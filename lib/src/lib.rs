@@ -3,12 +3,13 @@
 //! To avoid name clashes, the functions in this file
 //! should not share names with other functions in the library.
 
+pub mod camera_control;
 mod demo_boids;
 mod demo_polygon;
 mod demo_raymarching;
-
-pub mod camera_control;
 mod frame_rate;
+mod game;
+pub mod kinetic_novel;
 pub mod mouse_input;
 pub mod program;
 pub mod reload_flags;
@@ -21,10 +22,10 @@ use crate::program::{Program, ProgramError};
 pub use crate::camera_control::CameraLookAt;
 
 /// Specify which program we want to run here.
-pub use crate::demo_polygon::DemoPolygonProgram as CurrentProgram;
-// pub use crate::demo_boids::DemoBoidsProgram as CurrentProgram;
-// pub use crate::demo_raymarching::DemoRaymarchingProgram as CurrentProgram;
-
+//pub use crate::demo_polygon::DemoPolygonProgram as CurrentProgram;
+//pub use crate::demo_boids::DemoBoidsProgram as CurrentProgram;
+//pub use crate::demo_raymarching::DemoRaymarchingProgram as CurrentProgram;
+pub use crate::game::GameProgram as CurrentProgram;
 /// Hot-reloading does not support generics, so we need to specialize
 /// the functions we want to call from the outside.
 ///
