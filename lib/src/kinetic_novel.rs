@@ -78,7 +78,7 @@ impl KineticLabel {
     ///
     /// Note that any `\n` in the text will always produce a new line.
     ///
-    /// You can also use [`crate::Style::wrap`].
+    /// You can also use [`egui::Style::wrap`].
     #[inline]
     pub fn wrap(mut self, wrap: bool) -> Self {
         self.wrap = Some(wrap);
@@ -109,9 +109,9 @@ impl KineticLabel {
     /// This will also give the label the hover-effect of a button, but without the frame.
     ///
     /// ```
-    /// # use egui::{KineticLabel, Sense};
+    /// # use egui::{Label, Sense};
     /// # egui::__run_test_ui(|ui| {
-    /// if ui.add(KineticLabel::new("click me").sense(Sense::click())).clicked() {
+    /// if ui.add(Label::new("click me").sense(Sense::click())).clicked() {
     ///     /* … */
     /// }
     /// # });
