@@ -1,16 +1,14 @@
 use std::fs::File;
 use std::io::{BufRead, BufReader, Lines};
-use std::ops::Range;
 use std::path::Path;
 
-use egui::{Color32, FontData, FontDefinitions, FontTweak, RichText, Style, TextStyle, Visuals};
-use log::info;
-use nanorand::{rand, Rng};
+use egui::{Color32, TextStyle, Visuals};
+use nanorand::Rng;
 use wgpu::util::DeviceExt;
 
 use crate::camera_control::CameraLookAt;
 use crate::frame_rate::FrameRate;
-use crate::kinetic_novel::KineticLabel;
+use crate::kinetic_novel::{KineticEffect, KineticLabel};
 use crate::program::{Program, ProgramError};
 use crate::shader_builder::ShaderBuilder;
 
@@ -71,7 +69,7 @@ pub struct GameProgram {
     last_update: instant::Instant,
     frame_rate: FrameRate,
     settings: GameSettings,
-    test_text: String,
+    _test_text: String,
     test_lines: String,
 }
 
@@ -148,7 +146,7 @@ impl Program for GameProgram {
                     frame_rate: FrameRate::new(100),
                     settings: GameSettings::new(),
                     test_lines: random_lines.to_owned().join("\n"),
-                    test_text: the_body,
+                    _test_text: the_body,
                 })
             }
             Err(_) => Err(ProgramError::ShaderParseError("".to_owned())),
@@ -241,7 +239,7 @@ impl Program for GameProgram {
 
         ui.label(std::format!("framerate: {:.0}fps", self.frame_rate.get()));
         for line in self.test_lines.lines() {
-            ui.add(KineticLabel::new(line));
+            ui.add(KineticLabel::new(line).kinesis(vec![KineticEffect::default()]));
         }
     }
 
