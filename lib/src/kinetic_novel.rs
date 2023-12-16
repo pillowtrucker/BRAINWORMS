@@ -1,14 +1,16 @@
-use std::f32::consts::PI;
+use std::{borrow::BorrowMut, f32::consts::PI, process::exit};
 
 use egui::{
     egui_assert,
     epaint::{self, ClippedShape, Primitive, TextShape},
     lerp, pos2, vec2,
     widget_text::WidgetTextGalley,
-    Align, Direction, FontSelection, FullOutput, Pos2, Rect, Response, Sense, Shape, Stroke, Ui,
-    Widget, WidgetInfo, WidgetText, WidgetType,
+    Align, Color32, Direction, FontSelection, FullOutput, Pos2, Rect, Response, Sense, Shape,
+    Stroke, Ui, Widget, WidgetInfo, WidgetText, WidgetType,
 };
+use instant::Instant;
 use log::info;
+use nanorand::Rng;
 
 pub(crate) struct KineticLabel {
     text: WidgetText,
@@ -232,15 +234,44 @@ impl Widget for KineticLabel {
                 .ctx()
                 .tessellate(vec![humshape], text_galley.galley.pixels_per_point);
             if !homshape.is_empty() {
+                let mut rng = nanorand::tls_rng();
                 let mymesh = homshape[0].primitive.clone();
                 if let Primitive::Mesh(mut themesh) = mymesh {
-                    let lenne = themesh.vertices.len();
+                    let len_vertices = themesh.vertices.len();
+                    let mut n = 0.;
+                    let mut colour = Color32::WHITE;
+
+                    let framo = ui.ctx().frame_nr();
 
                     for (i, v) in themesh.vertices.iter_mut().enumerate() {
-                        // let ok = lerp(-PI * 0.5..=PI * 0.5, i as f32 / lenne as f32);
+                        let ok = lerp(-PI * 2.0..=PI * 2.0, i as f32 / len_vertices as f32);
+                        let ok2 = lerp(0.0..=255.0, i as f32 / len_vertices as f32);
+                        if i % 4 == 0 {
+                            n = (ok + (framo as f32) / 1000.0).sin() * 10.;
+                            colour = Color32::from_rgb(0, ((ok2 as u64 + framo) % 255) as u8, 0);
+                        } else {
+                        }
+                        v.color = colour;
+                        v.pos.y += n;
+
+                        //                        info!("index enumerate {} vertex {:?}", i, v.);
+                    }
+                    //                    let g_text = text_galley.galley.text().to_owned();
+                    for r in text_galley.galley.rows.iter() {
+                        for (i, g) in r.glyphs.iter().enumerate() {
+                            //                            info!("index enumerate {} glyph {:?} row rect {:?}", i, g, r.rect);
+                        }
+                    }
+                    //                    exit(0);
+                    // operating on each vertex is too chaotic, may be useful for some effects though
+                    /*
+                    for (i, v) in themesh.vertices.iter_mut().enumerate() {
+
                         //                    info!("{}", ok);
                         v.pos.y *= (0.01 * i as f32).sin();
                     }
+                    */
+
                     ui.painter().add(themesh);
                 }
             } else {

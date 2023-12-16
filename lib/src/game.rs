@@ -137,7 +137,7 @@ impl Program for GameProgram {
                         acc
                     }
                 });
-                let good_number = rng.generate_range(0..the_body.lines().count());
+                let good_number = rng.generate_range(0..(the_body.lines().count() - 66));
                 let random_lines = the_body.lines().collect::<Vec<&str>>()
                     [good_number..good_number + 66]
                     .to_owned();
