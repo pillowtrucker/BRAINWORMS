@@ -226,22 +226,25 @@ impl Widget for KineticLabel {
             };
             let humshape: ClippedShape = ClippedShape {
                 clip_rect: Rect::EVERYTHING,
-                shape: Shape::Text(hmmshape),
+                shape: Shape::Text(hmmshape.clone()),
             };
             let homshape = ui
                 .ctx()
                 .tessellate(vec![humshape], text_galley.galley.pixels_per_point);
+            if !homshape.is_empty() {
+                let mymesh = homshape[0].primitive.clone();
+                if let Primitive::Mesh(mut themesh) = mymesh {
+                    let lenne = themesh.vertices.len();
 
-            let mymesh = homshape[0].primitive.clone();
-            if let Primitive::Mesh(mut themesh) = mymesh {
-                let lenne = themesh.vertices.len();
-
-                for (i, v) in themesh.vertices.iter_mut().enumerate() {
-                    let ok = lerp(-PI..=PI, i as f32 / lenne as f32);
-                    //                    info!("{}", ok);
-                    v.pos.y += ok * 1000.;
+                    for (i, v) in themesh.vertices.iter_mut().enumerate() {
+                        // let ok = lerp(-PI * 0.5..=PI * 0.5, i as f32 / lenne as f32);
+                        //                    info!("{}", ok);
+                        v.pos.y *= (0.01 * i as f32).sin();
+                    }
+                    ui.painter().add(themesh);
                 }
-                ui.painter().add(themesh);
+            } else {
+                ui.painter().add(hmmshape);
             }
 
             /*

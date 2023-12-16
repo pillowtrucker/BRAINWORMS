@@ -63,6 +63,7 @@ impl Program for DemoPolygonProgram {
         surface: &wgpu::Surface,
         device: &wgpu::Device,
         adapter: &wgpu::Adapter,
+        _egui_ctx: &mut egui::Context,
     ) -> Result<Self, ProgramError> {
         let render_pass = Self::create_render_pass(surface, device, adapter)?;
 

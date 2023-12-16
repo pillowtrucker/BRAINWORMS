@@ -43,6 +43,7 @@ pub trait Program: Sized {
         surface: &wgpu::Surface,
         device: &wgpu::Device,
         adapter: &wgpu::Adapter,
+        egui_ctx: &mut egui::Context,
     ) -> Result<Self, ProgramError>;
 
     /// Get program name.

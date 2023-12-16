@@ -73,7 +73,6 @@ pub struct GameProgram {
     settings: GameSettings,
     test_text: String,
     test_lines: String,
-    uictx: bool,
 }
 
 impl GameSettings {
@@ -106,8 +105,26 @@ impl Program for GameProgram {
         surface: &wgpu::Surface,
         device: &wgpu::Device,
         adapter: &wgpu::Adapter,
+        egui_ctx: &mut egui::Context,
     ) -> Result<Self, ProgramError> {
         let render_pass = Self::create_render_pass(surface, device, adapter)?;
+
+        egui_ctx.set_visuals(Visuals {
+            panel_fill: Color32::TRANSPARENT,
+            window_fill: Color32::TRANSPARENT,
+            extreme_bg_color: Color32::TRANSPARENT,
+            code_bg_color: Color32::TRANSPARENT,
+            faint_bg_color: Color32::TRANSPARENT,
+            ..Default::default()
+        });
+        let mut style = (*egui_ctx.style()).clone();
+        if let Some(hum) = style.text_styles.get_mut(&TextStyle::Body) {
+            hum.size = 24.;
+        }
+
+        //            let myfont = FontData::from_static(include_bytes!("../../assets/Hasklug.otf"));
+        //info!("{:?}", style);
+        egui_ctx.set_style(style);
 
         match read_lines("assets/texts/PARADISE_LOST.txt") {
             Ok(test_text) => {
@@ -132,7 +149,6 @@ impl Program for GameProgram {
                     settings: GameSettings::new(),
                     test_lines: random_lines.to_owned().join("\n"),
                     test_text: the_body,
-                    uictx: true,
                 })
             }
             Err(_) => Err(ProgramError::ShaderParseError("".to_owned())),
@@ -222,29 +238,11 @@ impl Program for GameProgram {
     fn draw_ui(&mut self, ui: &mut egui::Ui) {
         //        ui.heading("Settings");
         //        ui.separator();
-        let ctx = ui.ctx();
-        if self.uictx {
-            ctx.set_visuals(Visuals {
-                panel_fill: Color32::TRANSPARENT,
-                window_fill: Color32::TRANSPARENT,
-                extreme_bg_color: Color32::TRANSPARENT,
-                code_bg_color: Color32::TRANSPARENT,
-                faint_bg_color: Color32::TRANSPARENT,
-                ..Default::default()
-            });
-            let mut style = (*ctx.style()).clone();
-            if let Some(hum) = style.text_styles.get_mut(&TextStyle::Body) {
-                hum.size = 24.;
-            }
-
-            //            let myfont = FontData::from_static(include_bytes!("../../assets/Hasklug.otf"));
-            //info!("{:?}", style);
-            ctx.set_style(style);
-            self.uictx = false;
-        }
 
         ui.label(std::format!("framerate: {:.0}fps", self.frame_rate.get()));
-        ui.add(KineticLabel::new(&self.test_lines));
+        for line in self.test_lines.lines() {
+            ui.add(KineticLabel::new(line));
+        }
     }
 
     fn get_camera(&mut self) -> Option<&mut crate::camera_control::CameraLookAt> {

@@ -36,8 +36,9 @@ pub fn create_program(
     surface: &wgpu::Surface,
     device: &wgpu::Device,
     adapter: &wgpu::Adapter,
+    egui_ctx: &mut egui::Context,
 ) -> Result<CurrentProgram, ProgramError> {
-    CurrentProgram::init(surface, device, adapter)
+    CurrentProgram::init(surface, device, adapter, egui_ctx)
 }
 
 /// Contrary to `Program::get_name`, this function returns a String

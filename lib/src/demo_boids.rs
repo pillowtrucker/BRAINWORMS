@@ -92,6 +92,7 @@ impl Program for DemoBoidsProgram {
         surface: &wgpu::Surface,
         device: &wgpu::Device,
         adapter: &wgpu::Adapter,
+        _egui_ctx: &mut egui::Context,
     ) -> Result<Self, ProgramError> {
         let settings = DemoBoidsSettings::new();
 

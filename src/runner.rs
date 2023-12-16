@@ -95,19 +95,20 @@ async fn run(
 
     surface.configure(&device, &config);
 
-    // Create our program.
-    let mut program = library_bridge::create_program(&surface, &device, &adapter)
-        .expect("Failed to create program");
-    // Update window title with program name.
-    window.set_title(library_bridge::get_program_name(&program).as_str());
-
     // Create egui state.
     let mut egui_state =
         egui_winit::State::new(egui::ViewportId::default(), &event_loop, None, None);
-    let egui_context = egui::Context::default();
+    let mut egui_context = egui::Context::default();
     let mut egui_renderer = Renderer::new(&device, config.format, None, 1);
 
     let mut mouse_state = lib::mouse_input::MouseState::default();
+
+    // Create our program.
+    let mut program =
+        library_bridge::create_program(&surface, &device, &adapter, &mut egui_context)
+            .expect("Failed to create program");
+    // Update window title with program name.
+    window.set_title(library_bridge::get_program_name(&program).as_str());
 
     event_loop.run(move |event, _, control_flow| {
         // Have the closure take ownership of the resources.
