@@ -5,8 +5,8 @@ use egui::{
     epaint::{self, ClippedShape, Primitive, TextShape},
     lerp, pos2, vec2,
     widget_text::WidgetTextGalley,
-    Align, Direction, FontSelection, Pos2, Rect, Response, Sense, Shape, Stroke, Ui, Widget,
-    WidgetInfo, WidgetText, WidgetType,
+    Align, Color32, Direction, FontSelection, Pos2, Rect, Response, Sense, Shape, Stroke, Ui,
+    Widget, WidgetInfo, WidgetText, WidgetType,
 };
 use nanorand::Rng;
 
@@ -17,16 +17,34 @@ pub struct KineticLabel {
     pub sense: Option<Sense>,
     pub kinesis: Option<Vec<KineticEffect>>,
 }
-#[derive(Copy, Clone)]
+#[derive(Clone)]
 pub enum KineticEffect {
     SineWavify { params: SineWavify },
     ShakeLetters { params: ShakeLetters },
     Gay { params: Gay },
 }
-#[derive(Copy, Clone)]
+#[derive(Clone)]
 pub struct Gay {
+    pub rainbow: Vec<Color32>,
     pub live: bool,
-    pub live_dampen: f32,
+    pub live_dampen: u64,
+}
+impl Default for Gay {
+    fn default() -> Self {
+        Self {
+            rainbow: vec![
+                Color32::RED,
+                Color32::from_rgb(255, 127, 0),
+                Color32::YELLOW,
+                Color32::GREEN,
+                Color32::BLUE,
+                Color32::from_rgb(63, 0, 127),
+                Color32::from_rgb(127, 0, 255),
+            ],
+            live: true,
+            live_dampen: 20,
+        }
+    }
 }
 /// This is way too dependent on fps and screen dimensions and resolution to figure out good defaults
 #[derive(Copy, Clone)]
@@ -267,103 +285,116 @@ impl Widget for KineticLabel {
                 ui.add(egui::Label::new(text));
             });
         }
-
-        if ui.is_rect_visible(response.rect) {
-            let response_color = ui.style().interact(&response).text_color();
-
-            let underline = if response.has_focus() || response.highlighted() {
-                Stroke::new(1.0, response_color)
-            } else {
-                Stroke::NONE
-            };
-
-            let override_text_color = if text_galley.galley_has_color {
-                None
-            } else {
-                Some(response_color)
-            };
-            let normal_label = || {
-                ui.painter().add(epaint::TextShape {
-                    pos,
-                    galley: text_galley.galley.clone(),
-                    override_text_color,
-                    underline,
-                    angle: 0.0,
-                });
-            };
-
-            self.kinesis.map_or_else(normal_label, |kes| {
-                let text_shape: TextShape = TextShape {
-                    pos,
-                    galley: text_galley.galley.clone(),
-                    underline,
-                    override_text_color,
-                    angle: 0.0,
-                };
-                let clipped_shape: ClippedShape = ClippedShape {
-                    clip_rect: Rect::EVERYTHING,
-                    shape: Shape::Text(text_shape),
-                };
-                let mut clipped_primitive = ui
-                    .ctx()
-                    .tessellate(vec![clipped_shape], text_galley.galley.pixels_per_point);
-                if !clipped_primitive.is_empty() {
-                    let the_primitive = &mut clipped_primitive[0].primitive;
-                    if let Primitive::Mesh(ref mut the_mesh) = the_primitive {
-                        let len_vertices = the_mesh.vertices.len();
-                        for ke in kes {
-                            match ke {
-                                KineticEffect::SineWavify { params } => {
-                                    assert_ne!(params.live_dampen, 0.0);
-                                    let mut vertical_translation = 0.;
-                                    let framo = if params.live { ui.ctx().frame_nr() } else { 0 };
-                                    for (i, v) in the_mesh.vertices.iter_mut().enumerate() {
-                                        let base_sinus_argument = lerp(
-                                            params.x_0..=params.x_1,
-                                            i as f32 / len_vertices as f32,
-                                        );
-                                        // glyph quad border
-                                        if i % 4 == 0 {
-                                            vertical_translation = (base_sinus_argument
-                                                + (framo as f32) / params.live_dampen)
-                                                .sin()
-                                                * params.amp;
-                                        }
-                                        v.pos.y += vertical_translation;
-                                    }
-                                }
-                                KineticEffect::ShakeLetters { params } => {
-                                    let mut vertical_translation = 0;
-                                    let mut horizontal_translation = 0;
-                                    let mut rng = nanorand::tls_rng();
-                                    for (i, v) in the_mesh.vertices.iter_mut().enumerate() {
-                                        // glyph quad border
-                                        if i % 4 == 0 && (ui.ctx().frame_nr() % params.dampen) < 5 {
-                                            vertical_translation =
-                                                rng.generate_range(0..params.max_distortion);
-                                            horizontal_translation =
-                                                rng.generate_range(0..params.max_distortion); // can't use -max..+max because then it averages out to the normal position lol
-                                            if rng.generate_range(0..100) > 50 {
-                                                vertical_translation = -vertical_translation;
-                                            } else {
-                                                horizontal_translation = -horizontal_translation;
-                                            }
-                                        }
-
-                                        v.pos.y += vertical_translation as f32;
-                                        v.pos.x += horizontal_translation as f32;
-                                    }
-                                }
-                                KineticEffect::Gay { params: _ } => todo!(),
-                            }
-                        }
-                        ui.painter().add(the_mesh.to_owned());
-                    }
-                } else {
-                    normal_label();
-                }
-            });
+        if !ui.is_rect_visible(response.rect) {
+            return response;
         }
-        response.to_owned()
+
+        let response_color = ui.style().interact(&response).text_color();
+
+        let underline = if response.has_focus() || response.highlighted() {
+            Stroke::new(1.0, response_color)
+        } else {
+            Stroke::NONE
+        };
+
+        let override_text_color = if text_galley.galley_has_color {
+            None
+        } else {
+            Some(response_color)
+        };
+        let normal_label = || {
+            ui.painter().add(epaint::TextShape {
+                pos,
+                galley: text_galley.galley.clone(),
+                override_text_color,
+                underline,
+                angle: 0.0,
+            });
+        };
+        if self.kinesis.is_none() {
+            normal_label();
+            return response;
+        }
+
+        let kes = self.kinesis.unwrap();
+        let text_shape: TextShape = TextShape {
+            pos,
+            galley: text_galley.galley.clone(),
+            underline,
+            override_text_color,
+            angle: 0.0,
+        };
+        let clipped_shape: ClippedShape = ClippedShape {
+            clip_rect: Rect::EVERYTHING,
+            shape: Shape::Text(text_shape),
+        };
+        let mut clipped_primitive = ui
+            .ctx()
+            .tessellate(vec![clipped_shape], text_galley.galley.pixels_per_point);
+        if clipped_primitive.is_empty() {
+            normal_label();
+            return response;
+        };
+        let Primitive::Mesh(ref mut the_mesh) = &mut clipped_primitive[0].primitive else {
+            return response;
+        };
+        let len_vertices = the_mesh.vertices.len();
+        kes.iter().for_each(|ke| match ke {
+            KineticEffect::SineWavify { params } => {
+                assert_ne!(params.live_dampen, 0.0);
+                let mut vertical_translation = 0.;
+                let framo = if params.live { ui.ctx().frame_nr() } else { 0 };
+                for (i, v) in the_mesh.vertices.iter_mut().enumerate() {
+                    let base_sinus_argument =
+                        lerp(params.x_0..=params.x_1, i as f32 / len_vertices as f32);
+                    // glyph quad border
+                    if i % 4 == 0 {
+                        vertical_translation =
+                            (base_sinus_argument + (framo as f32) / params.live_dampen).sin()
+                                * params.amp;
+                    }
+                    v.pos.y += vertical_translation;
+                }
+            }
+            KineticEffect::ShakeLetters { params } => {
+                let mut vertical_translation = 0;
+                let mut horizontal_translation = 0;
+                let mut rng = nanorand::tls_rng();
+                for (i, v) in the_mesh.vertices.iter_mut().enumerate() {
+                    // glyph quad border
+                    if i % 4 == 0 && (ui.ctx().frame_nr() % params.dampen) < 5 {
+                        vertical_translation = rng.generate_range(0..params.max_distortion);
+                        horizontal_translation = rng.generate_range(0..params.max_distortion); // can't use -max..+max because then it averages out to the normal position lol
+                        if rng.generate_range(0..100) > 50 {
+                            vertical_translation = -vertical_translation;
+                        } else {
+                            horizontal_translation = -horizontal_translation;
+                        }
+                    }
+
+                    v.pos.y += vertical_translation as f32;
+                    v.pos.x += horizontal_translation as f32;
+                }
+            }
+            KineticEffect::Gay { params } => {
+                let mut colour = Color32::WHITE;
+                let mut rainbow = params.rainbow.iter().cycle();
+                for (i, v) in the_mesh.vertices.iter_mut().enumerate() {
+                    // glyph quad border
+                    if i % 4 == 0 {
+                        colour = *rainbow.next().unwrap();
+                        if params.live {
+                            for _ in 0..((ui.ctx().frame_nr() / params.live_dampen) % 8) + 1 {
+                                rainbow.next();
+                            }
+                            colour = *rainbow.next().unwrap();
+                        }
+                    }
+                    v.color = colour;
+                }
+            }
+        });
+        ui.painter().add(the_mesh.to_owned());
+        response
     }
 }

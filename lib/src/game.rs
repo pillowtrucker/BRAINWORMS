@@ -8,7 +8,7 @@ use wgpu::util::DeviceExt;
 
 use crate::camera_control::CameraLookAt;
 use crate::frame_rate::FrameRate;
-use crate::kinetic_novel::{KineticEffect, KineticLabel, ShakeLetters};
+use crate::kinetic_novel::{Gay, KineticEffect, KineticLabel, ShakeLetters};
 use crate::program::{Program, ProgramError};
 use crate::shader_builder::ShaderBuilder;
 
@@ -254,6 +254,9 @@ impl Program for GameProgram {
                         params: ShakeLetters::default(),
                     }]),
                 );
+                ui.add(KineticLabel::new("still").kinesis(vec![KineticEffect::Gay {
+                    params: Gay::default(),
+                }]));
             });
         });
     }
