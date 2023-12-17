@@ -8,17 +8,31 @@ use egui::{
     Align, Direction, FontSelection, Pos2, Rect, Response, Sense, Shape, Stroke, Ui, Widget,
     WidgetInfo, WidgetText, WidgetType,
 };
+use nanorand::Rng;
 
 pub struct KineticLabel {
     pub text: WidgetText,
     pub wrap: Option<bool>,
     pub truncate: bool,
     pub sense: Option<Sense>,
-    pub kinetic_effects: Option<Vec<KineticEffect>>,
+    pub kinesis: Option<Vec<KineticEffect>>,
 }
 #[derive(Copy, Clone)]
 pub enum KineticEffect {
     SineWavify { params: SineWavify },
+    ShakeLetters { params: ShakeLetters },
+    Gay { params: Gay },
+}
+#[derive(Copy, Clone)]
+pub struct Gay {
+    pub live: bool,
+    pub live_dampen: f32,
+}
+/// This is way too dependent on fps and screen dimensions and resolution to figure out good defaults
+#[derive(Copy, Clone)]
+pub struct ShakeLetters {
+    pub max_distortion: i32,
+    pub dampen: u64,
 }
 #[derive(Copy, Clone)]
 pub struct SineWavify {
@@ -27,6 +41,15 @@ pub struct SineWavify {
     pub x_1: f32,
     pub live: bool,
     pub live_dampen: f32,
+}
+
+impl Default for ShakeLetters {
+    fn default() -> Self {
+        Self {
+            max_distortion: 10,
+            dampen: 8,
+        }
+    }
 }
 impl Default for SineWavify {
     fn default() -> Self {
@@ -54,13 +77,13 @@ impl KineticLabel {
             wrap: None,
             truncate: false,
             sense: None,
-            kinetic_effects: None,
+            kinesis: None,
         }
     }
 
     #[inline]
-    pub fn kinesis(mut self, kinetic_effects: Vec<KineticEffect>) -> Self {
-        self.kinetic_effects = Some(kinetic_effects);
+    pub fn kinesis(mut self, kinesis: Vec<KineticEffect>) -> Self {
+        self.kinesis = Some(kinesis);
         self
     }
 
@@ -269,7 +292,7 @@ impl Widget for KineticLabel {
                 });
             };
 
-            self.kinetic_effects.map_or_else(normal_label, |kes| {
+            self.kinesis.map_or_else(normal_label, |kes| {
                 let text_shape: TextShape = TextShape {
                     pos,
                     galley: text_galley.galley.clone(),
@@ -287,11 +310,11 @@ impl Widget for KineticLabel {
                 if !clipped_primitive.is_empty() {
                     let the_primitive = &mut clipped_primitive[0].primitive;
                     if let Primitive::Mesh(ref mut the_mesh) = the_primitive {
+                        let len_vertices = the_mesh.vertices.len();
                         for ke in kes {
                             match ke {
                                 KineticEffect::SineWavify { params } => {
                                     assert_ne!(params.live_dampen, 0.0);
-                                    let len_vertices = the_mesh.vertices.len();
                                     let mut vertical_translation = 0.;
                                     let framo = if params.live { ui.ctx().frame_nr() } else { 0 };
                                     for (i, v) in the_mesh.vertices.iter_mut().enumerate() {
@@ -309,6 +332,29 @@ impl Widget for KineticLabel {
                                         v.pos.y += vertical_translation;
                                     }
                                 }
+                                KineticEffect::ShakeLetters { params } => {
+                                    let mut vertical_translation = 0;
+                                    let mut horizontal_translation = 0;
+                                    let mut rng = nanorand::tls_rng();
+                                    for (i, v) in the_mesh.vertices.iter_mut().enumerate() {
+                                        // glyph quad border
+                                        if i % 4 == 0 && (ui.ctx().frame_nr() % params.dampen) < 5 {
+                                            vertical_translation =
+                                                rng.generate_range(0..params.max_distortion);
+                                            horizontal_translation =
+                                                rng.generate_range(0..params.max_distortion); // can't use -max..+max because then it averages out to the normal position lol
+                                            if rng.generate_range(0..100) > 50 {
+                                                vertical_translation = -vertical_translation;
+                                            } else {
+                                                horizontal_translation = -horizontal_translation;
+                                            }
+                                        }
+
+                                        v.pos.y += vertical_translation as f32;
+                                        v.pos.x += horizontal_translation as f32;
+                                    }
+                                }
+                                KineticEffect::Gay { params: _ } => todo!(),
                             }
                         }
                         ui.painter().add(the_mesh.to_owned());

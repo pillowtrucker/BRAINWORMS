@@ -2,13 +2,13 @@ use std::fs::File;
 use std::io::{BufRead, BufReader, Lines};
 use std::path::Path;
 
-use egui::{Color32, TextStyle, Visuals};
+use egui::{Color32, Label, TextStyle, Visuals, Window};
 use nanorand::Rng;
 use wgpu::util::DeviceExt;
 
 use crate::camera_control::CameraLookAt;
 use crate::frame_rate::FrameRate;
-use crate::kinetic_novel::{KineticEffect, KineticLabel};
+use crate::kinetic_novel::{KineticEffect, KineticLabel, ShakeLetters};
 use crate::program::{Program, ProgramError};
 use crate::shader_builder::ShaderBuilder;
 
@@ -115,7 +115,9 @@ impl Program for GameProgram {
             faint_bg_color: Color32::TRANSPARENT,
             ..Default::default()
         });
+
         let mut style = (*egui_ctx.style()).clone();
+
         if let Some(hum) = style.text_styles.get_mut(&TextStyle::Body) {
             hum.size = 24.;
         }
@@ -239,8 +241,21 @@ impl Program for GameProgram {
 
         ui.label(std::format!("framerate: {:.0}fps", self.frame_rate.get()));
         for line in self.test_lines.lines() {
-            ui.add(KineticLabel::new(line).kinesis(vec![KineticEffect::default()]));
+            ui.horizontal(|ui| {
+                ui.add(KineticLabel::new(line).kinesis(vec![KineticEffect::default()]))
+            });
         }
+        Window::new("with horizontal layout").show(ui.ctx(), |ui| {
+            ui.horizontal(|ui| {
+                ui.add(Label::new("blabla"));
+                ui.add(KineticLabel::new("same").kinesis(vec![KineticEffect::default()]));
+                ui.add(
+                    KineticLabel::new("line").kinesis(vec![KineticEffect::ShakeLetters {
+                        params: ShakeLetters::default(),
+                    }]),
+                );
+            });
+        });
     }
 
     fn get_camera(&mut self) -> Option<&mut crate::camera_control::CameraLookAt> {

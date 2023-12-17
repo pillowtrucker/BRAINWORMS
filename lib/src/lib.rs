@@ -9,6 +9,7 @@ mod demo_polygon;
 mod demo_raymarching;
 mod frame_rate;
 mod game;
+
 pub mod kinetic_novel;
 pub mod mouse_input;
 pub mod program;

@@ -229,6 +229,7 @@ async fn run(
 
                     // Update the ui before drawing.
                     let input = egui_state.take_egui_input(&window);
+
                     egui_context.begin_frame(input);
                     egui::Window::new(library_bridge::get_program_name(&program)).show(
                         &egui_context,
