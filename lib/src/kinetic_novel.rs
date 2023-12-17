@@ -34,7 +34,7 @@ impl Default for SineWavify {
             amp: 10.0,
             x_0: 0.0,
             x_1: 2.0 * PI,
-            live: false,
+            live: true,
             live_dampen: 1000.0,
         }
     }
@@ -205,7 +205,7 @@ impl KineticLabel {
                     text_job.job.wrap.max_width = f32::INFINITY;
                 };
                 /*
-                // is_grid is private
+                // is_grid is private but this might be important for embedding in grids
                 if ui.is_grid() {
                     // TODO(emilk): remove special Grid hacks like these
                     text_job.job.halign = Align::LEFT;
@@ -270,51 +270,51 @@ impl Widget for KineticLabel {
             };
 
             self.kinetic_effects.map_or_else(normal_label, |kes| {
-                for ke in kes {
-                    match ke {
-                        KineticEffect::SineWavify { params } => {
-                            let hmmshape: TextShape = TextShape {
-                                pos,
-                                galley: text_galley.galley.clone(),
-                                underline,
-                                override_text_color,
-                                angle: 0.0,
-                            };
-                            let humshape: ClippedShape = ClippedShape {
-                                clip_rect: Rect::EVERYTHING,
-                                shape: Shape::Text(hmmshape.clone()),
-                            };
-                            let homshape = ui
-                                .ctx()
-                                .tessellate(vec![humshape], text_galley.galley.pixels_per_point);
-                            if !homshape.is_empty() {
-                                let mymesh = homshape[0].primitive.clone();
-                                if let Primitive::Mesh(mut themesh) = mymesh {
-                                    let len_vertices = themesh.vertices.len();
-                                    let mut n = 0.;
-
-                                    let framo = ui.ctx().frame_nr();
-
-                                    for (i, v) in themesh.vertices.iter_mut().enumerate() {
-                                        let ok = lerp(
+                let text_shape: TextShape = TextShape {
+                    pos,
+                    galley: text_galley.galley.clone(),
+                    underline,
+                    override_text_color,
+                    angle: 0.0,
+                };
+                let clipped_shape: ClippedShape = ClippedShape {
+                    clip_rect: Rect::EVERYTHING,
+                    shape: Shape::Text(text_shape),
+                };
+                let mut clipped_primitive = ui
+                    .ctx()
+                    .tessellate(vec![clipped_shape], text_galley.galley.pixels_per_point);
+                if !clipped_primitive.is_empty() {
+                    let the_primitive = &mut clipped_primitive[0].primitive;
+                    if let Primitive::Mesh(ref mut the_mesh) = the_primitive {
+                        for ke in kes {
+                            match ke {
+                                KineticEffect::SineWavify { params } => {
+                                    assert_ne!(params.live_dampen, 0.0);
+                                    let len_vertices = the_mesh.vertices.len();
+                                    let mut vertical_translation = 0.;
+                                    let framo = if params.live { ui.ctx().frame_nr() } else { 0 };
+                                    for (i, v) in the_mesh.vertices.iter_mut().enumerate() {
+                                        let base_sinus_argument = lerp(
                                             params.x_0..=params.x_1,
                                             i as f32 / len_vertices as f32,
                                         );
+                                        // glyph quad border
                                         if i % 4 == 0 {
-                                            n = (ok + (framo as f32) / params.live_dampen).sin()
-                                                * 10.;
+                                            vertical_translation = (base_sinus_argument
+                                                + (framo as f32) / params.live_dampen)
+                                                .sin()
+                                                * params.amp;
                                         }
-
-                                        v.pos.y += n;
+                                        v.pos.y += vertical_translation;
                                     }
-
-                                    ui.painter().add(themesh);
                                 }
-                            } else {
-                                ui.painter().add(hmmshape);
                             }
                         }
+                        ui.painter().add(the_mesh.to_owned());
                     }
+                } else {
+                    normal_label();
                 }
             });
         }
