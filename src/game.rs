@@ -247,7 +247,7 @@ impl Program for GameProgram {
         }
         Window::new("with horizontal layout").show(ui.ctx(), |ui| {
             ui.horizontal(|ui| {
-                ui.add(Label::new("blabla"));
+                ui.add(KineticLabel::new("blabla"));
                 ui.add(KineticLabel::new("same").kinesis(vec![KineticEffect::default()]));
                 ui.add(
                     KineticLabel::new("line").kinesis(vec![KineticEffect::ShakeLetters {

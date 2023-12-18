@@ -382,13 +382,12 @@ impl Widget for KineticLabel {
                 for (i, v) in the_mesh.vertices.iter_mut().enumerate() {
                     // glyph quad border
                     if i % 4 == 0 {
-                        colour = *rainbow.next().unwrap();
                         if params.live {
                             for _ in 0..((ui.ctx().frame_nr() / params.live_dampen) % 8) + 1 {
                                 rainbow.next();
                             }
-                            colour = *rainbow.next().unwrap();
                         }
+                        colour = *rainbow.next().unwrap();
                     }
                     v.color = colour;
                 }
