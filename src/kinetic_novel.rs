@@ -1,4 +1,4 @@
-use std::f32::consts::PI;
+use std::{f32::consts::PI, mem::variant_count};
 
 use egui::{
     egui_assert,
@@ -8,20 +8,36 @@ use egui::{
     Align, Color32, Direction, FontSelection, Pos2, Rect, Response, Sense, Shape, Stroke, Ui,
     Widget, WidgetInfo, WidgetText, WidgetType,
 };
-use nanorand::Rng;
+use nanorand::{RandomGen, Rng};
 
-pub struct KineticLabel {
+pub struct KineticLabel<'a> {
     pub text: WidgetText,
     pub wrap: Option<bool>,
     pub truncate: bool,
     pub sense: Option<Sense>,
-    pub kinesis: Option<Vec<KineticEffect>>,
+    pub kinesis: Option<Vec<&'a KineticEffect>>,
 }
 #[derive(Clone)]
 pub enum KineticEffect {
     SineWavify { params: SineWavify },
     ShakeLetters { params: ShakeLetters },
     Gay { params: Gay },
+}
+impl<Generator: Rng<OUTPUT>, const OUTPUT: usize> RandomGen<Generator, OUTPUT> for KineticEffect {
+    fn random(rng: &mut Generator) -> Self {
+        match rng.generate_range(0..variant_count::<KineticEffect>()) {
+            0 => KineticEffect::SineWavify {
+                params: SineWavify::default(),
+            },
+            1 => KineticEffect::ShakeLetters {
+                params: ShakeLetters::default(),
+            },
+            2 => KineticEffect::Gay {
+                params: Gay::default(),
+            },
+            _ => KineticEffect::default(),
+        }
+    }
 }
 #[derive(Clone)]
 pub struct Gay {
@@ -88,7 +104,7 @@ impl Default for KineticEffect {
     }
 }
 
-impl KineticLabel {
+impl<'a> KineticLabel<'a> {
     pub fn new(text: impl Into<WidgetText>) -> Self {
         Self {
             text: text.into(),
@@ -100,7 +116,7 @@ impl KineticLabel {
     }
 
     #[inline]
-    pub fn kinesis(mut self, kinesis: Vec<KineticEffect>) -> Self {
+    pub fn kinesis(mut self, kinesis: Vec<&'a KineticEffect>) -> Self {
         self.kinesis = Some(kinesis);
         self
     }
@@ -164,7 +180,7 @@ impl KineticLabel {
     }
 }
 
-impl KineticLabel {
+impl KineticLabel<'_> {
     /// Do layout and position the galley in the ui, without painting it or adding widget info.
     pub fn layout_in_ui(&mut self, ui: &mut Ui) -> (Pos2, WidgetTextGalley, Response) {
         let sense = self.sense.unwrap_or_else(|| {
@@ -271,7 +287,7 @@ impl KineticLabel {
     }
 }
 
-impl Widget for KineticLabel {
+impl Widget for KineticLabel<'_> {
     fn ui(mut self, ui: &mut Ui) -> Response {
         let (pos, text_galley, mut response) = self.layout_in_ui(ui);
 

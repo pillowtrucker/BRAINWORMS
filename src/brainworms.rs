@@ -1,3 +1,7 @@
+#![feature(variant_count)]
+pub mod frame_rate;
+pub mod kinetic_novel;
+
 use std::{
     fs::File,
     io::{BufRead, BufReader, Lines},
@@ -6,9 +10,11 @@ use std::{
     sync::Arc,
 };
 
-use egui::TextStyle;
+use egui::{Color32, TextStyle, Visuals};
+use frame_rate::FrameRate;
+use kinetic_novel::{Gay, KineticEffect, KineticLabel, ShakeLetters};
 use log::info;
-use nanorand::Rng;
+use nanorand::{RandomGen, Rng};
 
 struct GameProgrammeData {
     _object_handle: rend3::types::ObjectHandle,
@@ -21,6 +27,11 @@ struct GameProgrammeData {
     color: [f32; 4],
     _test_text: String,
     test_lines: String,
+    random_line_effects: Vec<KineticEffect>,
+    _start_time: instant::Instant,
+    last_update: instant::Instant,
+    frame_rate: FrameRate,
+    elapsed: f32,
 }
 
 const SAMPLE_COUNT: rend3::types::SampleCount = rend3::types::SampleCount::One;
@@ -58,6 +69,15 @@ impl rend3_framework::App for GameProgramme {
         );
         // Create the egui context
         let egui_ctx = egui::Context::default();
+        egui_ctx.set_visuals(Visuals {
+            panel_fill: Color32::TRANSPARENT,
+            window_fill: Color32::TRANSPARENT,
+            extreme_bg_color: Color32::TRANSPARENT,
+            code_bg_color: Color32::TRANSPARENT,
+            faint_bg_color: Color32::TRANSPARENT,
+            ..Default::default()
+        });
+
         egui_ctx.style_mut(|style| {
             if let Some(hum) = style.text_styles.get_mut(&TextStyle::Body) {
                 hum.size = 24.;
@@ -85,6 +105,11 @@ impl rend3_framework::App for GameProgramme {
             info!("couldnt read text file");
             exit(1);
         };
+        let mut random_line_effects = vec![];
+        let mut rng = nanorand::tls_rng();
+        for _ in test_lines.lines() {
+            random_line_effects.push(KineticEffect::random(&mut rng));
+        }
         // Create mesh and calculate smooth normals based on vertices
         let mesh = create_mesh();
 
@@ -177,13 +202,17 @@ impl rend3_framework::App for GameProgramme {
             _object_handle,
             material_handle,
             _directional_handle,
-
+            _start_time: instant::Instant::now(),
+            last_update: instant::Instant::now(),
+            frame_rate: FrameRate::new(100),
+            elapsed: 0.0,
             egui_routine,
             egui_ctx,
             platform,
             color,
             test_lines,
             _test_text,
+            random_line_effects,
         });
     }
 
@@ -202,6 +231,10 @@ impl rend3_framework::App for GameProgramme {
 
         match event {
             rend3_framework::Event::RedrawRequested(..) => {
+                let last_frame_duration = data.last_update.elapsed().as_secs_f32();
+                data.elapsed += last_frame_duration;
+                data.frame_rate.update(last_frame_duration);
+                data.last_update = instant::Instant::now();
                 data.egui_ctx
                     .begin_frame(data.platform.take_egui_input(window));
 
@@ -210,6 +243,7 @@ impl rend3_framework::App for GameProgramme {
                 egui::Window::new("Change color")
                     .resizable(true)
                     .show(ctx, |ui| {
+                        ui.label(std::format!("framerate: {:.0}fps", data.frame_rate.get()));
                         ui.label("Change the color of the cube");
                         if ui
                             .color_edit_button_rgba_unmultiplied(&mut data.color)
@@ -239,6 +273,25 @@ impl rend3_framework::App for GameProgramme {
                         }
                     });
 
+                egui::Window::new("egui widget testing").show(ctx, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.add(KineticLabel::new("blabla"));
+                        ui.add(KineticLabel::new("same").kinesis(vec![&KineticEffect::default()]));
+                        ui.add(KineticLabel::new("line").kinesis(vec![
+                            &KineticEffect::ShakeLetters {
+                                params: ShakeLetters::default(),
+                            },
+                        ]));
+                        ui.add(
+                            KineticLabel::new("still").kinesis(vec![&KineticEffect::Gay {
+                                params: Gay::default(),
+                            }]),
+                        );
+                    });
+                    for (i, line) in data.test_lines.lines().enumerate() {
+                        ui.add(KineticLabel::new(line).kinesis(vec![&data.random_line_effects[i]]));
+                    }
+                });
                 // End the UI frame. Now let's draw the UI with our Backend, we could also
                 // handle the output here
                 let egui::FullOutput {
