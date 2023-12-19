@@ -15,6 +15,8 @@ use frame_rate::FrameRate;
 use kinetic_novel::{Gay, KineticEffect, KineticLabel, ShakeLetters};
 use log::info;
 use nanorand::{RandomGen, Rng};
+use rend3_framework::UserResizeEvent;
+use winit::{event::WindowEvent, event_loop::EventLoopWindowTarget};
 
 struct GameProgrammeData {
     _object_handle: rend3::types::ObjectHandle,
@@ -171,6 +173,7 @@ impl rend3_framework::App for GameProgramme {
 
         // Create the winit/egui integration.
         let platform = egui_winit::State::new(
+            egui_ctx.clone(),
             egui::ViewportId::default(),
             &window,
             Some(window.scale_factor() as f32),
@@ -226,11 +229,15 @@ impl rend3_framework::App for GameProgramme {
         resolution: glam::UVec2,
         event: rend3_framework::Event<'_, ()>,
         control_flow: impl FnOnce(winit::event_loop::ControlFlow),
+        event_loop_window_target: &EventLoopWindowTarget<UserResizeEvent<()>>,
     ) {
         let data = self.data.as_mut().unwrap();
 
         match event {
-            rend3_framework::Event::RedrawRequested(..) => {
+            rend3_framework::Event::WindowEvent {
+                window_id: _,
+                event: WindowEvent::RedrawRequested,
+            } => {
                 let last_frame_duration = data.last_update.elapsed().as_secs_f32();
                 data.elapsed += last_frame_duration;
                 data.frame_rate.update(last_frame_duration);
@@ -357,16 +364,12 @@ impl rend3_framework::App for GameProgramme {
 
                 control_flow(winit::event_loop::ControlFlow::Poll);
             }
-            rend3_framework::Event::MainEventsCleared => {
+            rend3_framework::Event::AboutToWait => {
                 window.request_redraw();
             }
             rend3_framework::Event::WindowEvent { event, .. } => {
                 // Pass the window events to the egui integration.
-                if data
-                    .platform
-                    .on_window_event(&data.egui_ctx, &event)
-                    .consumed
-                {
+                if data.platform.on_window_event(window, &event).consumed {
                     return;
                 }
 
@@ -379,7 +382,7 @@ impl rend3_framework::App for GameProgramme {
                         );
                     }
                     winit::event::WindowEvent::CloseRequested => {
-                        control_flow(winit::event_loop::ControlFlow::Exit);
+                        event_loop_window_target.exit();
                     }
                     _ => {}
                 }
