@@ -159,8 +159,8 @@ impl GameProgrammeSettings {
             option_arg(args.opt_value_from_str("--ambient")).unwrap_or(0.10);
         let scale: Option<f32> = option_arg(args.opt_value_from_str("--scale"));
         let shadow_distance: Option<f32> = option_arg(args.opt_value_from_str("--shadow-distance"));
-        let shadow_resolution: Option<u16> =
-            option_arg(args.opt_value_from_str("--shadow-resolution"));
+        let shadow_resolution: u16 =
+            option_arg(args.opt_value_from_str("--shadow-resolution")).unwrap_or(8192);
         let gltf_disable_directional_light: bool =
             args.contains("--gltf-disable-directional-lights");
 
@@ -212,9 +212,8 @@ impl GameProgrammeSettings {
         if let Some(shadow_distance) = shadow_distance {
             gltf_settings.directional_light_shadow_distance = shadow_distance;
         }
-        if let Some(shadow_resolution) = shadow_resolution {
-            gltf_settings.directional_light_resolution = shadow_resolution;
-        }
+
+        gltf_settings.directional_light_resolution = shadow_resolution;
 
         Self {
             absolute_mouse,
@@ -310,14 +309,14 @@ impl rend3_framework::App for GameProgramme {
         if let Some(direction) = self.settings.directional_light_direction {
             self.settings.directional_light = Some(
                 renderer.add_directional_light(DirectionalLight {
-                    color: Vec3::splat(1.0),
+                    color: Vec3::new(1., 0.9, 0.8),
                     intensity: self.settings.directional_light_intensity,
                     direction,
                     distance: self
                         .settings
                         .gltf_settings
                         .directional_light_shadow_distance,
-                    resolution: 2048,
+                    resolution: self.settings.gltf_settings.directional_light_resolution,
                 }),
             );
         }
