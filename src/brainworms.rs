@@ -1,6 +1,7 @@
 #![feature(variant_count)]
 pub mod frame_rate;
 pub mod kinetic_novel;
+pub mod scene_viewer_utils;
 
 use std::{
     fs::File,

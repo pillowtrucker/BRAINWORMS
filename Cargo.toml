@@ -11,7 +11,7 @@ keywords = ["wgpu", "wasm", "rend3", "not-bevy", "no-ecs", "game", "program"]
 
 [dependencies]
 wgpu = { version = "0.18.0", default-features = false }
-egui = { git = "https://github.com/emilk/egui.git", branch="master"}
+egui = { version = "0.24.2", git = "https://github.com/emilk/egui.git", branch="master"}
 pollster = "0.3.0"
 log = "0.4.20"
 winit = "0.29.4"
@@ -19,7 +19,7 @@ winit = "0.29.4"
 env_logger = "0.10.1"
 wasm-bindgen = "0.2.89"
 
-egui-wgpu = { git = "https://github.com/emilk/egui.git", branch="master", features = ["winit"] }
+egui-wgpu = {version = "0.24.2", git = "https://github.com/emilk/egui.git", branch="master", features = ["winit"] }
 #egui-winit = { version = "0.24.1", default-features = false, features = ["clipboard", "links", "wayland"] }
 
 # Linear algebra library
@@ -28,6 +28,8 @@ glam = "0.24"
 image = { version = "0.24.3", default-features = false, features = ["png"] }
 # Renderer core
 rend3 = { version = "^0.3.0",path = "rend3/rend3" }
+
+rend3-gltf = { version = "^0.3.0",path = "rend3/rend3-gltf" }
 # Egui renderer integration
 rend3-egui = { version = "^0.3.0",path = "rend3/rend3-egui" }
 # Framework that deals with the event loop, setting up the renderer, and platform differences.
@@ -40,7 +42,9 @@ webbrowser = "0.8.2"
 bytemuck = { version = "1.14.0", features = ["derive"] }
 instant = "0.1.12"
 nanorand = { version = "0.7", default-features = false, features = ["wyrand"] }
-
+pico-args = "0.5"
+wgpu-profiler = "0.15.0"
+#web-time = "0.2" # I can probably use the instant::Instant stuff for this
 [features]
 webgl = ["wgpu/webgl"]
 wgsl = ["wgpu/wgsl"]
@@ -58,14 +62,25 @@ opt-level = 0
 opt-level = 1
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
-egui-winit = {git = "https://github.com/emilk/egui.git", branch="master", default-features = false, features = ["clipboard", "links", "wayland"] }
+egui-winit = {version = "0.24.2", git = "https://github.com/emilk/egui.git", branch="master", default-features = false, features = ["clipboard", "links", "wayland"] }
 notify = "6.1.1"
 rust-embed = "8.1.0" # Enable shader hot reload for native compilation.
 [target.'cfg(target_family = "wasm")'.dependencies]
-egui-winit = { git = "https://github.com/emilk/egui.git", branch="master", default-features = false, features = ["links"] }
+egui-winit = { version = "0.24.2", git = "https://github.com/emilk/egui.git", branch="master", default-features = false, features = ["links"] }
 wasm-bindgen-futures = "0.4.39"
 web-sys = "=0.3.64"
 console_error_panic_hook = "0.1.7"
 console_log = "1.0.0"
 # Embed shaders in wasm.
 rust-embed = { version = "8.0.0", features = ["debug-embed"] }
+[package.metadata.android]
+build_targets = ["aarch64-linux-android"]
+assets = "resources"
+
+[package.metadata.android.sdk]
+min_sdk_version = 28
+target_sdk_version = 28
+compile_sdk_version = 28
+
+[package.metadata.android.application.activity]
+orientation = "landscape"
