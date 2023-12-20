@@ -642,7 +642,7 @@ checksum = "9ea835d29036a4087793836fa931b08837ad5e957da9e23886b29586fb9b6650"
 [[package]]
 name = "ecolor"
 version = "0.24.2"
-source = "git+https://github.com/emilk/egui.git?branch=master#add1695624d136484542abf1bc18749cf7b8eee3"
+source = "git+https://github.com/emilk/egui.git?branch=master#963be247f26f2ddd72c03649e9ebc0ec88ac8431"
 dependencies = [
  "bytemuck",
 ]
@@ -650,7 +650,7 @@ dependencies = [
 [[package]]
 name = "egui"
 version = "0.24.2"
-source = "git+https://github.com/emilk/egui.git?branch=master#add1695624d136484542abf1bc18749cf7b8eee3"
+source = "git+https://github.com/emilk/egui.git?branch=master#963be247f26f2ddd72c03649e9ebc0ec88ac8431"
 dependencies = [
  "ahash",
  "epaint",
@@ -661,7 +661,7 @@ dependencies = [
 [[package]]
 name = "egui-wgpu"
 version = "0.24.2"
-source = "git+https://github.com/emilk/egui.git?branch=master#add1695624d136484542abf1bc18749cf7b8eee3"
+source = "git+https://github.com/emilk/egui.git?branch=master#963be247f26f2ddd72c03649e9ebc0ec88ac8431"
 dependencies = [
  "bytemuck",
  "egui",
@@ -676,7 +676,7 @@ dependencies = [
 [[package]]
 name = "egui-winit"
 version = "0.24.2"
-source = "git+https://github.com/emilk/egui.git?branch=master#add1695624d136484542abf1bc18749cf7b8eee3"
+source = "git+https://github.com/emilk/egui.git?branch=master#963be247f26f2ddd72c03649e9ebc0ec88ac8431"
 dependencies = [
  "arboard",
  "egui",
@@ -691,7 +691,7 @@ dependencies = [
 [[package]]
 name = "emath"
 version = "0.24.2"
-source = "git+https://github.com/emilk/egui.git?branch=master#add1695624d136484542abf1bc18749cf7b8eee3"
+source = "git+https://github.com/emilk/egui.git?branch=master#963be247f26f2ddd72c03649e9ebc0ec88ac8431"
 dependencies = [
  "bytemuck",
 ]
@@ -753,7 +753,7 @@ dependencies = [
 [[package]]
 name = "epaint"
 version = "0.24.2"
-source = "git+https://github.com/emilk/egui.git?branch=master#add1695624d136484542abf1bc18749cf7b8eee3"
+source = "git+https://github.com/emilk/egui.git?branch=master#963be247f26f2ddd72c03649e9ebc0ec88ac8431"
 dependencies = [
  "ab_glyph",
  "ahash",
