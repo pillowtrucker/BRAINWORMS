@@ -1,8 +1,24 @@
 #![feature(variant_count)]
-pub mod frame_rate;
-pub mod kinetic_novel;
-pub mod scene_viewer_utils;
-
+pub mod backstage;
+pub mod play;
+use backstage::plumbing::frame_rate;
+use backstage::pyrotechnics::kinetic_narrative::{Gay, KineticEffect, KineticLabel, ShakeLetters};
+use egui::{Color32, TextStyle, Visuals};
+use frame_rate::FrameRate;
+use glam::{DVec2, Vec3, Vec3A};
+use instant::Instant;
+use log::info;
+use nanorand::{RandomGen, Rng};
+use pico_args::Arguments;
+use play::stage3d::{
+    extract_array, extract_backend, extract_msaa, extract_profile, extract_vec3, extract_vsync,
+    option_arg,
+};
+use rend3::types::{DirectionalLight, DirectionalLightHandle, SampleCount};
+use rend3::util::typedefs::FastHashMap;
+use rend3::RendererProfile;
+use rend3_framework::{AssetPath, UserResizeEvent};
+use rend3_routine::pbr::NormalTextureYDirection;
 use std::{
     fs::File,
     io::{BufRead, BufReader, Lines},
@@ -10,14 +26,11 @@ use std::{
     process::exit,
     sync::Arc,
 };
-
-use egui::{Color32, TextStyle, Visuals};
-use frame_rate::FrameRate;
-use kinetic_novel::{Gay, KineticEffect, KineticLabel, ShakeLetters};
-use log::info;
-use nanorand::{RandomGen, Rng};
-use rend3_framework::UserResizeEvent;
+use wgpu::Backend;
+use wgpu_profiler::GpuTimerScopeResult;
 use winit::{event::WindowEvent, event_loop::EventLoopWindowTarget};
+
+use crate::play::stage3d::{load_gltf, load_skybox, spawn};
 
 struct GameProgrammeData {
     _object_handle: rend3::types::ObjectHandle,
@@ -36,12 +49,208 @@ struct GameProgrammeData {
     frame_rate: FrameRate,
     elapsed: f32,
 }
+const HELP: &str = "\
+scene-viewer
+
+gltf and glb scene viewer powered by the rend3 rendering library.
+
+usage: scene-viewer --options ./path/to/gltf/file.gltf
+
+Meta:
+  --help            This menu.
+
+Rendering:
+  -b --backend                 Choose backend to run on ('vk', 'dx12', 'dx11', 'metal', 'gl').
+  -d --device                  Choose device to run on (case insensitive device substring).
+  -p --profile                 Choose rendering profile to use ('cpu', 'gpu').
+  -v --vsync                   Choose vsync mode ('immediate' [no-vsync], 'fifo' [vsync], 'fifo_relaxed' [adaptive vsync], 'mailbox' [fast vsync])
+  --msaa <level>               Level of antialiasing (either 1 or 4). Default 1.
+
+Windowing:
+  --absolute-mouse             Interpret the relative mouse coordinates as absolute. Useful when using things like VNC.
+  --fullscreen                 Open the window in borderless fullscreen.
+
+Assets:
+  --normal-y-down                        Interpret all normals as having the DirectX convention of Y down. Defaults to Y up.
+  --directional-light <x,y,z>            Create a directional light pointing towards the given coordinates.
+  --directional-light-intensity <value>  All lights created by the above flag have this intensity. Defaults to 4.
+  --gltf-disable-directional-lights      Disable all directional lights in the gltf
+  --ambient <value>                      Set the value of the minimum ambient light. This will be treated as white light of this intensity. Defaults to 0.1.
+  --scale <scale>                        Scale all objects loaded by this factor. Defaults to 1.0.
+  --shadow-distance <value>              Distance from the camera there will be directional shadows. Lower values means higher quality shadows. Defaults to 100.
+  --shadow-resolution <value>            Resolution of the shadow map. Higher values mean higher quality shadows with high performance cost. Defaults to 2048.
+
+Controls:
+  --walk <speed>               Walk speed (speed without holding shift) in units/second (typically meters). Default 10.
+  --run  <speed>               Run speed (speed while holding shift) in units/second (typically meters). Default 50.
+  --camera x,y,z,pitch,yaw     Spawns the camera at the given position. Press Period to get the current camera position.
+";
+
+struct GameProgrammeSettings {
+    absolute_mouse: bool,
+    desired_backend: Option<Backend>,
+    desired_device_name: Option<String>,
+    desired_profile: Option<RendererProfile>,
+    file_to_load: Option<String>,
+    walk_speed: f32,
+    run_speed: f32,
+    gltf_settings: rend3_gltf::GltfLoadSettings,
+    directional_light_direction: Option<Vec3>,
+    directional_light_intensity: f32,
+    directional_light: Option<DirectionalLightHandle>,
+    ambient_light_level: f32,
+    present_mode: rend3::types::PresentMode,
+    samples: SampleCount,
+
+    fullscreen: bool,
+
+    scancode_status: FastHashMap<u32, bool>,
+    camera_pitch: f32,
+    camera_yaw: f32,
+    camera_location: Vec3A,
+    previous_profiling_stats: Option<Vec<GpuTimerScopeResult>>,
+    timestamp_last_second: Instant,
+    timestamp_last_frame: Instant,
+    frame_times: histogram::Histogram,
+    last_mouse_delta: Option<DVec2>,
+
+    grabber: Option<rend3_framework::Grabber>,
+}
+impl GameProgrammeSettings {
+    pub fn new() -> Self {
+        #[cfg(feature = "tracy")]
+        tracy_client::Client::start();
+
+        let mut args = Arguments::from_vec(std::env::args_os().skip(1).collect());
+
+        // Meta
+        let help = args.contains(["-h", "--help"]);
+
+        // Rendering
+        let desired_backend =
+            option_arg(args.opt_value_from_fn(["-b", "--backend"], extract_backend));
+        let desired_device_name: Option<String> =
+            option_arg(args.opt_value_from_str(["-d", "--device"]))
+                .map(|s: String| s.to_lowercase());
+        let desired_mode = option_arg(args.opt_value_from_fn(["-p", "--profile"], extract_profile));
+        let samples =
+            option_arg(args.opt_value_from_fn("--msaa", extract_msaa)).unwrap_or(SampleCount::One);
+        let present_mode = option_arg(args.opt_value_from_fn(["-v", "--vsync"], extract_vsync))
+            .unwrap_or(rend3::types::PresentMode::Fifo);
+
+        // Windowing
+        let absolute_mouse: bool = args.contains("--absolute-mouse");
+        let fullscreen = args.contains("--fullscreen");
+
+        // Assets
+        let normal_direction = match args.contains("--normal-y-down") {
+            true => NormalTextureYDirection::Down,
+            false => NormalTextureYDirection::Up,
+        };
+        let directional_light_direction =
+            option_arg(args.opt_value_from_fn("--directional-light", extract_vec3));
+        let directional_light_intensity: f32 =
+            option_arg(args.opt_value_from_str("--directional-light-intensity")).unwrap_or(4.0);
+        let ambient_light_level: f32 =
+            option_arg(args.opt_value_from_str("--ambient")).unwrap_or(0.10);
+        let scale: Option<f32> = option_arg(args.opt_value_from_str("--scale"));
+        let shadow_distance: Option<f32> = option_arg(args.opt_value_from_str("--shadow-distance"));
+        let shadow_resolution: Option<u16> =
+            option_arg(args.opt_value_from_str("--shadow-resolution"));
+        let gltf_disable_directional_light: bool =
+            args.contains("--gltf-disable-directional-lights");
+
+        // Controls
+        let walk_speed = args.value_from_str("--walk").unwrap_or(10.0_f32);
+        let run_speed = args.value_from_str("--run").unwrap_or(50.0_f32);
+        let camera_default = [
+            3.0,
+            3.0,
+            3.0,
+            -std::f32::consts::FRAC_PI_8,
+            std::f32::consts::FRAC_PI_4,
+        ];
+        let camera_info = args
+            .value_from_str("--camera")
+            .map_or(camera_default, |s: String| {
+                extract_array(&s, camera_default).unwrap()
+            });
+
+        // Free args
+        let file_to_load: Option<String> = args.free_from_str().ok();
+
+        let remaining = args.finish();
+
+        if !remaining.is_empty() {
+            eprint!("Unknown arguments:");
+            for flag in remaining {
+                eprint!(" '{}'", flag.to_string_lossy());
+            }
+            eprintln!("\n");
+
+            eprintln!("{}", HELP);
+            std::process::exit(1);
+        }
+
+        if help {
+            eprintln!("{}", HELP);
+            std::process::exit(1);
+        }
+
+        let mut gltf_settings = rend3_gltf::GltfLoadSettings {
+            normal_direction,
+            enable_directional: !gltf_disable_directional_light,
+            ..Default::default()
+        };
+        if let Some(scale) = scale {
+            gltf_settings.scale = scale
+        }
+        if let Some(shadow_distance) = shadow_distance {
+            gltf_settings.directional_light_shadow_distance = shadow_distance;
+        }
+        if let Some(shadow_resolution) = shadow_resolution {
+            gltf_settings.directional_light_resolution = shadow_resolution;
+        }
+
+        Self {
+            absolute_mouse,
+            desired_backend,
+            desired_device_name,
+            desired_profile: desired_mode,
+            file_to_load,
+            walk_speed,
+            run_speed,
+            gltf_settings,
+            directional_light_direction,
+            directional_light_intensity,
+            directional_light: None,
+            ambient_light_level,
+            present_mode,
+            samples,
+
+            fullscreen,
+
+            scancode_status: FastHashMap::default(),
+            camera_pitch: camera_info[3],
+            camera_yaw: camera_info[4],
+            camera_location: Vec3A::new(camera_info[0], camera_info[1], camera_info[2]),
+            previous_profiling_stats: None,
+            timestamp_last_second: Instant::now(),
+            timestamp_last_frame: Instant::now(),
+            frame_times: histogram::Histogram::new(),
+            last_mouse_delta: None,
+
+            grabber: None,
+        }
+    }
+}
 
 const SAMPLE_COUNT: rend3::types::SampleCount = rend3::types::SampleCount::One;
 
 #[derive(Default)]
 struct GameProgramme {
     data: Option<GameProgrammeData>,
+    settings: Option<GameProgrammeSettings>,
     rust_logo: egui::TextureId,
 }
 impl rend3_framework::App for GameProgramme {
@@ -56,9 +265,21 @@ impl rend3_framework::App for GameProgramme {
         _event_loop: &winit::event_loop::EventLoop<rend3_framework::UserResizeEvent<()>>,
         window: &winit::window::Window,
         renderer: &Arc<rend3::Renderer>,
-        _routines: &Arc<rend3_framework::DefaultRoutines>,
+        routines: &Arc<rend3_framework::DefaultRoutines>,
         surface_format: rend3::types::TextureFormat,
     ) {
+        let mut _settings = GameProgrammeSettings::new();
+        _settings.grabber = Some(rend3_framework::Grabber::new(window));
+        if let Some(direction) = _settings.directional_light_direction {
+            _settings.directional_light = Some(renderer.add_directional_light(DirectionalLight {
+                color: Vec3::splat(1.0),
+                intensity: _settings.directional_light_intensity,
+                direction,
+                distance: _settings.gltf_settings.directional_light_shadow_distance,
+                resolution: 2048,
+            }));
+        }
+
         let window_size = window.inner_size();
 
         // Create the egui render routine
@@ -86,10 +307,9 @@ impl rend3_framework::App for GameProgramme {
                 hum.size = 24.;
             }
         });
-
+        let mut rng = nanorand::tls_rng();
         let Some((_test_text, test_lines)) = (match read_lines("assets/texts/PARADISE_LOST.txt") {
             Ok(test_text) => {
-                let mut rng = nanorand::tls_rng();
                 let the_body = test_text.fold("".to_owned(), |acc: String, l| {
                     if let Ok(l) = l {
                         format!("{}{}\n", acc, l)
@@ -109,7 +329,7 @@ impl rend3_framework::App for GameProgramme {
             exit(1);
         };
         let mut random_line_effects = vec![];
-        let mut rng = nanorand::tls_rng();
+        //        let mut rng = nanorand::tls_rng();
         for _ in test_lines.lines() {
             random_line_effects.push(KineticEffect::random(&mut rng));
         }
@@ -218,6 +438,33 @@ impl rend3_framework::App for GameProgramme {
             _test_text,
             random_line_effects,
         });
+
+        let gltf_settings = _settings.gltf_settings;
+        let file_to_load = _settings.file_to_load.take();
+        let renderer = Arc::clone(renderer);
+        let routines = Arc::clone(routines);
+        spawn(async move {
+            let loader = rend3_framework::AssetLoader::new_local(
+                concat!(env!("CARGO_MANIFEST_DIR"), "/assets/"),
+                "",
+                "http://localhost:8000/assets/",
+            );
+            if let Err(e) = load_skybox(&renderer, &loader, &routines.skybox).await {
+                println!("Failed to load skybox {}", e)
+            };
+            Box::leak(Box::new(
+                load_gltf(
+                    &renderer,
+                    &loader,
+                    &gltf_settings,
+                    file_to_load
+                        .as_deref()
+                        .map_or_else(|| AssetPath::Internal("LinacLab.glb"), AssetPath::External),
+                )
+                .await,
+            ));
+        });
+        self.settings = Some(_settings);
     }
 
     fn handle_event(

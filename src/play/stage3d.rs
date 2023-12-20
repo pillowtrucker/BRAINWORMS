@@ -1,3 +1,5 @@
+// how to set the stage for a 3d scene
+// for now I'm going to test and experiment in main() and then dump the results here
 use std::{
     collections::HashMap, future::Future, hash::BuildHasher, path::Path, sync::Arc, time::Duration,
 };
@@ -27,9 +29,12 @@ use winit::{
     window::{Fullscreen, WindowBuilder},
 };
 
-use crate::platform_scancodes;
-
-async fn load_skybox_image(loader: &rend3_framework::AssetLoader, data: &mut Vec<u8>, path: &str) {
+use crate::backstage::plumbing::platform_scancodes::Scancodes;
+pub(crate) async fn load_skybox_image(
+    loader: &rend3_framework::AssetLoader,
+    data: &mut Vec<u8>,
+    path: &str,
+) {
     let decoded = image::load_from_memory(
         &loader
             .get_asset(AssetPath::Internal(path))
@@ -42,7 +47,7 @@ async fn load_skybox_image(loader: &rend3_framework::AssetLoader, data: &mut Vec
     data.extend_from_slice(decoded.as_raw());
 }
 
-async fn load_skybox(
+pub(crate) async fn load_skybox(
     renderer: &Arc<Renderer>,
     loader: &rend3_framework::AssetLoader,
     skybox_routine: &Mutex<SkyboxRoutine>,
@@ -67,7 +72,7 @@ async fn load_skybox(
     Ok(())
 }
 
-async fn load_gltf(
+pub(crate) async fn load_gltf(
     renderer: &Arc<Renderer>,
     loader: &rend3_framework::AssetLoader,
     settings: &rend3_gltf::GltfLoadSettings,
@@ -141,7 +146,7 @@ fn button_pressed<Hash: BuildHasher>(map: &HashMap<u32, bool, Hash>, key: u32) -
     map.get(&key).map_or(false, |b| *b)
 }
 
-fn extract_backend(value: &str) -> Result<Backend, &'static str> {
+pub(crate) fn extract_backend(value: &str) -> Result<Backend, &'static str> {
     Ok(match value.to_lowercase().as_str() {
         "vulkan" | "vk" => Backend::Vulkan,
         "dx12" | "12" => Backend::Dx12,
@@ -152,7 +157,7 @@ fn extract_backend(value: &str) -> Result<Backend, &'static str> {
     })
 }
 
-fn extract_profile(value: &str) -> Result<rend3::RendererProfile, &'static str> {
+pub(crate) fn extract_profile(value: &str) -> Result<rend3::RendererProfile, &'static str> {
     Ok(match value.to_lowercase().as_str() {
         "legacy" | "c" | "cpu" => rend3::RendererProfile::CpuDriven,
         "modern" | "g" | "gpu" => rend3::RendererProfile::GpuDriven,
@@ -160,7 +165,7 @@ fn extract_profile(value: &str) -> Result<rend3::RendererProfile, &'static str> 
     })
 }
 
-fn extract_msaa(value: &str) -> Result<SampleCount, &'static str> {
+pub(crate) fn extract_msaa(value: &str) -> Result<SampleCount, &'static str> {
     Ok(match value {
         "1" => SampleCount::One,
         "4" => SampleCount::Four,
@@ -168,7 +173,7 @@ fn extract_msaa(value: &str) -> Result<SampleCount, &'static str> {
     })
 }
 
-fn extract_vsync(value: &str) -> Result<rend3::types::PresentMode, &'static str> {
+pub(crate) fn extract_vsync(value: &str) -> Result<rend3::types::PresentMode, &'static str> {
     Ok(match value.to_lowercase().as_str() {
         "immediate" => rend3::types::PresentMode::Immediate,
         "fifo" => rend3::types::PresentMode::Fifo,
@@ -177,7 +182,10 @@ fn extract_vsync(value: &str) -> Result<rend3::types::PresentMode, &'static str>
     })
 }
 
-fn extract_array<const N: usize>(value: &str, default: [f32; N]) -> Result<[f32; N], &'static str> {
+pub(crate) fn extract_array<const N: usize>(
+    value: &str,
+    default: [f32; N],
+) -> Result<[f32; N], &'static str> {
     let mut res = default;
     let split: Vec<_> = value.split(',').enumerate().collect();
 
@@ -193,7 +201,7 @@ fn extract_array<const N: usize>(value: &str, default: [f32; N]) -> Result<[f32;
     Ok(res)
 }
 
-fn extract_vec3(value: &str) -> Result<Vec3, &'static str> {
+pub(crate) fn extract_vec3(value: &str) -> Result<Vec3, &'static str> {
     let mut res = [0.0_f32, 0.0, 0.0];
     let split: Vec<_> = value.split(',').enumerate().collect();
 
@@ -209,7 +217,7 @@ fn extract_vec3(value: &str) -> Result<Vec3, &'static str> {
     Ok(Vec3::from(res))
 }
 
-fn option_arg<T>(result: Result<Option<T>, pico_args::Error>) -> Option<T> {
+pub(crate) fn option_arg<T>(result: Result<Option<T>, pico_args::Error>) -> Option<T> {
     match result {
         Ok(o) => o,
         Err(pico_args::Error::Utf8ArgumentParsingFailed { value, cause }) => {
@@ -589,28 +597,27 @@ impl rend3_framework::App for SceneViewer {
                 let forward = -rotation.z_axis;
                 let up = rotation.y_axis;
                 let side = -rotation.x_axis;
-                let velocity = if button_pressed(&self.scancode_status, platform::Scancodes::SHIFT)
-                {
+                let velocity = if button_pressed(&self.scancode_status, Scancodes::SHIFT) {
                     self.run_speed
                 } else {
                     self.walk_speed
                 };
-                if button_pressed(&self.scancode_status, platform::Scancodes::W) {
+                if button_pressed(&self.scancode_status, Scancodes::W) {
                     self.camera_location += forward * velocity * delta_time.as_secs_f32();
                 }
-                if button_pressed(&self.scancode_status, platform::Scancodes::S) {
+                if button_pressed(&self.scancode_status, Scancodes::S) {
                     self.camera_location -= forward * velocity * delta_time.as_secs_f32();
                 }
-                if button_pressed(&self.scancode_status, platform::Scancodes::A) {
+                if button_pressed(&self.scancode_status, Scancodes::A) {
                     self.camera_location += side * velocity * delta_time.as_secs_f32();
                 }
-                if button_pressed(&self.scancode_status, platform::Scancodes::D) {
+                if button_pressed(&self.scancode_status, Scancodes::D) {
                     self.camera_location -= side * velocity * delta_time.as_secs_f32();
                 }
-                if button_pressed(&self.scancode_status, platform::Scancodes::Q) {
+                if button_pressed(&self.scancode_status, Scancodes::Q) {
                     self.camera_location += up * velocity * delta_time.as_secs_f32();
                 }
-                if button_pressed(&self.scancode_status, platform::Scancodes::PERIOD) {
+                if button_pressed(&self.scancode_status, Scancodes::PERIOD) {
                     println!(
                         "{x},{y},{z},{pitch},{yaw}",
                         x = self.camera_location.x,
@@ -621,11 +628,11 @@ impl rend3_framework::App for SceneViewer {
                     );
                 }
 
-                if button_pressed(&self.scancode_status, platform::Scancodes::ESCAPE) {
+                if button_pressed(&self.scancode_status, Scancodes::ESCAPE) {
                     self.grabber.as_mut().unwrap().request_ungrab(window);
                 }
 
-                if button_pressed(&self.scancode_status, platform::Scancodes::P) {
+                if button_pressed(&self.scancode_status, Scancodes::P) {
                     // write out gpu side performance info into a trace readable by chrome://tracing
                     if let Some(ref stats) = self.previous_profiling_stats {
                         println!("Outputing gpu timing chrome trace to profile.json");

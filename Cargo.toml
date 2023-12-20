@@ -25,7 +25,7 @@ egui-wgpu = {version = "0.24.2", git = "https://github.com/emilk/egui.git", bran
 # Linear algebra library
 glam = "0.24"
 # Importing png's
-image = { version = "0.24.3", default-features = false, features = ["png"] }
+image = { version = "0.24.3", default-features = false, features = ["png","jpeg","tiff"] }
 # Renderer core
 rend3 = { version = "^0.3.0",path = "rend3/rend3" }
 
@@ -45,6 +45,11 @@ nanorand = { version = "0.7", default-features = false, features = ["wyrand"] }
 pico-args = "0.5"
 wgpu-profiler = "0.15.0"
 #web-time = "0.2" # I can probably use the instant::Instant stuff for this
+anyhow = "1"
+cfg-if = "1"
+indoc = "2"
+profiling = { version = "1", default-features = false }
+histogram = "0.6"
 [features]
 webgl = ["wgpu/webgl"]
 wgsl = ["wgpu/wgsl"]
