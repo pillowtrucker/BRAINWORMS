@@ -120,7 +120,7 @@ impl<'a> KineticLabel<'a> {
         self.kinesis = Some(kinesis);
         self
     }
-
+    #[allow(dead_code)]
     pub fn text(&self) -> &str {
         self.text.text()
     }
@@ -137,6 +137,7 @@ impl<'a> KineticLabel<'a> {
     ///
     /// You can also use [`egui::Style::wrap`].
     #[inline]
+    #[allow(dead_code)]
     pub fn wrap(mut self, wrap: bool) -> Self {
         self.wrap = Some(wrap);
         self.truncate = false;
@@ -153,6 +154,7 @@ impl<'a> KineticLabel<'a> {
     ///
     /// Calling `truncate` will override [`Self::wrap`].
     #[inline]
+    #[allow(dead_code)]
     pub fn truncate(mut self, truncate: bool) -> Self {
         self.wrap = None;
         self.truncate = truncate;
@@ -174,6 +176,7 @@ impl<'a> KineticLabel<'a> {
     /// # });
     /// ```
     #[inline]
+    #[allow(dead_code)]
     pub fn sense(mut self, sense: Sense) -> Self {
         self.sense = Some(sense);
         self

@@ -36,6 +36,7 @@ impl FrameRate {
 
     /// Return current parity of the frame.
     /// This is useful for ping pong textures or buffers.
+    #[allow(dead_code)]
     pub fn get_parity(&self) -> bool {
         self.current_index % 2 == 0
     }

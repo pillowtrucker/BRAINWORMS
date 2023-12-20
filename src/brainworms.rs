@@ -5,8 +5,8 @@ use backstage::plumbing::frame_rate;
 use backstage::pyrotechnics::kinetic_narrative::{Gay, KineticEffect, KineticLabel, ShakeLetters};
 use egui::{Color32, TextStyle, Visuals};
 use frame_rate::FrameRate;
-use glam::{DVec2, Vec3, Vec3A};
-use instant::Instant;
+use glam::{DVec2, Mat3A, Mat4, Vec3, Vec3A};
+use instant::{Duration, Instant};
 use log::info;
 use nanorand::{RandomGen, Rng};
 use pico_args::Arguments;
@@ -14,10 +14,12 @@ use play::stage3d::{
     extract_array, extract_backend, extract_msaa, extract_profile, extract_vec3, extract_vsync,
     option_arg,
 };
-use rend3::types::{DirectionalLight, DirectionalLightHandle, SampleCount};
+use rend3::types::{
+    Camera, CameraProjection, DirectionalLight, DirectionalLightHandle, SampleCount,
+};
 use rend3::util::typedefs::FastHashMap;
 use rend3::RendererProfile;
-use rend3_framework::{AssetPath, UserResizeEvent};
+use rend3_framework::{lock, AssetPath, Event, UserResizeEvent};
 use rend3_routine::pbr::NormalTextureYDirection;
 use std::{
     fs::File,
@@ -28,19 +30,21 @@ use std::{
 };
 use wgpu::Backend;
 use wgpu_profiler::GpuTimerScopeResult;
+use winit::event::{DeviceEvent, ElementState, KeyEvent, MouseButton};
+use winit::window::{Fullscreen, WindowBuilder};
 use winit::{event::WindowEvent, event_loop::EventLoopWindowTarget};
 
-use crate::play::stage3d::{load_gltf, load_skybox, spawn};
+use crate::backstage::plumbing::platform_scancodes::Scancodes;
+use crate::play::stage3d::{button_pressed, load_gltf, load_skybox, spawn};
+#[cfg(target_arch = "wasm32")]
+use winit::keyboard::PhysicalKey::Code;
+#[cfg(not(target_arch = "wasm32"))]
+use winit::platform::scancode::PhysicalKeyExtScancode;
 
 struct GameProgrammeData {
-    _object_handle: rend3::types::ObjectHandle,
-    material_handle: rend3::types::MaterialHandle,
-    _directional_handle: rend3::types::DirectionalLightHandle,
-
     egui_routine: rend3_egui::EguiRenderRoutine,
     egui_ctx: egui::Context,
     platform: egui_winit::State,
-    color: [f32; 4],
     _test_text: String,
     test_lines: String,
     random_line_effects: Vec<KineticEffect>,
@@ -134,9 +138,9 @@ impl GameProgrammeSettings {
                 .map(|s: String| s.to_lowercase());
         let desired_mode = option_arg(args.opt_value_from_fn(["-p", "--profile"], extract_profile));
         let samples =
-            option_arg(args.opt_value_from_fn("--msaa", extract_msaa)).unwrap_or(SampleCount::One);
+            option_arg(args.opt_value_from_fn("--msaa", extract_msaa)).unwrap_or(SampleCount::Four);
         let present_mode = option_arg(args.opt_value_from_fn(["-v", "--vsync"], extract_vsync))
-            .unwrap_or(rend3::types::PresentMode::Fifo);
+            .unwrap_or(rend3::types::PresentMode::Immediate);
 
         // Windowing
         let absolute_mouse: bool = args.contains("--absolute-mouse");
@@ -245,19 +249,53 @@ impl GameProgrammeSettings {
     }
 }
 
-const SAMPLE_COUNT: rend3::types::SampleCount = rend3::types::SampleCount::One;
-
-#[derive(Default)]
 struct GameProgramme {
     data: Option<GameProgrammeData>,
-    settings: Option<GameProgrammeSettings>,
-    rust_logo: egui::TextureId,
+    settings: GameProgrammeSettings,
+}
+impl GameProgramme {
+    fn new() -> Self {
+        Self {
+            data: None,
+            settings: GameProgrammeSettings::new(),
+        }
+    }
 }
 impl rend3_framework::App for GameProgramme {
-    const HANDEDNESS: rend3::types::Handedness = rend3::types::Handedness::Left;
+    const HANDEDNESS: rend3::types::Handedness = rend3::types::Handedness::Right;
 
+    fn present_mode(&self) -> rend3::types::PresentMode {
+        self.settings.present_mode
+    }
+
+    fn scale_factor(&self) -> f32 {
+        // Android has very low memory bandwidth, so lets run internal buffers at half
+        // res by default
+        cfg_if::cfg_if! {
+            if #[cfg(target_os = "android")] {
+                0.5
+            } else {
+                1.0
+            }
+        }
+    }
+    fn create_iad<'a>(
+        &'a mut self,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = anyhow::Result<rend3::InstanceAdapterDevice>> + 'a>,
+    > {
+        Box::pin(async move {
+            Ok(rend3::create_iad(
+                self.settings.desired_backend,
+                self.settings.desired_device_name.clone(),
+                self.settings.desired_profile,
+                None,
+            )
+            .await?)
+        })
+    }
     fn sample_count(&self) -> rend3::types::SampleCount {
-        SAMPLE_COUNT
+        self.settings.samples
     }
 
     fn setup(
@@ -268,22 +306,26 @@ impl rend3_framework::App for GameProgramme {
         routines: &Arc<rend3_framework::DefaultRoutines>,
         surface_format: rend3::types::TextureFormat,
     ) {
-        let mut _settings = GameProgrammeSettings::new();
-        _settings.grabber = Some(rend3_framework::Grabber::new(window));
-        if let Some(direction) = _settings.directional_light_direction {
-            _settings.directional_light = Some(renderer.add_directional_light(DirectionalLight {
-                color: Vec3::splat(1.0),
-                intensity: _settings.directional_light_intensity,
-                direction,
-                distance: _settings.gltf_settings.directional_light_shadow_distance,
-                resolution: 2048,
-            }));
+        self.settings.grabber = Some(rend3_framework::Grabber::new(window));
+        if let Some(direction) = self.settings.directional_light_direction {
+            self.settings.directional_light = Some(
+                renderer.add_directional_light(DirectionalLight {
+                    color: Vec3::splat(1.0),
+                    intensity: self.settings.directional_light_intensity,
+                    direction,
+                    distance: self
+                        .settings
+                        .gltf_settings
+                        .directional_light_shadow_distance,
+                    resolution: 2048,
+                }),
+            );
         }
 
         let window_size = window.inner_size();
 
         // Create the egui render routine
-        let mut egui_routine = rend3_egui::EguiRenderRoutine::new(
+        let egui_routine = rend3_egui::EguiRenderRoutine::new(
             renderer,
             surface_format,
             rend3::types::SampleCount::One,
@@ -333,35 +375,6 @@ impl rend3_framework::App for GameProgramme {
         for _ in test_lines.lines() {
             random_line_effects.push(KineticEffect::random(&mut rng));
         }
-        // Create mesh and calculate smooth normals based on vertices
-        let mesh = create_mesh();
-
-        // Add mesh to renderer's world.
-        //
-        // All handles are refcounted, so we only need to hang onto the handle until we
-        // make an object.
-        let mesh_handle = renderer.add_mesh(mesh).unwrap();
-
-        // Add PBR material with all defaults except a single color.
-        let material = rend3_routine::pbr::PbrMaterial {
-            albedo: rend3_routine::pbr::AlbedoComponent::Value(glam::Vec4::new(0.0, 0.5, 0.5, 1.0)),
-            transparency: rend3_routine::pbr::Transparency::Blend,
-            ..rend3_routine::pbr::PbrMaterial::default()
-        };
-        let material_handle = renderer.add_material(material);
-
-        // Combine the mesh and the material with a location to give an object.
-        let object = rend3::types::Object {
-            mesh_kind: rend3::types::ObjectMeshKind::Static(mesh_handle),
-            material: material_handle.clone(),
-            transform: glam::Mat4::IDENTITY,
-        };
-
-        // Creating an object will hold onto both the mesh and the material
-        // even if they are deleted.
-        //
-        // We need to keep the object handle alive.
-        let _object_handle = renderer.add_object(object);
 
         let camera_pitch = std::f32::consts::FRAC_PI_4;
         let camera_yaw = -std::f32::consts::FRAC_PI_4;
@@ -380,18 +393,6 @@ impl rend3_framework::App for GameProgramme {
             view,
         });
 
-        // Create a single directional light
-        //
-        // We need to keep the directional light handle alive.
-        let _directional_handle = renderer.add_directional_light(rend3::types::DirectionalLight {
-            color: glam::Vec3::ONE,
-            intensity: 10.0,
-            // Direction will be normalized
-            direction: glam::Vec3::new(-1.0, -4.0, 2.0),
-            distance: 400.0,
-            resolution: 2048,
-        });
-
         // Create the winit/egui integration.
         let platform = egui_winit::State::new(
             egui_ctx.clone(),
@@ -402,30 +403,8 @@ impl rend3_framework::App for GameProgramme {
         );
 
         //Images
-        let image_bytes = include_bytes!("../assets/rust-logo-128x128-blk.png");
-        let image_image = image::load_from_memory(image_bytes).unwrap();
-        let image_rgba = image_image.as_rgba8().unwrap().clone().into_raw();
-
-        use image::GenericImageView;
-        let dimensions = image_image.dimensions();
-
-        let format = wgpu::TextureFormat::Rgba8UnormSrgb;
-
-        self.rust_logo = rend3_egui::EguiRenderRoutine::create_egui_texture(
-            &mut egui_routine.internal,
-            renderer,
-            format,
-            &image_rgba,
-            dimensions,
-            Some("rust_logo_texture"),
-        );
-
-        let color: [f32; 4] = [0.0, 0.5, 0.5, 1.0];
 
         self.data = Some(GameProgrammeData {
-            _object_handle,
-            material_handle,
-            _directional_handle,
             _start_time: instant::Instant::now(),
             last_update: instant::Instant::now(),
             frame_rate: FrameRate::new(100),
@@ -433,14 +412,13 @@ impl rend3_framework::App for GameProgramme {
             egui_routine,
             egui_ctx,
             platform,
-            color,
             test_lines,
             _test_text,
             random_line_effects,
         });
 
-        let gltf_settings = _settings.gltf_settings;
-        let file_to_load = _settings.file_to_load.take();
+        let gltf_settings = self.settings.gltf_settings;
+        let file_to_load = self.settings.file_to_load.take();
         let renderer = Arc::clone(renderer);
         let routines = Arc::clone(routines);
         spawn(async move {
@@ -464,7 +442,6 @@ impl rend3_framework::App for GameProgramme {
                 .await,
             ));
         });
-        self.settings = Some(_settings);
     }
 
     fn handle_event(
@@ -490,45 +467,30 @@ impl rend3_framework::App for GameProgramme {
                 data.elapsed += last_frame_duration;
                 data.frame_rate.update(last_frame_duration);
                 data.last_update = instant::Instant::now();
+                let view = Mat4::from_euler(
+                    glam::EulerRot::XYZ,
+                    -self.settings.camera_pitch,
+                    -self.settings.camera_yaw,
+                    0.0,
+                );
+                let view = view * Mat4::from_translation((-self.settings.camera_location).into());
+
+                renderer.set_camera_data(Camera {
+                    projection: CameraProjection::Perspective {
+                        vfov: 60.0,
+                        near: 0.1,
+                    },
+                    view,
+                });
+
                 data.egui_ctx
                     .begin_frame(data.platform.take_egui_input(window));
 
                 // Insert egui commands here
                 let ctx = &data.egui_ctx;
-                egui::Window::new("Change color")
-                    .resizable(true)
-                    .show(ctx, |ui| {
-                        ui.label(std::format!("framerate: {:.0}fps", data.frame_rate.get()));
-                        ui.label("Change the color of the cube");
-                        if ui
-                            .color_edit_button_rgba_unmultiplied(&mut data.color)
-                            .changed()
-                        {
-                            renderer.update_material(
-                                &data.material_handle.clone(),
-                                rend3_routine::pbr::PbrMaterial {
-                                    albedo: rend3_routine::pbr::AlbedoComponent::Value(
-                                        glam::Vec4::from(data.color),
-                                    ),
-                                    transparency: rend3_routine::pbr::Transparency::Blend,
-                                    ..rend3_routine::pbr::PbrMaterial::default()
-                                },
-                            );
-                        }
-                        ui.label("Want to get rusty?");
-                        if ui
-                            .add(egui::widgets::ImageButton::new((
-                                self.rust_logo,
-                                egui::Vec2::splat(64.0),
-                            )))
-                            .clicked()
-                        {
-                            webbrowser::open("https://www.rust-lang.org")
-                                .expect("failed to open URL");
-                        }
-                    });
 
                 egui::Window::new("egui widget testing").show(ctx, |ui| {
+                    ui.label(std::format!("framerate: {:.0}fps", data.frame_rate.get()));
                     ui.horizontal(|ui| {
                         ui.add(KineticLabel::new("blabla"));
                         ui.add(KineticLabel::new("same").kinesis(vec![&KineticEffect::default()]));
@@ -568,15 +530,20 @@ impl rend3_framework::App for GameProgramme {
                 let frame = surface.unwrap().get_current_texture().unwrap();
 
                 // Swap the instruction buffers so that our frame's changes can be processed.
+
+                // Swap the instruction buffers so that our frame's changes can be processed.
                 renderer.swap_instruction_buffers();
                 // Evaluate our frame's world-change instructions
                 let mut eval_output = renderer.evaluate_instructions();
 
                 // Lock the routines
                 let pbr_routine = rend3_framework::lock(&routines.pbr);
+                let mut skybox_routine = lock(&routines.skybox);
                 let tonemapping_routine = rend3_framework::lock(&routines.tonemapping);
-
-                // Build a rendergraph
+                skybox_routine.evaluate(renderer);
+                /*
+                Build a rendergraph
+                */
                 let mut graph = rend3::graph::RenderGraph::new();
 
                 // Import the surface texture into the render graph.
@@ -591,13 +558,13 @@ impl rend3_framework::App for GameProgramme {
                     &mut graph,
                     &eval_output,
                     &pbr_routine,
-                    None,
+                    Some(&skybox_routine),
                     &tonemapping_routine,
                     frame_handle,
                     resolution,
-                    SAMPLE_COUNT,
-                    glam::Vec4::ZERO,
-                    glam::Vec4::new(0.10, 0.05, 0.10, 1.0), // Nice scene-referred purple
+                    self.settings.samples,
+                    Vec3::splat(self.settings.ambient_light_level).extend(1.0),
+                    glam::Vec4::new(0.0, 0.0, 0.0, 1.0),
                 );
 
                 // Add egui on top of all the other passes
@@ -605,14 +572,114 @@ impl rend3_framework::App for GameProgramme {
                     .add_to_graph(&mut graph, input, frame_handle);
 
                 // Dispatch a render using the built up rendergraph!
-                graph.execute(renderer, &mut eval_output);
+                self.settings.previous_profiling_stats = graph.execute(renderer, &mut eval_output);
 
                 // Present the frame
                 frame.present();
-
+                // mark the end of the frame for tracy/other profilers
+                profiling::finish_frame!();
                 control_flow(winit::event_loop::ControlFlow::Poll);
             }
             rend3_framework::Event::AboutToWait => {
+                profiling::scope!("MainEventsCleared");
+                let now = Instant::now();
+
+                let delta_time = now - self.settings.timestamp_last_frame;
+                self.settings
+                    .frame_times
+                    .increment(delta_time.as_micros() as u64)
+                    .unwrap();
+
+                let elapsed_since_second = now - self.settings.timestamp_last_second;
+                if elapsed_since_second > Duration::from_secs(1) {
+                    let count = self.settings.frame_times.entries();
+                    println!(
+                        "{:0>5} frames over {:0>5.2}s. \
+                        Min: {:0>5.2}ms; \
+                        Average: {:0>5.2}ms; \
+                        95%: {:0>5.2}ms; \
+                        99%: {:0>5.2}ms; \
+                        Max: {:0>5.2}ms; \
+                        StdDev: {:0>5.2}ms",
+                        count,
+                        elapsed_since_second.as_secs_f32(),
+                        self.settings.frame_times.minimum().unwrap() as f32 / 1_000.0,
+                        self.settings.frame_times.mean().unwrap() as f32 / 1_000.0,
+                        self.settings.frame_times.percentile(95.0).unwrap() as f32 / 1_000.0,
+                        self.settings.frame_times.percentile(99.0).unwrap() as f32 / 1_000.0,
+                        self.settings.frame_times.maximum().unwrap() as f32 / 1_000.0,
+                        self.settings.frame_times.stddev().unwrap() as f32 / 1_000.0,
+                    );
+                    self.settings.timestamp_last_second = now;
+                    self.settings.frame_times.clear();
+                }
+
+                self.settings.timestamp_last_frame = now;
+
+                // std::thread::sleep(Duration::from_millis(100));
+
+                let rotation = Mat3A::from_euler(
+                    glam::EulerRot::XYZ,
+                    -self.settings.camera_pitch,
+                    -self.settings.camera_yaw,
+                    0.0,
+                )
+                .transpose();
+                let forward = -rotation.z_axis;
+                let up = rotation.y_axis;
+                let side = -rotation.x_axis;
+                let velocity = if button_pressed(&self.settings.scancode_status, Scancodes::SHIFT) {
+                    self.settings.run_speed
+                } else {
+                    self.settings.walk_speed
+                };
+                if button_pressed(&self.settings.scancode_status, Scancodes::W) {
+                    self.settings.camera_location += forward * velocity * delta_time.as_secs_f32();
+                }
+                if button_pressed(&self.settings.scancode_status, Scancodes::S) {
+                    self.settings.camera_location -= forward * velocity * delta_time.as_secs_f32();
+                }
+                if button_pressed(&self.settings.scancode_status, Scancodes::A) {
+                    self.settings.camera_location += side * velocity * delta_time.as_secs_f32();
+                }
+                if button_pressed(&self.settings.scancode_status, Scancodes::D) {
+                    self.settings.camera_location -= side * velocity * delta_time.as_secs_f32();
+                }
+                if button_pressed(&self.settings.scancode_status, Scancodes::Q) {
+                    self.settings.camera_location += up * velocity * delta_time.as_secs_f32();
+                }
+                if button_pressed(&self.settings.scancode_status, Scancodes::PERIOD) {
+                    println!(
+                        "{x},{y},{z},{pitch},{yaw}",
+                        x = self.settings.camera_location.x,
+                        y = self.settings.camera_location.y,
+                        z = self.settings.camera_location.z,
+                        pitch = self.settings.camera_pitch,
+                        yaw = self.settings.camera_yaw
+                    );
+                }
+
+                if button_pressed(&self.settings.scancode_status, Scancodes::ESCAPE) {
+                    self.settings
+                        .grabber
+                        .as_mut()
+                        .unwrap()
+                        .request_ungrab(window);
+                }
+
+                if button_pressed(&self.settings.scancode_status, Scancodes::P) {
+                    // write out gpu side performance info into a trace readable by chrome://tracing
+                    if let Some(ref stats) = self.settings.previous_profiling_stats {
+                        println!("Outputing gpu timing chrome trace to profile.json");
+                        wgpu_profiler::chrometrace::write_chrometrace(
+                            Path::new("profile.json"),
+                            stats,
+                        )
+                        .unwrap();
+                    } else {
+                        println!("No gpu timing trace available, either timestamp queries are unsupported or not enough frames have elapsed yet!");
+                    }
+                }
                 window.request_redraw();
             }
             rend3_framework::Event::WindowEvent { event, .. } => {
@@ -622,6 +689,9 @@ impl rend3_framework::App for GameProgramme {
                 }
 
                 match event {
+                    WindowEvent::CloseRequested => {
+                        event_loop_window_target.exit();
+                    }
                     winit::event::WindowEvent::Resized(size) => {
                         data.egui_routine.resize(
                             size.width,
@@ -629,79 +699,107 @@ impl rend3_framework::App for GameProgramme {
                             window.scale_factor() as f32,
                         );
                     }
-                    winit::event::WindowEvent::CloseRequested => {
-                        event_loop_window_target.exit();
+
+                    WindowEvent::KeyboardInput {
+                        event:
+                            KeyEvent {
+                                physical_key,
+                                state,
+                                ..
+                            },
+                        ..
+                    } => {
+                        #[cfg(not(target_arch = "wasm32"))]
+                        let scancode = PhysicalKeyExtScancode::to_scancode(physical_key).unwrap();
+                        #[cfg(target_arch = "wasm32")]
+                        let scancode = if let Code(kk) = physical_key {
+                            kk as u32
+                        } else {
+                            0
+                        };
+                        log::info!("WE scancode {:x}", scancode);
+                        self.settings.scancode_status.insert(
+                            scancode,
+                            match state {
+                                ElementState::Pressed => true,
+                                ElementState::Released => false,
+                            },
+                        );
                     }
+                    WindowEvent::MouseInput {
+                        button: MouseButton::Left,
+                        state: ElementState::Pressed,
+                        ..
+                    } => {
+                        let grabber = self.settings.grabber.as_mut().unwrap();
+
+                        if !grabber.grabbed() {
+                            grabber.request_grab(window);
+                        }
+                    }
+
                     _ => {}
                 }
+            }
+            Event::DeviceEvent {
+                event:
+                    DeviceEvent::MouseMotion {
+                        delta: (delta_x, delta_y),
+                        ..
+                    },
+                ..
+            } => {
+                if !self.settings.grabber.as_ref().unwrap().grabbed() {
+                    return;
+                }
+
+                const TAU: f32 = std::f32::consts::PI * 2.0;
+
+                let mouse_delta = if self.settings.absolute_mouse {
+                    let prev = self
+                        .settings
+                        .last_mouse_delta
+                        .replace(DVec2::new(delta_x, delta_y));
+                    if let Some(prev) = prev {
+                        (DVec2::new(delta_x, delta_y) - prev) / 4.0
+                    } else {
+                        return;
+                    }
+                } else {
+                    DVec2::new(delta_x, delta_y)
+                };
+
+                self.settings.camera_yaw -= (mouse_delta.x / 1000.0) as f32;
+                self.settings.camera_pitch -= (mouse_delta.y / 1000.0) as f32;
+                if self.settings.camera_yaw < 0.0 {
+                    self.settings.camera_yaw += TAU;
+                } else if self.settings.camera_yaw >= TAU {
+                    self.settings.camera_yaw -= TAU;
+                }
+                self.settings.camera_pitch = self.settings.camera_pitch.clamp(
+                    -std::f32::consts::FRAC_PI_2 + 0.0001,
+                    std::f32::consts::FRAC_PI_2 - 0.0001,
+                )
             }
             _ => {}
         }
     }
 }
-
+#[cfg_attr(
+    target_os = "android",
+    ndk_glue::main(backtrace = "on", logger(level = "debug"))
+)]
 fn main() {
-    let app = GameProgramme::default();
-    rend3_framework::start(
-        app,
-        winit::window::WindowBuilder::new()
-            .with_title("egui")
-            .with_maximized(true),
-    )
+    let app = GameProgramme::new();
+    let mut builder = WindowBuilder::new()
+        .with_title("Therac3D")
+        .with_maximized(true);
+    if app.settings.fullscreen {
+        builder = builder.with_fullscreen(Some(Fullscreen::Borderless(None)))
+    }
+    rend3_framework::start(app, builder)
 }
 
-fn vertex(pos: [f32; 3]) -> glam::Vec3 {
-    glam::Vec3::from(pos)
-}
-
-fn create_mesh() -> rend3::types::Mesh {
-    let vertex_positions = [
-        // far side (0.0, 0.0, 1.0)
-        vertex([-1.0, -1.0, 1.0]),
-        vertex([1.0, -1.0, 1.0]),
-        vertex([1.0, 1.0, 1.0]),
-        vertex([-1.0, 1.0, 1.0]),
-        // near side (0.0, 0.0, -1.0)
-        vertex([-1.0, 1.0, -1.0]),
-        vertex([1.0, 1.0, -1.0]),
-        vertex([1.0, -1.0, -1.0]),
-        vertex([-1.0, -1.0, -1.0]),
-        // right side (1.0, 0.0, 0.0)
-        vertex([1.0, -1.0, -1.0]),
-        vertex([1.0, 1.0, -1.0]),
-        vertex([1.0, 1.0, 1.0]),
-        vertex([1.0, -1.0, 1.0]),
-        // left side (-1.0, 0.0, 0.0)
-        vertex([-1.0, -1.0, 1.0]),
-        vertex([-1.0, 1.0, 1.0]),
-        vertex([-1.0, 1.0, -1.0]),
-        vertex([-1.0, -1.0, -1.0]),
-        // top (0.0, 1.0, 0.0)
-        vertex([1.0, 1.0, -1.0]),
-        vertex([-1.0, 1.0, -1.0]),
-        vertex([-1.0, 1.0, 1.0]),
-        vertex([1.0, 1.0, 1.0]),
-        // bottom (0.0, -1.0, 0.0)
-        vertex([1.0, -1.0, 1.0]),
-        vertex([-1.0, -1.0, 1.0]),
-        vertex([-1.0, -1.0, -1.0]),
-        vertex([1.0, -1.0, -1.0]),
-    ];
-
-    let index_data: &[u32] = &[
-        0, 1, 2, 2, 3, 0, // far
-        4, 5, 6, 6, 7, 4, // near
-        8, 9, 10, 10, 11, 8, // right
-        12, 13, 14, 14, 15, 12, // left
-        16, 17, 18, 18, 19, 16, // top
-        20, 21, 22, 22, 23, 20, // bottom
-    ];
-
-    rend3::types::MeshBuilder::new(vertex_positions.to_vec(), rend3::types::Handedness::Left)
-        .with_indices(index_data.to_vec())
-        .build()
-        .unwrap()
-}
 pub fn read_lines<P>(filename: P) -> std::io::Result<Lines<BufReader<File>>>
 where
     P: AsRef<Path>,

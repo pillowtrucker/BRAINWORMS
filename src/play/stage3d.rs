@@ -142,7 +142,7 @@ pub(crate) async fn load_gltf(
     Some((scene, instance))
 }
 
-fn button_pressed<Hash: BuildHasher>(map: &HashMap<u32, bool, Hash>, key: u32) -> bool {
+pub(crate) fn button_pressed<Hash: BuildHasher>(map: &HashMap<u32, bool, Hash>, key: u32) -> bool {
     map.get(&key).map_or(false, |b| *b)
 }
 
