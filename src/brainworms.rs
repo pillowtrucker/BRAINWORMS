@@ -115,11 +115,7 @@ struct GameProgrammeSettings {
     camera_yaw: f32,
     camera_location: Vec3A,
     previous_profiling_stats: Option<Vec<GpuTimerScopeResult>>,
-    timestamp_last_second: time::Instant,
-    timestamp_last_frame: time::Instant,
-    frame_times: histogram::Histogram,
     last_mouse_delta: Option<DVec2>,
-
     grabber: Option<rend3_framework::Grabber>,
 }
 impl GameProgrammeSettings {
@@ -133,16 +129,24 @@ impl GameProgrammeSettings {
         let help = args.contains(["-h", "--help"]);
 
         // Rendering
-        let desired_backend =
-            option_arg(args.opt_value_from_fn(["-b", "--backend"], extract_backend));
+        let desired_backend = option_arg(
+            args.opt_value_from_fn(["-b", "--backend"], extract_backend),
+            HELP,
+        );
         let desired_device_name: Option<String> =
-            option_arg(args.opt_value_from_str(["-d", "--device"]))
+            option_arg(args.opt_value_from_str(["-d", "--device"]), HELP)
                 .map(|s: String| s.to_lowercase());
-        let desired_mode = option_arg(args.opt_value_from_fn(["-p", "--profile"], extract_profile));
-        let samples =
-            option_arg(args.opt_value_from_fn("--msaa", extract_msaa)).unwrap_or(SampleCount::Four);
-        let present_mode = option_arg(args.opt_value_from_fn(["-v", "--vsync"], extract_vsync))
-            .unwrap_or(rend3::types::PresentMode::Immediate);
+        let desired_mode = option_arg(
+            args.opt_value_from_fn(["-p", "--profile"], extract_profile),
+            HELP,
+        );
+        let samples = option_arg(args.opt_value_from_fn("--msaa", extract_msaa), HELP)
+            .unwrap_or(SampleCount::Four);
+        let present_mode = option_arg(
+            args.opt_value_from_fn(["-v", "--vsync"], extract_vsync),
+            HELP,
+        )
+        .unwrap_or(rend3::types::PresentMode::Immediate);
 
         // Windowing
         let absolute_mouse: bool = args.contains("--absolute-mouse");
@@ -153,16 +157,22 @@ impl GameProgrammeSettings {
             true => NormalTextureYDirection::Down,
             false => NormalTextureYDirection::Up,
         };
-        let directional_light_direction =
-            option_arg(args.opt_value_from_fn("--directional-light", extract_vec3));
-        let directional_light_intensity: f32 =
-            option_arg(args.opt_value_from_str("--directional-light-intensity")).unwrap_or(4.0);
+        let directional_light_direction = option_arg(
+            args.opt_value_from_fn("--directional-light", extract_vec3),
+            HELP,
+        );
+        let directional_light_intensity: f32 = option_arg(
+            args.opt_value_from_str("--directional-light-intensity"),
+            HELP,
+        )
+        .unwrap_or(4.0);
         let ambient_light_level: f32 =
-            option_arg(args.opt_value_from_str("--ambient")).unwrap_or(0.10);
-        let scale: Option<f32> = option_arg(args.opt_value_from_str("--scale"));
-        let shadow_distance: Option<f32> = option_arg(args.opt_value_from_str("--shadow-distance"));
+            option_arg(args.opt_value_from_str("--ambient"), HELP).unwrap_or(0.10);
+        let scale: Option<f32> = option_arg(args.opt_value_from_str("--scale"), HELP);
+        let shadow_distance: Option<f32> =
+            option_arg(args.opt_value_from_str("--shadow-distance"), HELP);
         let shadow_resolution: u16 =
-            option_arg(args.opt_value_from_str("--shadow-resolution")).unwrap_or(8192);
+            option_arg(args.opt_value_from_str("--shadow-resolution"), HELP).unwrap_or(8192);
         let gltf_disable_directional_light: bool =
             args.contains("--gltf-disable-directional-lights");
 
@@ -240,9 +250,7 @@ impl GameProgrammeSettings {
             camera_yaw: camera_info[4],
             camera_location: Vec3A::new(camera_info[0], camera_info[1], camera_info[2]),
             previous_profiling_stats: None,
-            timestamp_last_second: time::Instant::now(),
-            timestamp_last_frame: time::Instant::now(),
-            frame_times: histogram::Histogram::new(),
+
             last_mouse_delta: None,
 
             grabber: None,
@@ -583,41 +591,6 @@ impl rend3_framework::App for GameProgramme {
             }
             rend3_framework::Event::AboutToWait => {
                 profiling::scope!("MainEventsCleared");
-                let now = time::Instant::now();
-
-                let delta_time = now - self.settings.timestamp_last_frame;
-                self.settings
-                    .frame_times
-                    .increment(delta_time.as_micros() as u64)
-                    .unwrap();
-
-                let elapsed_since_second = now - self.settings.timestamp_last_second;
-                if elapsed_since_second > time::Duration::from_secs(1) {
-                    let count = self.settings.frame_times.entries();
-                    println!(
-                        "{:0>5} frames over {:0>5.2}s. \
-                        Min: {:0>5.2}ms; \
-                        Average: {:0>5.2}ms; \
-                        95%: {:0>5.2}ms; \
-                        99%: {:0>5.2}ms; \
-                        Max: {:0>5.2}ms; \
-                        StdDev: {:0>5.2}ms",
-                        count,
-                        elapsed_since_second.as_secs_f32(),
-                        self.settings.frame_times.minimum().unwrap() as f32 / 1_000.0,
-                        self.settings.frame_times.mean().unwrap() as f32 / 1_000.0,
-                        self.settings.frame_times.percentile(95.0).unwrap() as f32 / 1_000.0,
-                        self.settings.frame_times.percentile(99.0).unwrap() as f32 / 1_000.0,
-                        self.settings.frame_times.maximum().unwrap() as f32 / 1_000.0,
-                        self.settings.frame_times.stddev().unwrap() as f32 / 1_000.0,
-                    );
-                    self.settings.timestamp_last_second = now;
-                    self.settings.frame_times.clear();
-                }
-
-                self.settings.timestamp_last_frame = now;
-
-                // std::thread::sleep(Duration::from_millis(100));
 
                 let rotation = Mat3A::from_euler(
                     glam::EulerRot::XYZ,
@@ -635,19 +608,24 @@ impl rend3_framework::App for GameProgramme {
                     self.settings.walk_speed
                 };
                 if button_pressed(&self.settings.scancode_status, Scancodes::W) {
-                    self.settings.camera_location += forward * velocity * delta_time.as_secs_f32();
+                    self.settings.camera_location +=
+                        forward * velocity * data.last_update.elapsed().as_secs_f32();
                 }
                 if button_pressed(&self.settings.scancode_status, Scancodes::S) {
-                    self.settings.camera_location -= forward * velocity * delta_time.as_secs_f32();
+                    self.settings.camera_location -=
+                        forward * velocity * data.last_update.elapsed().as_secs_f32();
                 }
                 if button_pressed(&self.settings.scancode_status, Scancodes::A) {
-                    self.settings.camera_location += side * velocity * delta_time.as_secs_f32();
+                    self.settings.camera_location +=
+                        side * velocity * data.last_update.elapsed().as_secs_f32();
                 }
                 if button_pressed(&self.settings.scancode_status, Scancodes::D) {
-                    self.settings.camera_location -= side * velocity * delta_time.as_secs_f32();
+                    self.settings.camera_location -=
+                        side * velocity * data.last_update.elapsed().as_secs_f32();
                 }
                 if button_pressed(&self.settings.scancode_status, Scancodes::Q) {
-                    self.settings.camera_location += up * velocity * delta_time.as_secs_f32();
+                    self.settings.camera_location +=
+                        up * velocity * data.last_update.elapsed().as_secs_f32();
                 }
                 if button_pressed(&self.settings.scancode_status, Scancodes::PERIOD) {
                     println!(
