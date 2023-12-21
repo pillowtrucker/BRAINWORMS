@@ -1,18 +1,11 @@
 #![feature(variant_count)]
-pub mod backstage;
-pub mod play;
-use backstage::plumbing::frame_rate;
-use backstage::pyrotechnics::kinetic_narrative::{Gay, KineticEffect, KineticLabel, ShakeLetters};
+mod the_great_mind_palace_of_theatrical_arts;
 use egui::{Color32, TextStyle, Visuals};
 use frame_rate::FrameRate;
 use glam::{DVec2, Mat3A, Mat4, Vec3, Vec3A};
 use log::info;
 use nanorand::{RandomGen, Rng};
 use pico_args::Arguments;
-use play::stage3d::{
-    extract_array, extract_backend, extract_msaa, extract_profile, extract_vec3, extract_vsync,
-    option_arg,
-};
 use rend3::types::{
     Camera, CameraProjection, DirectionalLight, DirectionalLightHandle, SampleCount,
 };
@@ -27,20 +20,30 @@ use std::{
     process::exit,
     sync::Arc,
 };
+use the_great_mind_palace_of_theatrical_arts as theater;
+use theater::basement::frame_rate;
+use theater::play::backstage::pyrotechnics::kinetic_narrative::{
+    Gay, KineticEffect, KineticLabel, ShakeLetters,
+};
+use theater::play::scene::stage3d::{
+    extract_array, extract_backend, extract_msaa, extract_profile, extract_vec3, extract_vsync,
+    option_arg,
+};
 use wgpu::Backend;
 use wgpu_profiler::GpuTimerScopeResult;
 use winit::event::{DeviceEvent, ElementState, KeyEvent, MouseButton};
 use winit::window::{Fullscreen, WindowBuilder};
 use winit::{event::WindowEvent, event_loop::EventLoopWindowTarget};
 
-use crate::backstage::plumbing::platform_scancodes::Scancodes;
-use crate::play::stage3d::{button_pressed, load_gltf, load_skybox, spawn};
 #[cfg(not(wasm_platform))]
 use std::time;
+use theater::basement::platform_scancodes::Scancodes;
+use theater::play::scene::stage3d::{button_pressed, load_gltf, load_skybox, spawn};
 #[cfg(wasm_platform)]
 use web_time as time;
 #[cfg(target_arch = "wasm32")]
 use winit::keyboard::PhysicalKey::Code;
+
 #[cfg(not(target_arch = "wasm32"))]
 use winit::platform::scancode::PhysicalKeyExtScancode;
 struct GameProgrammeData {
@@ -107,9 +110,7 @@ struct GameProgrammeSettings {
     ambient_light_level: f32,
     present_mode: rend3::types::PresentMode,
     samples: SampleCount,
-
     fullscreen: bool,
-
     scancode_status: FastHashMap<u32, bool>,
     camera_pitch: f32,
     camera_yaw: f32,
