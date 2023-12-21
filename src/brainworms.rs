@@ -6,7 +6,6 @@ use backstage::pyrotechnics::kinetic_narrative::{Gay, KineticEffect, KineticLabe
 use egui::{Color32, TextStyle, Visuals};
 use frame_rate::FrameRate;
 use glam::{DVec2, Mat3A, Mat4, Vec3, Vec3A};
-use instant::{Duration, Instant};
 use log::info;
 use nanorand::{RandomGen, Rng};
 use pico_args::Arguments;
@@ -36,11 +35,14 @@ use winit::{event::WindowEvent, event_loop::EventLoopWindowTarget};
 
 use crate::backstage::plumbing::platform_scancodes::Scancodes;
 use crate::play::stage3d::{button_pressed, load_gltf, load_skybox, spawn};
+#[cfg(not(wasm_platform))]
+use std::time;
+#[cfg(wasm_platform)]
+use web_time as time;
 #[cfg(target_arch = "wasm32")]
 use winit::keyboard::PhysicalKey::Code;
 #[cfg(not(target_arch = "wasm32"))]
 use winit::platform::scancode::PhysicalKeyExtScancode;
-
 struct GameProgrammeData {
     egui_routine: rend3_egui::EguiRenderRoutine,
     egui_ctx: egui::Context,
@@ -48,8 +50,8 @@ struct GameProgrammeData {
     _test_text: String,
     test_lines: String,
     random_line_effects: Vec<KineticEffect>,
-    _start_time: instant::Instant,
-    last_update: instant::Instant,
+    _start_time: time::Instant,
+    last_update: time::Instant,
     frame_rate: FrameRate,
     elapsed: f32,
 }
@@ -113,8 +115,8 @@ struct GameProgrammeSettings {
     camera_yaw: f32,
     camera_location: Vec3A,
     previous_profiling_stats: Option<Vec<GpuTimerScopeResult>>,
-    timestamp_last_second: Instant,
-    timestamp_last_frame: Instant,
+    timestamp_last_second: time::Instant,
+    timestamp_last_frame: time::Instant,
     frame_times: histogram::Histogram,
     last_mouse_delta: Option<DVec2>,
 
@@ -238,8 +240,8 @@ impl GameProgrammeSettings {
             camera_yaw: camera_info[4],
             camera_location: Vec3A::new(camera_info[0], camera_info[1], camera_info[2]),
             previous_profiling_stats: None,
-            timestamp_last_second: Instant::now(),
-            timestamp_last_frame: Instant::now(),
+            timestamp_last_second: time::Instant::now(),
+            timestamp_last_frame: time::Instant::now(),
             frame_times: histogram::Histogram::new(),
             last_mouse_delta: None,
 
@@ -404,8 +406,8 @@ impl rend3_framework::App for GameProgramme {
         //Images
 
         self.data = Some(GameProgrammeData {
-            _start_time: instant::Instant::now(),
-            last_update: instant::Instant::now(),
+            _start_time: time::Instant::now(),
+            last_update: time::Instant::now(),
             frame_rate: FrameRate::new(100),
             elapsed: 0.0,
             egui_routine,
@@ -465,7 +467,7 @@ impl rend3_framework::App for GameProgramme {
                 let last_frame_duration = data.last_update.elapsed().as_secs_f32();
                 data.elapsed += last_frame_duration;
                 data.frame_rate.update(last_frame_duration);
-                data.last_update = instant::Instant::now();
+                data.last_update = time::Instant::now();
                 let view = Mat4::from_euler(
                     glam::EulerRot::XYZ,
                     -self.settings.camera_pitch,
@@ -581,7 +583,7 @@ impl rend3_framework::App for GameProgramme {
             }
             rend3_framework::Event::AboutToWait => {
                 profiling::scope!("MainEventsCleared");
-                let now = Instant::now();
+                let now = time::Instant::now();
 
                 let delta_time = now - self.settings.timestamp_last_frame;
                 self.settings
@@ -590,7 +592,7 @@ impl rend3_framework::App for GameProgramme {
                     .unwrap();
 
                 let elapsed_since_second = now - self.settings.timestamp_last_second;
-                if elapsed_since_second > Duration::from_secs(1) {
+                if elapsed_since_second > time::Duration::from_secs(1) {
                     let count = self.settings.frame_times.entries();
                     println!(
                         "{:0>5} frames over {:0>5.2}s. \

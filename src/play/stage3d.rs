@@ -5,7 +5,6 @@ use std::{
 };
 
 use glam::{DVec2, Mat3A, Mat4, UVec2, Vec3, Vec3A};
-use instant::Instant;
 use pico_args::Arguments;
 use rend3::{
     types::{
@@ -18,6 +17,10 @@ use rend3::{
 use rend3_framework::{lock, AssetPath, Mutex, UserResizeEvent};
 use rend3_gltf::GltfSceneInstance;
 use rend3_routine::{base::BaseRenderGraph, pbr::NormalTextureYDirection, skybox::SkyboxRoutine};
+#[cfg(not(wasm_platform))]
+use std::time;
+#[cfg(wasm_platform)]
+use web_time as time;
 use wgpu_profiler::GpuTimerScopeResult;
 #[cfg(target_arch = "wasm32")]
 use winit::keyboard::PhysicalKey::Code;
@@ -79,7 +82,7 @@ pub(crate) async fn load_gltf(
     location: AssetPath<'_>,
 ) -> Option<(rend3_gltf::LoadedGltfScene, GltfSceneInstance)> {
     // profiling::scope!("loading gltf");
-    let gltf_start = Instant::now();
+    let gltf_start = time::Instant::now();
     let is_default_scene = matches!(location, AssetPath::Internal(_));
     let path = loader.get_asset_path(location);
     let path = Path::new(&*path);
@@ -120,7 +123,7 @@ pub(crate) async fn load_gltf(
     };
 
     let gltf_elapsed = gltf_start.elapsed();
-    let resources_start = Instant::now();
+    let resources_start = time::Instant::now();
     let (scene, instance) = rend3_gltf::load_gltf(renderer, &gltf_data, settings, |uri| async {
         if let Some(base64) = rend3_gltf::try_load_base64(&uri) {
             Ok(base64)
@@ -315,8 +318,8 @@ struct SceneViewer {
     camera_yaw: f32,
     camera_location: Vec3A,
     previous_profiling_stats: Option<Vec<GpuTimerScopeResult>>,
-    timestamp_last_second: Instant,
-    timestamp_last_frame: Instant,
+    timestamp_last_second: time::Instant,
+    timestamp_last_frame: time::Instant,
     frame_times: histogram::Histogram,
     last_mouse_delta: Option<DVec2>,
 
@@ -441,8 +444,8 @@ impl SceneViewer {
             camera_yaw: camera_info[4],
             camera_location: Vec3A::new(camera_info[0], camera_info[1], camera_info[2]),
             previous_profiling_stats: None,
-            timestamp_last_second: Instant::now(),
-            timestamp_last_frame: Instant::now(),
+            timestamp_last_second: time::Instant::now(),
+            timestamp_last_frame: time::Instant::now(),
             frame_times: histogram::Histogram::new(),
             last_mouse_delta: None,
 
@@ -552,7 +555,7 @@ impl rend3_framework::App for SceneViewer {
         match event {
             Event::AboutToWait => {
                 profiling::scope!("MainEventsCleared");
-                let now = Instant::now();
+                let now = time::Instant::now();
 
                 let delta_time = now - self.timestamp_last_frame;
                 self.frame_times
