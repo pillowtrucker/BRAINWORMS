@@ -50,6 +50,7 @@ cfg-if = "1"
 indoc = "2"
 profiling = { version = "1", default-features = false }
 histogram = "0.6"
+parking_lot = "0.12.1"
 [features]
 webgl = ["wgpu/webgl"]
 wgsl = ["wgpu/wgsl"]

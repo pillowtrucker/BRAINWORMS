@@ -267,6 +267,7 @@ dependencies = [
  "log",
  "nanorand",
  "notify",
+ "parking_lot",
  "pico-args",
  "pollster",
  "profiling",
