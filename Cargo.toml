@@ -44,12 +44,12 @@ web-time = "0.2.3"
 nanorand = { version = "0.7", default-features = false, features = ["wyrand"] }
 pico-args = "0.5"
 wgpu-profiler = "0.15.0"
-#web-time = "0.2" # I can probably use the instant::Instant stuff for this
+gluon = {git = "https://github.com/gluon-lang/gluon", branch = "master"}
 anyhow = "1"
 cfg-if = "1"
 indoc = "2"
 profiling = { version = "1", default-features = false }
-
+uuid = "1.6.1"
 parking_lot = "0.12.1"
 [features]
 webgl = ["wgpu/webgl"]
