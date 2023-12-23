@@ -1,15 +1,15 @@
 pub mod backstage;
 pub mod orchestra;
 pub mod scene;
-use std::collections::HashMap;
+//use std::collections::HashMap;
 
-use self::{orchestra::Intermezzo, scene::Scene};
+//use self::{orchestra::Intermezzo, scene::Scene};
+/*
 #[cfg(target_arch = "wasm32")]
 pub(crate) use super::basement::resize_observer;
-pub use parking_lot::{Mutex, MutexGuard};
-/// I definitely want the minimal asset loader and the grabber from r3f
-pub use rend3_framework::{AssetError, AssetLoader, AssetPath, Grabber, UserResizeEvent};
-
+//pub use parking_lot::{Mutex, MutexGuard};
+// I definitely want the minimal asset loader and the grabber from r3f
+//pub use rend3_framework::{AssetError, AssetLoader, AssetPath, Grabber, UserResizeEvent};
 use uuid::Uuid;
 
 type PlayableUUID = Uuid;
@@ -22,7 +22,8 @@ pub trait Playable {
     fn after_id(&self) -> &Option<PlayableUUID>;
     fn play(&mut self);
 }
-
+*/
+/*
 pub struct Play {
     current_playable: Option<Uuid>,
     intermezzi: HashMap<PlayableUUID, Intermezzo>,
@@ -47,7 +48,7 @@ impl Play {
             panic!("asked to play unlinked playable")
         }
     }
-    pub fn showtime(&mut self) {
+    pub fn _showtime(&mut self) {
         self.current_playable = Some(self.get_first_pl_id().to_owned());
         self.run_playable(
             self.current_playable
@@ -55,3 +56,4 @@ impl Play {
         )
     }
 }
+*/

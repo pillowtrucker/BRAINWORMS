@@ -4,7 +4,7 @@ use winit::{
     dpi::PhysicalSize, event_loop::EventLoopProxy, platform::web::WindowExtWebSys, window::Window,
 };
 
-use crate::theater::play::UserResizeEvent;
+use crate::UserResizeEvent;
 
 //from https://github.com/seed-rs/seed/pull/534/files
 

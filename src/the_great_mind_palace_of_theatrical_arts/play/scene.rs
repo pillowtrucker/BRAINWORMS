@@ -1,3 +1,4 @@
+/*
 use core::hash::Hash;
 use std::collections::HashMap;
 
@@ -6,12 +7,12 @@ use uuid::Uuid;
 use self::{actors::Actor, props::Prop};
 
 use super::{ActorUUID, Playable, PlayableUUID, PropUUID, Script};
-
+*/
 pub mod actors;
 pub mod props;
 pub mod stage2d;
 pub mod stage3d;
-
+/*
 pub struct Scene {
     pub uuid: Uuid,
     pub after_id: Option<PlayableUUID>,
@@ -37,3 +38,4 @@ impl Playable for Scene {
         todo!()
     }
 }
+*/

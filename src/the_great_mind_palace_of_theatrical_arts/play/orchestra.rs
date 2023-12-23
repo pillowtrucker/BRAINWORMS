@@ -1,3 +1,4 @@
+/*
 use uuid::Uuid;
 
 use super::{Playable, PlayableUUID, Script};
@@ -26,3 +27,4 @@ impl Playable for Intermezzo {
         todo!()
     }
 }
+*/
