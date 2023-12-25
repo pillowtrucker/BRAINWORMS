@@ -12,6 +12,7 @@ use rend3::{
 };
 
 use rend3_routine::base::BaseRenderGraph;
+
 use std::{path::Path, process::exit, sync::Arc};
 use wgpu::{Instance, PresentMode, Surface, TextureFormat};
 
@@ -31,6 +32,22 @@ use theater::{
     play::backstage::plumbing::asset_loader::AssetPath,
 };
 
+#[cfg(not(wasm_platform))]
+use std::time;
+use theater::basement::platform_scancodes::Scancodes;
+#[cfg(target_arch = "wasm32")]
+use theater::basement::resize_observer::*;
+use theater::play::scene::stage3d::{button_pressed, load_gltf, load_skybox, spawn};
+#[cfg(not(wasm_platform))]
+use tokio as wingman;
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen_futures as wingman;
+#[cfg(target_arch = "wasm32")]
+use web_time as time;
+#[cfg(target_arch = "wasm32")]
+use winit::keyboard::PhysicalKey::Code;
+#[cfg(not(target_arch = "wasm32"))]
+use winit::platform::scancode::PhysicalKeyExtScancode;
 use winit::{
     dpi::PhysicalSize,
     error::EventLoopError,
@@ -38,19 +55,6 @@ use winit::{
     event_loop::{ControlFlow, EventLoop, EventLoopBuilder, EventLoopWindowTarget},
     window::{Fullscreen, Window, WindowBuilder, WindowId},
 };
-
-#[cfg(not(wasm_platform))]
-use std::time;
-use theater::basement::platform_scancodes::Scancodes;
-#[cfg(target_arch = "wasm32")]
-use theater::basement::resize_observer::*;
-use theater::play::scene::stage3d::{button_pressed, load_gltf, load_skybox, spawn};
-#[cfg(target_arch = "wasm32")]
-use web_time as time;
-#[cfg(target_arch = "wasm32")]
-use winit::keyboard::PhysicalKey::Code;
-#[cfg(not(target_arch = "wasm32"))]
-use winit::platform::scancode::PhysicalKeyExtScancode;
 
 use crate::theater::play::scene::stage3d::lock;
 pub struct GameProgrammeData {
@@ -97,11 +101,15 @@ pub enum UserResizeEvent<T: 'static> {
 pub fn start(gp: GameProgramme, window_builder: WindowBuilder) {
     #[cfg(target_arch = "wasm32")]
     {
-        wasm_bindgen_futures::spawn_local(self.async_start(window_builder));
+        wasm_bindgen_futures::spawn_local(gp.async_start(window_builder));
     }
 
     #[cfg(not(target_arch = "wasm32"))]
     {
+        let Ok(wingman) = wingman::runtime::Runtime::new() else {
+            panic!("no tokyo for you");
+        };
+
         pollster::block_on(gp.async_start(window_builder));
     }
 }
@@ -375,7 +383,7 @@ impl GameProgramme {
                     return;
                 }
             }
-
+            // event loop starts here
             self.handle_event(
                 &window,
                 &renderer,
@@ -392,9 +400,7 @@ impl GameProgramme {
             )
         });
     }
-    /*
-    UserResizeEvent<GameProgramme> should probably actually be UserResizeEvent<()> unless for some reason I want to access this on the one platform where it matters (I don't)
-    */
+
     #[allow(clippy::too_many_arguments)]
     fn handle_event(
         &mut self,
@@ -918,8 +924,6 @@ impl GameProgramme {
     ndk_glue::main(backtrace = "on", logger(level = "debug"))
 )]
 fn main() {
-    let app = GameProgramme::new();
-    //    let event_loop = winit::event_loop::EventLoop::new().expect("More like loseit");
     let window_builder = WindowBuilder::new()
         .with_title("Therac3D")
         .with_maximized(true)
@@ -927,9 +931,6 @@ fn main() {
         .with_decorations(false);
     register_logger();
     register_panic_hook();
-    if app.settings.fullscreen {
-        info!("ignored explicit fullscreen");
-    }
 
     let the_game_programme = GameProgramme::new();
     start(the_game_programme, window_builder);

@@ -197,6 +197,10 @@ impl GameProgrammeSettings {
         let absolute_mouse: bool = args.contains("--absolute-mouse");
         let fullscreen = args.contains("--fullscreen");
 
+        if fullscreen {
+            log::info!("ignored explicit fullscreen");
+        }
+
         // Assets
         let normal_direction = match args.contains("--normal-y-down") {
             true => NormalTextureYDirection::Down,

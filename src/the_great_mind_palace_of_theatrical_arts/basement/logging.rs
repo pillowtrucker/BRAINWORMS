@@ -4,7 +4,8 @@ pub fn register_logger() {
 
     #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))]
     env_logger::builder()
-        .filter_module("rend3", log::LevelFilter::Info)
+        .filter_level(log::LevelFilter::Info)
+        //.filter_module("rend3", log::LevelFilter::Info)
         .parse_default_env()
         .init();
 }

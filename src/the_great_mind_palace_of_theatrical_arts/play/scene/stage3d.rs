@@ -3,6 +3,7 @@
 use std::{collections::HashMap, future::Future, hash::BuildHasher, path::Path, sync::Arc};
 
 use glam::UVec2;
+
 use parking_lot::Mutex;
 use rend3::{
     types::{Texture, TextureFormat},
