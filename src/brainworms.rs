@@ -39,7 +39,7 @@ use winit::{
     window::{Fullscreen, Window, WindowBuilder, WindowId},
 };
 
-#[cfg(not(wasm_platform))]
+#[cfg(not(target_arch = "wasm32"))]
 use std::time;
 use theater::basement::platform_scancodes::Scancodes;
 #[cfg(target_arch = "wasm32")]
@@ -97,7 +97,7 @@ pub enum UserResizeEvent<T: 'static> {
 pub fn start(gp: GameProgramme, window_builder: WindowBuilder) {
     #[cfg(target_arch = "wasm32")]
     {
-        wasm_bindgen_futures::spawn_local(self.async_start(window_builder));
+        wasm_bindgen_futures::spawn_local(gp.async_start(window_builder));
     }
 
     #[cfg(not(target_arch = "wasm32"))]
