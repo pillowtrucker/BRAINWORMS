@@ -32,22 +32,6 @@ use theater::{
     play::backstage::plumbing::asset_loader::AssetPath,
 };
 
-#[cfg(not(wasm_platform))]
-use std::time;
-use theater::basement::platform_scancodes::Scancodes;
-#[cfg(target_arch = "wasm32")]
-use theater::basement::resize_observer::*;
-use theater::play::scene::stage3d::{button_pressed, load_gltf, load_skybox, spawn};
-#[cfg(not(wasm_platform))]
-use tokio as wingman;
-#[cfg(target_arch = "wasm32")]
-use wasm_bindgen_futures as wingman;
-#[cfg(target_arch = "wasm32")]
-use web_time as time;
-#[cfg(target_arch = "wasm32")]
-use winit::keyboard::PhysicalKey::Code;
-#[cfg(not(target_arch = "wasm32"))]
-use winit::platform::scancode::PhysicalKeyExtScancode;
 use winit::{
     dpi::PhysicalSize,
     error::EventLoopError,
@@ -55,6 +39,19 @@ use winit::{
     event_loop::{ControlFlow, EventLoop, EventLoopBuilder, EventLoopWindowTarget},
     window::{Fullscreen, Window, WindowBuilder, WindowId},
 };
+
+#[cfg(not(target_arch = "wasm32"))]
+use std::time;
+use theater::basement::platform_scancodes::Scancodes;
+#[cfg(target_arch = "wasm32")]
+use theater::basement::resize_observer::*;
+use theater::play::scene::stage3d::{button_pressed, load_gltf, load_skybox, spawn};
+#[cfg(target_arch = "wasm32")]
+use web_time as time;
+#[cfg(target_arch = "wasm32")]
+use winit::keyboard::PhysicalKey::Code;
+#[cfg(not(target_arch = "wasm32"))]
+use winit::platform::scancode::PhysicalKeyExtScancode;
 
 use crate::theater::play::scene::stage3d::lock;
 pub struct GameProgrammeData {
@@ -106,7 +103,7 @@ pub fn start(gp: GameProgramme, window_builder: WindowBuilder) {
 
     #[cfg(not(target_arch = "wasm32"))]
     {
-        let Ok(wingman) = wingman::runtime::Runtime::new() else {
+        let Ok(wingman) = tokio::runtime::Runtime::new() else {
             panic!("no tokyo for you");
         };
 

@@ -779,7 +779,7 @@ checksum = "9ea835d29036a4087793836fa931b08837ad5e957da9e23886b29586fb9b6650"
 [[package]]
 name = "ecolor"
 version = "0.24.2"
-source = "git+https://github.com/emilk/egui.git?branch=master#e36b9811180476fadd5b67c3e311ac9ce5a82302"
+source = "git+https://github.com/emilk/egui.git?branch=master#fc18d6f8f445bf840478979b97b9806a110d1b6f"
 dependencies = [
  "bytemuck",
 ]
@@ -787,7 +787,7 @@ dependencies = [
 [[package]]
 name = "egui"
 version = "0.24.2"
-source = "git+https://github.com/emilk/egui.git?branch=master#e36b9811180476fadd5b67c3e311ac9ce5a82302"
+source = "git+https://github.com/emilk/egui.git?branch=master#fc18d6f8f445bf840478979b97b9806a110d1b6f"
 dependencies = [
  "ahash 0.8.6",
  "epaint",
@@ -798,7 +798,7 @@ dependencies = [
 [[package]]
 name = "egui-wgpu"
 version = "0.24.2"
-source = "git+https://github.com/emilk/egui.git?branch=master#e36b9811180476fadd5b67c3e311ac9ce5a82302"
+source = "git+https://github.com/emilk/egui.git?branch=master#fc18d6f8f445bf840478979b97b9806a110d1b6f"
 dependencies = [
  "bytemuck",
  "egui",
@@ -813,7 +813,7 @@ dependencies = [
 [[package]]
 name = "egui-winit"
 version = "0.24.2"
-source = "git+https://github.com/emilk/egui.git?branch=master#e36b9811180476fadd5b67c3e311ac9ce5a82302"
+source = "git+https://github.com/emilk/egui.git?branch=master#fc18d6f8f445bf840478979b97b9806a110d1b6f"
 dependencies = [
  "arboard",
  "egui",
@@ -834,7 +834,7 @@ checksum = "a26ae43d7bcc3b814de94796a5e736d4029efb0ee900c12e2d54c993ad1a1e07"
 [[package]]
 name = "emath"
 version = "0.24.2"
-source = "git+https://github.com/emilk/egui.git?branch=master#e36b9811180476fadd5b67c3e311ac9ce5a82302"
+source = "git+https://github.com/emilk/egui.git?branch=master#fc18d6f8f445bf840478979b97b9806a110d1b6f"
 dependencies = [
  "bytemuck",
 ]
@@ -916,7 +916,7 @@ dependencies = [
 [[package]]
 name = "epaint"
 version = "0.24.2"
-source = "git+https://github.com/emilk/egui.git?branch=master#e36b9811180476fadd5b67c3e311ac9ce5a82302"
+source = "git+https://github.com/emilk/egui.git?branch=master#fc18d6f8f445bf840478979b97b9806a110d1b6f"
 dependencies = [
  "ab_glyph",
  "ahash 0.8.6",
@@ -4049,9 +4049,9 @@ dependencies = [
 
 [[package]]
 name = "web-time"
-version = "0.2.3"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "57099a701fb3a8043f993e8228dc24229c7b942e2b009a1b962e54489ba1d3bf"
+checksum = "aa30049b1c872b72c89866d458eae9f20380ab280ffd1b1e18df2d3e2d98cfe0"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
@@ -4457,9 +4457,9 @@ checksum = "dff9641d1cd4be8d1a070daf9e3773c5f67e78b4d9d42263020c057706765c04"
 
 [[package]]
 name = "winit"
-version = "0.29.5"
+version = "0.29.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2cc935117ef48caed8822a893efef723e07ad868f668dfc4d244aea8873b07f9"
+checksum = "0a5426b43d8782441f76a9b775686da171b9eedcfcee75a698fa5180c9a09d34"
 dependencies = [
  "ahash 0.8.6",
  "android-activity",
