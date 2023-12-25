@@ -1,12 +1,10 @@
-use std::{f32::consts::PI, mem::variant_count};
+use std::{f32::consts::PI, mem::variant_count, sync::Arc};
 
 use egui::{
     egui_assert,
     epaint::{self, ClippedShape, Primitive, TextShape},
-    lerp, pos2, vec2,
-    widget_text::WidgetTextGalley,
-    Align, Color32, Direction, FontSelection, Pos2, Rect, Response, Sense, Shape, Stroke, Ui,
-    Widget, WidgetInfo, WidgetText, WidgetType,
+    lerp, pos2, vec2, Align, Color32, Direction, FontSelection, Galley, Pos2, Rect, Response,
+    Sense, Shape, Stroke, Ui, Widget, WidgetInfo, WidgetText, WidgetType,
 };
 use nanorand::{RandomGen, Rng};
 
@@ -185,7 +183,7 @@ impl<'a> KineticLabel<'a> {
 
 impl KineticLabel<'_> {
     /// Do layout and position the galley in the ui, without painting it or adding widget info.
-    pub fn layout_in_ui(&mut self, ui: &mut Ui) -> (Pos2, WidgetTextGalley, Response) {
+    pub fn layout_in_ui(&mut self, ui: &mut Ui) -> (Pos2, Arc<Galley>, Response) {
         let sense = self.sense.unwrap_or_else(|| {
             // We only want to focus labels if the screen reader is on.
             if ui.memory(|mem| mem.options.screen_reader) {
@@ -202,17 +200,14 @@ impl KineticLabel<'_> {
                 Align::Center => rect.center_top(),
                 Align::RIGHT => rect.right_top(),
             };
-            let text_galley = WidgetTextGalley {
-                galley: galley.clone(),
-                galley_has_color: true,
-            };
-            (pos, text_galley, response)
+
+            (pos, galley.clone(), response)
         } else {
             let valign = ui.layout().vertical_align();
-            let mut text_job =
+            let mut lay_job =
                 self.text
                     .to_owned()
-                    .into_text_job(ui.style(), FontSelection::Default, valign);
+                    .into_layout_job(ui.style(), FontSelection::Default, valign);
 
             let truncate = self.truncate;
             let wrap = !truncate && self.wrap.unwrap_or_else(|| ui.wrap_text());
@@ -230,39 +225,34 @@ impl KineticLabel<'_> {
                 let first_row_indentation = available_width - ui.available_size_before_wrap().x;
                 egui_assert!(first_row_indentation.is_finite());
 
-                text_job.job.wrap.max_width = available_width;
-                text_job.job.first_row_min_height = cursor.height();
-                text_job.job.halign = Align::Min;
-                text_job.job.justify = false;
-                if let Some(first_section) = text_job.job.sections.first_mut() {
+                lay_job.wrap.max_width = available_width;
+                lay_job.first_row_min_height = cursor.height();
+                lay_job.halign = Align::Min;
+                lay_job.justify = false;
+                if let Some(first_section) = lay_job.sections.first_mut() {
                     first_section.leading_space = first_row_indentation;
                 }
-                let text_galley = ui.fonts(|f| text_job.into_galley(f));
+                let galley = ui.fonts(|f| f.layout_job(lay_job));
 
                 let pos = pos2(ui.max_rect().left(), ui.cursor().top());
-                assert!(
-                    !text_galley.galley.rows.is_empty(),
-                    "Galleys are never empty"
-                );
+                assert!(!galley.rows.is_empty(), "Galleys are never empty");
                 // collect a response from many rows:
-                let rect = text_galley.galley.rows[0]
-                    .rect
-                    .translate(vec2(pos.x, pos.y));
+                let rect = galley.rows[0].rect.translate(vec2(pos.x, pos.y));
                 let mut response = ui.allocate_rect(rect, sense);
-                for row in text_galley.galley.rows.iter().skip(1) {
+                for row in galley.rows.iter().skip(1) {
                     let rect = row.rect.translate(vec2(pos.x, pos.y));
                     response |= ui.allocate_rect(rect, sense);
                 }
-                (pos, text_galley, response)
+                (pos, galley, response)
             } else {
                 if truncate {
-                    text_job.job.wrap.max_width = available_width;
-                    text_job.job.wrap.max_rows = 1;
-                    text_job.job.wrap.break_anywhere = true;
+                    lay_job.wrap.max_width = available_width;
+                    lay_job.wrap.max_rows = 1;
+                    lay_job.wrap.break_anywhere = true;
                 } else if wrap {
-                    text_job.job.wrap.max_width = available_width;
+                    lay_job.wrap.max_width = available_width;
                 } else {
-                    text_job.job.wrap.max_width = f32::INFINITY;
+                    lay_job.wrap.max_width = f32::INFINITY;
                 };
                 /*
                 // is_grid is private but this might be important for embedding in grids
@@ -275,16 +265,16 @@ impl KineticLabel<'_> {
                     text_job.job.justify = ui.layout().horizontal_justify();
                 };
                 */
-                text_job.job.halign = ui.layout().horizontal_placement();
-                text_job.job.justify = ui.layout().horizontal_justify();
-                let text_galley = ui.fonts(|f| text_job.into_galley(f));
-                let (rect, response) = ui.allocate_exact_size(text_galley.size(), sense);
-                let pos = match text_galley.galley.job.halign {
+                lay_job.halign = ui.layout().horizontal_placement();
+                lay_job.justify = ui.layout().horizontal_justify();
+                let galley = ui.fonts(|f| f.layout_job(lay_job));
+                let (rect, response) = ui.allocate_exact_size(galley.size(), sense);
+                let pos = match galley.job.halign {
                     Align::LEFT => rect.left_top(),
                     Align::Center => rect.center_top(),
                     Align::RIGHT => rect.right_top(),
                 };
-                (pos, text_galley, response)
+                (pos, galley, response)
             }
         }
     }
@@ -292,14 +282,14 @@ impl KineticLabel<'_> {
 
 impl Widget for KineticLabel<'_> {
     fn ui(mut self, ui: &mut Ui) -> Response {
-        let (pos, text_galley, mut response) = self.layout_in_ui(ui);
+        let (pos, galley, mut response) = self.layout_in_ui(ui);
 
-        response.widget_info(|| WidgetInfo::labeled(WidgetType::Label, text_galley.text()));
+        response.widget_info(|| WidgetInfo::labeled(WidgetType::Label, galley.text()));
 
-        if text_galley.galley.elided {
+        if galley.elided {
             // Show the full (non-elided) text on hover:
 
-            let text = text_galley.text();
+            let text = galley.text();
             response = response.clone().on_hover_ui(|ui| {
                 ui.add(egui::Label::new(text));
             });
@@ -316,18 +306,14 @@ impl Widget for KineticLabel<'_> {
             Stroke::NONE
         };
 
-        let override_text_color = if text_galley.galley_has_color {
-            None
-        } else {
-            Some(response_color)
-        };
         let normal_label = || {
             ui.painter().add(epaint::TextShape {
                 pos,
-                galley: text_galley.galley.clone(),
-                override_text_color,
+                galley: galley.clone(),
                 underline,
                 angle: 0.0,
+                fallback_color: response_color,
+                override_text_color: Some(response_color),
             });
         };
         if self.kinesis.is_none() {
@@ -338,10 +324,11 @@ impl Widget for KineticLabel<'_> {
         let kes = self.kinesis.unwrap();
         let text_shape: TextShape = TextShape {
             pos,
-            galley: text_galley.galley.clone(),
+            galley: galley.clone(),
             underline,
-            override_text_color,
             angle: 0.0,
+            fallback_color: response_color,
+            override_text_color: Some(response_color),
         };
         let clipped_shape: ClippedShape = ClippedShape {
             clip_rect: Rect::EVERYTHING,
@@ -349,7 +336,7 @@ impl Widget for KineticLabel<'_> {
         };
         let mut clipped_primitive = ui
             .ctx()
-            .tessellate(vec![clipped_shape], text_galley.galley.pixels_per_point);
+            .tessellate(vec![clipped_shape], galley.pixels_per_point);
         if clipped_primitive.is_empty() {
             normal_label();
             return response;
