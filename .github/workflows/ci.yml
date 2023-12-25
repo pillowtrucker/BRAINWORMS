@@ -41,10 +41,10 @@ jobs:
         uses: dtolnay/rust-toolchain@nightly
       - uses: Swatinem/rust-cache@v2
       - name: Build
-        if: matrix.action == "build"
+        if: matrix.action == 'build'
         run: cargo build --all-features --workspace
       - name: Test
-        if: matrix.action == "test"
+        if: matrix.action == 'test'
         run: cargo test --all-features --workspace
 
   rustfmt:
