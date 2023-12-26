@@ -286,11 +286,12 @@ impl GameProgramme {
             let caps = s.get_capabilities(&iad.adapter);
             let format = caps.formats[0];
             let alpha_modes = s.get_capabilities(&iad.adapter).alpha_modes;
-            let alpha_mode = if alpha_modes.contains(&wgpu::CompositeAlphaMode::PreMultiplied) {
-                wgpu::CompositeAlphaMode::PreMultiplied
-            } else {
-                alpha_modes[0]
-            };
+            //            let alpha_mode = if alpha_modes.contains(&wgpu::CompositeAlphaMode::PreMultiplied) {
+            //                wgpu::CompositeAlphaMode::PreMultiplied
+            //            } else {
+            //                alpha_modes[0]
+            //            };
+            /*
             let config = wgpu::SurfaceConfiguration {
                 usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_DST,
                 format: wgpu::TextureFormat::Bgra8Unorm,
@@ -300,6 +301,7 @@ impl GameProgramme {
                 alpha_mode,
                 view_formats: Vec::new(),
             };
+            */
             // Configure the surface to be ready for rendering.
             rend3::configure_surface(
                 s,
@@ -308,7 +310,7 @@ impl GameProgramme {
                 glam::UVec2::new(window_size.width, window_size.height),
                 rend3::types::PresentMode::Fifo,
             );
-            s.configure(&renderer.device, &config);
+            //            s.configure(&renderer.device, &config);
             format
         });
 
@@ -402,19 +404,22 @@ impl GameProgramme {
                     return;
                 }
             }
+            /*
             let loader = AssetLoader::new_local(
                 concat!(env!("CARGO_MANIFEST_DIR"), "/assets/"),
                 "",
                 "http://localhost:8000/assets/",
             );
+
             let pupper = pollster::block_on(async {
                 loader
                     .get_asset(AssetPath::Internal(&self.settings.puppet_path))
                     .await
                     .unwrap()
             });
-            let mut inox_model = parse_inp(pupper.as_slice()).unwrap();
-            let mut inox_renderer = inox2d_wgpu::Renderer::new(
+            */
+            //            let mut inox_model = parse_inp(pupper.as_slice()).unwrap();
+            /*            let mut inox_renderer = inox2d_wgpu::Renderer::new(
                 &renderer.device,
                 &renderer.queue,
                 wgpu::TextureFormat::Bgra8Unorm,
@@ -423,12 +428,13 @@ impl GameProgramme {
             );
 
             inox_renderer.camera.scale = Vec2::splat(0.15);
+            */
             // event loop starts here
             self.handle_event(
                 &window,
                 &renderer,
-                &mut inox_renderer,
-                &mut inox_model,
+                //&mut inox_renderer,
+                //&mut inox_model,
                 &routines,
                 &base_rendergraph,
                 surface.as_ref(),
@@ -448,8 +454,8 @@ impl GameProgramme {
         &mut self,
         window: &winit::window::Window,
         renderer: &Arc<rend3::Renderer>,
-        inox_renderer: &mut inox2d_wgpu::Renderer,
-        inox_model: &mut inox2d::model::Model,
+        //        inox_renderer: &mut inox2d_wgpu::Renderer,
+        //        inox_model: &mut inox2d::model::Model,
         routines: &Arc<DefaultRoutines>,
         base_rendergraph: &rend3_routine::base::BaseRenderGraph,
         surface: Option<&Arc<rend3::types::Surface>>,
@@ -568,32 +574,34 @@ impl GameProgramme {
                     Vec3::splat(self.settings.ambient_light_level).extend(1.0),
                     glam::Vec4::new(0.0, 0.0, 0.0, 1.0),
                 );
+                /*
                 let texture_size = wgpu::Extent3d {
                     width: 1920,
                     height: 1080,
                     depth_or_array_layers: 1,
                 };
-                let format = surface
-                    .unwrap()
-                    .get_current_texture()
-                    .unwrap()
-                    .texture
-                    .format();
-                let image_texture = renderer.device.create_texture(&wgpu::TextureDescriptor {
-                    size: texture_size,
-                    mip_level_count: 1,
-                    sample_count: 1,
-                    dimension: wgpu::TextureDimension::D2,
-                    format,
-                    usage: wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::RENDER_ATTACHMENT,
-                    label: Some("ok"),
-                    view_formats: &[format],
-                });
 
+                                let format = surface
+                                    .unwrap()
+                                    .get_current_texture()
+                                    .unwrap()
+                                    .texture
+                                    .format();
+                                let image_texture = renderer.device.create_texture(&wgpu::TextureDescriptor {
+                                    size: texture_size,
+                                    mip_level_count: 1,
+                                    sample_count: 1,
+                                    dimension: wgpu::TextureDimension::D2,
+                                    format,
+                                    usage: wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::RENDER_ATTACHMENT,
+                                    label: Some("ok"),
+                                    view_formats: &[format],
+                                });
+                */
                 // Add egui on top of all the other passes
                 data.egui_routine
                     .add_to_graph(&mut graph, input, frame_handle);
-
+                /*
                 let puppet = inox_model.puppet.borrow_mut();
                 puppet.begin_set_params();
                 let t = ctx.frame_nr() as f32;
@@ -603,6 +611,7 @@ impl GameProgramme {
                 let output = image_texture; //.create_view(&wgpu::TextureViewDescriptor::default());
                 let view = (output).create_view(&wgpu::TextureViewDescriptor::default());
                 inox_renderer.render(&renderer.queue, &renderer.device, puppet, &view);
+
 
                 let mut encoder =
                     renderer
@@ -626,6 +635,7 @@ impl GameProgramme {
                         .size(),
                 );
                 renderer.queue.submit(std::iter::once(encoder.finish()));
+                */
                 // Dispatch a render using the built up rendergraph!
                 self.settings.previous_profiling_stats = graph.execute(renderer, &mut eval_output);
 
@@ -891,29 +901,31 @@ impl GameProgramme {
         }
 
         let window_size = window.inner_size();
+        /*
         let loader = AssetLoader::new_local(
             concat!(env!("CARGO_MANIFEST_DIR"), "/assets/"),
             "",
             "http://localhost:8000/assets/",
         );
-        let pp = self.settings.puppet_path.clone();
-        let pupper = pollster::block_on(async move {
-            loader
-                .get_asset(AssetPath::Internal(pp.as_str()))
-                .await
-                .unwrap()
-        });
-        let model = parse_inp(pupper.as_slice()).unwrap();
-        let mut inox_renderer = inox2d_wgpu::Renderer::new(
-            &renderer.device,
-            &renderer.queue,
-            surface_format,
-            &model,
-            uvec2(window.inner_size().width, window.inner_size().height),
-        );
-        inox_renderer.camera.scale = Vec2::splat(0.15);
-        //        let mut scene_ctrl = ExampleSceneController::new(&inox_renderer.camera, 0.5);
 
+                let pp = self.settings.puppet_path.clone();
+                let pupper = pollster::block_on(async move {
+                    loader
+                        .get_asset(AssetPath::Internal(pp.as_str()))
+                        .await
+                        .unwrap()
+                });
+                let model = parse_inp(pupper.as_slice()).unwrap();
+                let mut inox_renderer = inox2d_wgpu::Renderer::new(
+                    &renderer.device,
+                    &renderer.queue,
+                    surface_format,
+                    &model,
+                    uvec2(window.inner_size().width, window.inner_size().height),
+                );
+                inox_renderer.camera.scale = Vec2::splat(0.15);
+                //        let mut scene_ctrl = ExampleSceneController::new(&inox_renderer.camera, 0.5);
+        */
         // Create the egui render routine
         let egui_routine = rend3_egui::EguiRenderRoutine::new(
             renderer,
