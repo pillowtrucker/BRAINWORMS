@@ -228,7 +228,7 @@ impl GameProgrammeSettings {
             args.contains("--gltf-disable-directional-lights");
 
         let puppet_path: String = option_arg(args.opt_value_from_str("--puppet"), HELP)
-            .unwrap_or("assets/inochi2d-models/Midori.inp".to_owned());
+            .unwrap_or("inochi2d-models/Midori.inp".to_owned());
 
         // Controls
         let walk_speed = args.value_from_str("--walk").unwrap_or(10.0_f32);

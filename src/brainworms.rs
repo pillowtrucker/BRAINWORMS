@@ -1,8 +1,9 @@
 #![feature(variant_count)]
 mod the_great_mind_palace_of_theatrical_arts;
-use egui::{Color32, TextStyle, Visuals};
+use egui::{viewport, Color32, TextStyle, Visuals};
 use frame_rate::FrameRate;
-use glam::{DVec2, Mat3A, Mat4, UVec2, Vec3};
+use glam::{uvec2, vec2, DVec2, Mat3A, Mat4, UVec2, Vec2, Vec3};
+use inox2d::{formats::inp::parse_inp, render::InoxRenderer};
 use log::info;
 use nanorand::{RandomGen, Rng};
 use parking_lot::Mutex;
@@ -13,8 +14,8 @@ use rend3::{
 
 use rend3_routine::base::BaseRenderGraph;
 
-use std::{path::Path, process::exit, sync::Arc};
-use wgpu::{Instance, PresentMode, Surface, TextureFormat};
+use std::{borrow::BorrowMut, path::Path, process::exit, sync::Arc};
+use wgpu::{Features, Instance, PresentMode, Surface, TextureFormat};
 
 use the_great_mind_palace_of_theatrical_arts as theater;
 use theater::play::backstage::pyrotechnics::kinetic_narrative::{
@@ -205,7 +206,7 @@ impl GameProgramme {
                 self.settings.desired_backend,
                 self.settings.desired_device_name.clone(),
                 self.settings.desired_profile,
-                None,
+                Some(Features::ADDRESS_MODE_CLAMP_TO_BORDER),
             )
             .await?)
         })
@@ -250,6 +251,7 @@ impl GameProgramme {
 
     pub async fn async_start(mut self, window_builder: WindowBuilder) {
         let iad = self.create_iad().await.unwrap();
+
         let Ok((event_loop, window)) = self.create_window(window_builder.with_visible(false))
         else {
             exit(1)
@@ -273,6 +275,7 @@ impl GameProgramme {
             Some(window_size.width as f32 / window_size.height as f32),
         )
         .unwrap();
+
         // Get the preferred format for the surface.
         //
         // Assume android supports Rgba8Srgb, as it has 100% device coverage
@@ -333,6 +336,7 @@ impl GameProgramme {
             sample_count: self.sample_count(),
             present_mode: self.present_mode(),
         };
+
         // On native this is a result, but on wasm it's a unit type.
         #[allow(clippy::let_unit_value)]
         let _ = Self::winit_run(event_loop, move |event, event_loop_window_target| {
@@ -380,10 +384,33 @@ impl GameProgramme {
                     return;
                 }
             }
+            let loader = AssetLoader::new_local(
+                concat!(env!("CARGO_MANIFEST_DIR"), "/assets/"),
+                "",
+                "http://localhost:8000/assets/",
+            );
+            let pupper = pollster::block_on(async {
+                loader
+                    .get_asset(AssetPath::Internal(&self.settings.puppet_path))
+                    .await
+                    .unwrap()
+            });
+            let mut inox_model = parse_inp(pupper.as_slice()).unwrap();
+            let mut inox_renderer = inox2d_wgpu::Renderer::new(
+                &renderer.device,
+                &renderer.queue,
+                wgpu::TextureFormat::Bgra8Unorm,
+                &inox_model,
+                uvec2(window.inner_size().width, window.inner_size().height),
+            );
+
+            inox_renderer.camera.scale = Vec2::splat(0.15);
             // event loop starts here
             self.handle_event(
                 &window,
                 &renderer,
+                &mut inox_renderer,
+                &mut inox_model,
                 &routines,
                 &base_rendergraph,
                 surface.as_ref(),
@@ -403,6 +430,8 @@ impl GameProgramme {
         &mut self,
         window: &winit::window::Window,
         renderer: &Arc<rend3::Renderer>,
+        inox_renderer: &mut inox2d_wgpu::Renderer,
+        inox_model: &mut inox2d::model::Model,
         routines: &Arc<DefaultRoutines>,
         base_rendergraph: &rend3_routine::base::BaseRenderGraph,
         surface: Option<&Arc<rend3::types::Surface>>,
@@ -528,7 +557,16 @@ impl GameProgramme {
 
                 // Dispatch a render using the built up rendergraph!
                 self.settings.previous_profiling_stats = graph.execute(renderer, &mut eval_output);
+                let puppet = inox_model.puppet.borrow_mut();
+                puppet.begin_set_params();
+                let t = ctx.frame_nr() as f32;
+                puppet.set_param("Head:: Yaw-Pitch", vec2(t.cos(), t.sin()));
+                puppet.end_set_params();
 
+                let output = surface.unwrap().get_current_texture().unwrap();
+                let view = (output.texture).create_view(&wgpu::TextureViewDescriptor::default());
+
+                inox_renderer.render(&renderer.queue, &renderer.device, puppet, &view);
                 // Present the frame
                 frame.present();
                 // mark the end of the frame for tracy/other profilers
@@ -791,6 +829,28 @@ impl GameProgramme {
         }
 
         let window_size = window.inner_size();
+        let loader = AssetLoader::new_local(
+            concat!(env!("CARGO_MANIFEST_DIR"), "/assets/"),
+            "",
+            "http://localhost:8000/assets/",
+        );
+        let pp = self.settings.puppet_path.clone();
+        let pupper = pollster::block_on(async move {
+            loader
+                .get_asset(AssetPath::Internal(pp.as_str()))
+                .await
+                .unwrap()
+        });
+        let model = parse_inp(pupper.as_slice()).unwrap();
+        let mut inox_renderer = inox2d_wgpu::Renderer::new(
+            &renderer.device,
+            &renderer.queue,
+            surface_format,
+            &model,
+            uvec2(window.inner_size().width, window.inner_size().height),
+        );
+        inox_renderer.camera.scale = Vec2::splat(0.15);
+        //        let mut scene_ctrl = ExampleSceneController::new(&inox_renderer.camera, 0.5);
 
         // Create the egui render routine
         let egui_routine = rend3_egui::EguiRenderRoutine::new(
