@@ -193,7 +193,7 @@ impl GameProgrammeSettings {
             args.opt_value_from_fn(["-v", "--vsync"], extract_vsync),
             HELP,
         )
-        .unwrap_or(rend3::types::PresentMode::Immediate);
+        .unwrap_or(rend3::types::PresentMode::Fifo);
 
         // Windowing
         let absolute_mouse: bool = args.contains("--absolute-mouse");
