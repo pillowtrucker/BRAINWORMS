@@ -41,6 +41,7 @@ Assets:
   --scale <scale>                        Scale all objects loaded by this factor. Defaults to 1.0.
   --shadow-distance <value>              Distance from the camera there will be directional shadows. Lower values means higher quality shadows. Defaults to 100.
   --shadow-resolution <value>            Resolution of the shadow map. Higher values mean higher quality shadows with high performance cost. Defaults to 2048.
+  --puppet <path-to-inp-file>            inochi2d puppet
 
 Controls:
   --walk <speed>               Walk speed (speed without holding shift) in units/second (typically meters). Default 10.
@@ -160,6 +161,7 @@ pub struct GameProgrammeSettings {
     pub previous_profiling_stats: Option<Vec<GpuTimerScopeResult>>,
     pub last_mouse_delta: Option<DVec2>,
     pub grabber: Option<Grabber>,
+    pub puppet_path: String,
 }
 impl Default for GameProgrammeSettings {
     fn default() -> Self {
@@ -224,6 +226,9 @@ impl GameProgrammeSettings {
             option_arg(args.opt_value_from_str("--shadow-resolution"), HELP).unwrap_or(8192);
         let gltf_disable_directional_light: bool =
             args.contains("--gltf-disable-directional-lights");
+
+        let puppet_path: String = option_arg(args.opt_value_from_str("--puppet"), HELP)
+            .unwrap_or("assets/inochi2d-models/Midori.inp".to_owned());
 
         // Controls
         let walk_speed = args.value_from_str("--walk").unwrap_or(10.0_f32);
@@ -291,7 +296,7 @@ impl GameProgrammeSettings {
             ambient_light_level,
             present_mode,
             samples,
-
+            puppet_path,
             fullscreen,
 
             scancode_status: FastHashMap::default(),
