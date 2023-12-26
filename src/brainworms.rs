@@ -15,7 +15,10 @@ use rend3::{
 use rend3_routine::base::BaseRenderGraph;
 
 use std::{borrow::BorrowMut, path::Path, process::exit, sync::Arc};
-use wgpu::{Features, Instance, PresentMode, Surface, TextureFormat};
+use wgpu::{
+    CommandEncoder, CommandEncoderDescriptor, Features, Instance, PresentMode, RenderPass, Surface,
+    TextureFormat,
+};
 
 use the_great_mind_palace_of_theatrical_arts as theater;
 use theater::play::backstage::pyrotechnics::kinetic_narrative::{
@@ -282,7 +285,21 @@ impl GameProgramme {
         let format = surface.as_ref().map_or(TextureFormat::Rgba8UnormSrgb, |s| {
             let caps = s.get_capabilities(&iad.adapter);
             let format = caps.formats[0];
-
+            let alpha_modes = s.get_capabilities(&iad.adapter).alpha_modes;
+            let alpha_mode = if alpha_modes.contains(&wgpu::CompositeAlphaMode::PreMultiplied) {
+                wgpu::CompositeAlphaMode::PreMultiplied
+            } else {
+                alpha_modes[0]
+            };
+            let config = wgpu::SurfaceConfiguration {
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_DST,
+                format: wgpu::TextureFormat::Bgra8Unorm,
+                width: window.inner_size().width,
+                height: window.inner_size().height,
+                present_mode: wgpu::PresentMode::Fifo,
+                alpha_mode,
+                view_formats: Vec::new(),
+            };
             // Configure the surface to be ready for rendering.
             rend3::configure_surface(
                 s,
@@ -291,9 +308,10 @@ impl GameProgramme {
                 glam::UVec2::new(window_size.width, window_size.height),
                 rend3::types::PresentMode::Fifo,
             );
-
+            s.configure(&renderer.device, &config);
             format
         });
+
         let mut spp = rend3::ShaderPreProcessor::new();
         rend3_routine::builtin_shaders(&mut spp);
 
@@ -550,23 +568,67 @@ impl GameProgramme {
                     Vec3::splat(self.settings.ambient_light_level).extend(1.0),
                     glam::Vec4::new(0.0, 0.0, 0.0, 1.0),
                 );
+                let texture_size = wgpu::Extent3d {
+                    width: 1920,
+                    height: 1080,
+                    depth_or_array_layers: 1,
+                };
+                let format = surface
+                    .unwrap()
+                    .get_current_texture()
+                    .unwrap()
+                    .texture
+                    .format();
+                let image_texture = renderer.device.create_texture(&wgpu::TextureDescriptor {
+                    size: texture_size,
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format,
+                    usage: wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::RENDER_ATTACHMENT,
+                    label: Some("ok"),
+                    view_formats: &[format],
+                });
 
                 // Add egui on top of all the other passes
                 data.egui_routine
                     .add_to_graph(&mut graph, input, frame_handle);
 
-                // Dispatch a render using the built up rendergraph!
-                self.settings.previous_profiling_stats = graph.execute(renderer, &mut eval_output);
                 let puppet = inox_model.puppet.borrow_mut();
                 puppet.begin_set_params();
                 let t = ctx.frame_nr() as f32;
                 puppet.set_param("Head:: Yaw-Pitch", vec2(t.cos(), t.sin()));
                 puppet.end_set_params();
 
-                let output = surface.unwrap().get_current_texture().unwrap();
-                let view = (output.texture).create_view(&wgpu::TextureViewDescriptor::default());
-
+                let output = image_texture; //.create_view(&wgpu::TextureViewDescriptor::default());
+                let view = (output).create_view(&wgpu::TextureViewDescriptor::default());
                 inox_renderer.render(&renderer.queue, &renderer.device, puppet, &view);
+
+                let mut encoder =
+                    renderer
+                        .device
+                        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                            label: Some("Part Render Encoder"),
+                        });
+                encoder.copy_texture_to_texture(
+                    output.as_image_copy(),
+                    surface
+                        .unwrap()
+                        .get_current_texture()
+                        .unwrap()
+                        .texture
+                        .as_image_copy(),
+                    surface
+                        .unwrap()
+                        .get_current_texture()
+                        .unwrap()
+                        .texture
+                        .size(),
+                );
+                renderer.queue.submit(std::iter::once(encoder.finish()));
+                // Dispatch a render using the built up rendergraph!
+                self.settings.previous_profiling_stats = graph.execute(renderer, &mut eval_output);
+
                 // Present the frame
                 frame.present();
                 // mark the end of the frame for tracy/other profilers
