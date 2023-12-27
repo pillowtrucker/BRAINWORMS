@@ -1,9 +1,9 @@
 #![feature(variant_count)]
 mod the_great_mind_palace_of_theatrical_arts;
-use egui::{viewport, Color32, TextStyle, Visuals};
+use egui::{Color32, TextStyle, Visuals};
 use frame_rate::FrameRate;
 use glam::{uvec2, vec2, DVec2, Mat3A, Mat4, UVec2, Vec2, Vec3};
-use inox2d::{formats::inp::parse_inp, render::InoxRenderer};
+use inox2d::formats::inp::parse_inp;
 use log::info;
 use nanorand::{RandomGen, Rng};
 use parking_lot::Mutex;
@@ -15,10 +15,7 @@ use rend3::{
 use rend3_routine::base::BaseRenderGraph;
 
 use std::{borrow::BorrowMut, path::Path, process::exit, sync::Arc};
-use wgpu::{
-    CommandEncoder, CommandEncoderDescriptor, Features, Instance, PresentMode, RenderPass, Surface,
-    TextureFormat,
-};
+use wgpu::{Features, Instance, PresentMode, Surface, TextureFormat};
 
 use the_great_mind_palace_of_theatrical_arts as theater;
 use theater::play::backstage::pyrotechnics::kinetic_narrative::{
@@ -107,10 +104,11 @@ pub fn start(gp: GameProgramme, window_builder: WindowBuilder) {
 
     #[cfg(not(target_arch = "wasm32"))]
     {
-        let Ok(wingman) = tokio::runtime::Runtime::new() else {
-            panic!("no tokyo for you");
-        };
-
+        /*
+                let Ok(wingman) = tokio::runtime::Runtime::new() else {
+                    panic!("no tokyo for you");
+                };
+        */
         pollster::block_on(gp.async_start(window_builder));
     }
 }
@@ -569,15 +567,23 @@ impl GameProgramme {
                 // Add the default rendergraph without a skybox
                 base_rendergraph.add_to_graph(
                     &mut graph,
-                    &eval_output,
-                    &pbr_routine,
-                    Some(&skybox_routine),
-                    &tonemapping_routine,
-                    frame_handle,
-                    resolution,
-                    self.settings.samples,
-                    Vec3::splat(self.settings.ambient_light_level).extend(1.0),
-                    glam::Vec4::new(0.0, 0.0, 0.0, 1.0),
+                    rend3_routine::base::BaseRenderGraphInputs {
+                        eval_output: &eval_output,
+                        routines: rend3_routine::base::BaseRenderGraphRoutines {
+                            pbr: &pbr_routine,
+                            skybox: Some(&skybox_routine),
+                            tonemapping: &tonemapping_routine,
+                        },
+                        target: rend3_routine::base::OutputRenderTarget {
+                            handle: frame_handle,
+                            resolution,
+                            samples: self.settings.samples,
+                        },
+                    },
+                    rend3_routine::base::BaseRenderGraphSettings {
+                        ambient_color: Vec3::splat(self.settings.ambient_light_level).extend(1.0),
+                        clear_color: glam::Vec4::new(0.0, 0.0, 0.0, 1.0),
+                    },
                 );
                 let mut inox_renderer = inox2d_wgpu::Renderer::new(
                     &renderer.device,
@@ -898,31 +904,7 @@ impl GameProgramme {
         }
 
         let window_size = window.inner_size();
-        /*
-        let loader = AssetLoader::new_local(
-            concat!(env!("CARGO_MANIFEST_DIR"), "/assets/"),
-            "",
-            "http://localhost:8000/assets/",
-        );
 
-                let pp = self.settings.puppet_path.clone();
-                let pupper = pollster::block_on(async move {
-                    loader
-                        .get_asset(AssetPath::Internal(pp.as_str()))
-                        .await
-                        .unwrap()
-                });
-                let model = parse_inp(pupper.as_slice()).unwrap();
-                let mut inox_renderer = inox2d_wgpu::Renderer::new(
-                    &renderer.device,
-                    &renderer.queue,
-                    surface_format,
-                    &model,
-                    uvec2(window.inner_size().width, window.inner_size().height),
-                );
-                inox_renderer.camera.scale = Vec2::splat(0.15);
-                //        let mut scene_ctrl = ExampleSceneController::new(&inox_renderer.camera, 0.5);
-        */
         // Create the egui render routine
         let egui_routine = rend3_egui::EguiRenderRoutine::new(
             renderer,
