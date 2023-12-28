@@ -1,4 +1,5 @@
 use glam::{DVec2, Vec3, Vec3A};
+use inox2d::formats::inp::parse_inp;
 use pico_args::Arguments;
 use rend3::{
     types::{DirectionalLightHandle, SampleCount},
@@ -8,6 +9,8 @@ use rend3::{
 use rend3_routine::pbr::NormalTextureYDirection;
 use wgpu::Backend;
 use wgpu_profiler::GpuTimerScopeResult;
+
+use crate::theater::play::backstage::plumbing::asset_loader::{AssetLoader, AssetPath};
 
 use super::grab::Grabber;
 
@@ -162,6 +165,9 @@ pub struct GameProgrammeSettings {
     pub last_mouse_delta: Option<DVec2>,
     pub grabber: Option<Grabber>,
     pub puppet_path: String,
+    pub inox_model: inox2d::model::Model,
+    pub inox_renderer: Option<inox2d_wgpu::Renderer>,
+    pub inox_texture: Option<wgpu::Texture>,
 }
 impl Default for GameProgrammeSettings {
     fn default() -> Self {
@@ -193,7 +199,7 @@ impl GameProgrammeSettings {
             args.opt_value_from_fn(["-v", "--vsync"], extract_vsync),
             HELP,
         )
-        .unwrap_or(rend3::types::PresentMode::Fifo);
+        .unwrap_or(rend3::types::PresentMode::Immediate);
 
         // Windowing
         let absolute_mouse: bool = args.contains("--absolute-mouse");
@@ -280,6 +286,21 @@ impl GameProgrammeSettings {
         }
 
         gltf_settings.directional_light_resolution = shadow_resolution;
+        let inox_model = parse_inp(
+            pollster::block_on(async {
+                let loader = AssetLoader::new_local(
+                    concat!(env!("CARGO_MANIFEST_DIR"), "/assets/"),
+                    "",
+                    "http://localhost:8000/assets/",
+                );
+                loader
+                    .get_asset(AssetPath::Internal(&puppet_path))
+                    .await
+                    .unwrap()
+            })
+            .as_slice(),
+        )
+        .unwrap();
 
         Self {
             absolute_mouse,
@@ -298,7 +319,9 @@ impl GameProgrammeSettings {
             samples,
             puppet_path,
             fullscreen,
-
+            inox_model,
+            inox_renderer: None,
+            inox_texture: None,
             scancode_status: FastHashMap::default(),
             camera_pitch: camera_info[3],
             camera_yaw: camera_info[4],

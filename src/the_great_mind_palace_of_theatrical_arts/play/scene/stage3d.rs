@@ -54,7 +54,7 @@ pub(crate) async fn load_skybox(
     load_skybox_image(loader, &mut data, "skybox/back.jpg").await;
 
     let handle = renderer.add_texture_cube(Texture {
-        format: TextureFormat::Rgba8UnormSrgb,
+        format: TextureFormat::Bgra8UnormSrgb,
         size: UVec2::new(2048, 2048),
         data,
         label: Some("background".into()),

@@ -15,7 +15,7 @@ use rend3::{
 use rend3_routine::base::BaseRenderGraph;
 
 use std::{borrow::BorrowMut, path::Path, process::exit, sync::Arc};
-use wgpu::{Features, Instance, PresentMode, Surface, TextureFormat};
+use wgpu::{Extent3d, Features, Instance, PresentMode, Surface, Texture, TextureFormat};
 
 use the_great_mind_palace_of_theatrical_arts as theater;
 use theater::play::backstage::pyrotechnics::kinetic_narrative::{
@@ -66,6 +66,7 @@ pub struct GameProgrammeData {
     pub last_update: time::Instant,
     pub frame_rate: FrameRate,
     pub elapsed: f32,
+    pub timestamp_start: time::Instant,
 }
 
 pub struct GameProgramme {
@@ -127,7 +128,7 @@ impl GameProgramme {
     }
     #[allow(clippy::too_many_arguments)]
     fn handle_surface(
-        &self,
+        &mut self,
         window: &Window,
         event: &Event,
         instance: &Instance,
@@ -156,7 +157,9 @@ impl GameProgramme {
             } => {
                 log::debug!("resize {:?}", size);
                 let size = UVec2::new(size.width, size.height);
-
+                if let Some(ref mut inox_renderer) = self.settings.inox_renderer {
+                    inox_renderer.resize(size)
+                };
                 if size.x == 0 || size.y == 0 {
                     return Some(false);
                 }
@@ -181,7 +184,21 @@ impl GameProgramme {
                     style.set_property("width", "100%").unwrap();
                     style.set_property("height", "100%").unwrap();
                 }
-
+                let inox_texture = renderer.device.create_texture(&wgpu::TextureDescriptor {
+                    label: Some("inox texture"),
+                    size: Extent3d {
+                        width: size.x,
+                        height: size.y,
+                        depth_or_array_layers: 1,
+                    },
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: wgpu::TextureFormat::Bgra8Unorm,
+                    usage: wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::RENDER_ATTACHMENT,
+                    view_formats: &[wgpu::TextureFormat::Bgra8Unorm],
+                });
+                self.settings.inox_texture = Some(inox_texture);
                 // Reconfigure the surface for the new size.
                 rend3::configure_surface(
                     surface.as_ref().unwrap(),
@@ -191,21 +208,23 @@ impl GameProgramme {
                     surface_info.present_mode,
                 );
 
-                let alpha_mode = wgpu::CompositeAlphaMode::Opaque;
+                let alpha_mode = wgpu::CompositeAlphaMode::Auto;
 
                 let config = wgpu::SurfaceConfiguration {
                     usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_DST,
                     format: wgpu::TextureFormat::Bgra8Unorm,
                     width: window.inner_size().width,
                     height: window.inner_size().height,
-                    present_mode: wgpu::PresentMode::Fifo,
+                    present_mode: wgpu::PresentMode::Immediate,
                     alpha_mode,
                     view_formats: Vec::new(),
                 };
+
                 surface
                     .as_ref()
                     .unwrap()
                     .configure(&renderer.device, &config);
+
                 // Tell the renderer about the new aspect ratio.
                 renderer.set_aspect_ratio(size.x as f32 / size.y as f32);
                 Some(false)
@@ -296,9 +315,10 @@ impl GameProgramme {
         // Get the preferred format for the surface.
         //
         // Assume android supports Rgba8Srgb, as it has 100% device coverage
-        let format = surface.as_ref().map_or(TextureFormat::Bgra8Unorm, |s| {
-            //            let caps = s.get_capabilities(&iad.adapter);
+        let format = surface.as_ref().map_or(TextureFormat::Rgba8Unorm, |s| {
+            let caps = s.get_capabilities(&iad.adapter);
             let format = wgpu::TextureFormat::Bgra8Unorm;
+            //let format = caps.formats[0];
             let alpha_modes = s.get_capabilities(&iad.adapter).alpha_modes;
             let alpha_mode = if alpha_modes.contains(&wgpu::CompositeAlphaMode::PreMultiplied) {
                 wgpu::CompositeAlphaMode::PreMultiplied
@@ -311,7 +331,7 @@ impl GameProgramme {
                 format: wgpu::TextureFormat::Bgra8Unorm,
                 width: window.inner_size().width,
                 height: window.inner_size().height,
-                present_mode: wgpu::PresentMode::Fifo,
+                present_mode: wgpu::PresentMode::Immediate,
                 alpha_mode,
                 view_formats: Vec::new(),
             };
@@ -322,9 +342,9 @@ impl GameProgramme {
                 &iad.device,
                 format,
                 glam::UVec2::new(window_size.width, window_size.height),
-                rend3::types::PresentMode::Fifo,
+                rend3::types::PresentMode::Immediate,
             );
-            s.configure(&renderer.device, &config);
+            //            s.configure(&renderer.device, &config);
             format
         });
 
@@ -371,6 +391,35 @@ impl GameProgramme {
             present_mode: self.present_mode(),
         };
 
+        let mut inox_renderer = inox2d_wgpu::Renderer::new(
+            &renderer.device,
+            &renderer.queue,
+            wgpu::TextureFormat::Bgra8Unorm,
+            &self.settings.inox_model,
+            uvec2(window.inner_size().width, window.inner_size().height),
+        );
+
+        inox_renderer.camera.scale = Vec2::splat(0.15);
+
+        let texture_size = wgpu::Extent3d {
+            width: window.inner_size().width,
+            height: window.inner_size().height,
+            depth_or_array_layers: 1,
+        };
+
+        let inox_texture = renderer.device.create_texture(&wgpu::TextureDescriptor {
+            //size: frame.texture.size(),
+            size: texture_size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format,
+            usage: wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::RENDER_ATTACHMENT,
+            label: Some("ok"),
+            view_formats: &[format],
+        });
+        self.settings.inox_texture = Some(inox_texture);
+        self.settings.inox_renderer = Some(inox_renderer);
         // On native this is a result, but on wasm it's a unit type.
         #[allow(clippy::let_unit_value)]
         let _ = Self::winit_run(event_loop, move |event, event_loop_window_target| {
@@ -385,7 +434,7 @@ impl GameProgramme {
             };
             let mut control_flow = event_loop_window_target.control_flow();
             if let Some(suspend) = Self::handle_surface(
-                &self,
+                &mut self,
                 &window,
                 &event,
                 &iad.instance,
@@ -419,26 +468,10 @@ impl GameProgramme {
                 }
             }
 
-            let loader = AssetLoader::new_local(
-                concat!(env!("CARGO_MANIFEST_DIR"), "/assets/"),
-                "",
-                "http://localhost:8000/assets/",
-            );
-
-            let pupper = pollster::block_on(async {
-                loader
-                    .get_asset(AssetPath::Internal(&self.settings.puppet_path))
-                    .await
-                    .unwrap()
-            });
-
-            let mut inox_model = parse_inp(pupper.as_slice()).unwrap();
-            //            info!("{:?}", inox_model);
             // event loop starts here
             self.handle_event(
                 &window,
                 &renderer,
-                &mut inox_model,
                 &routines,
                 &base_rendergraph,
                 surface.as_ref(),
@@ -458,7 +491,7 @@ impl GameProgramme {
         &mut self,
         window: &winit::window::Window,
         renderer: &Arc<rend3::Renderer>,
-        inox_model: &mut inox2d::model::Model,
+
         routines: &Arc<DefaultRoutines>,
         base_rendergraph: &rend3_routine::base::BaseRenderGraph,
         surface: Option<&Arc<rend3::types::Surface>>,
@@ -478,6 +511,7 @@ impl GameProgramme {
                 data.elapsed += last_frame_duration;
                 data.frame_rate.update(last_frame_duration);
                 data.last_update = time::Instant::now();
+
                 let view = Mat4::from_euler(
                     glam::EulerRot::XYZ,
                     -self.settings.camera_pitch,
@@ -485,6 +519,8 @@ impl GameProgramme {
                     0.0,
                 );
                 let view = view * Mat4::from_translation((-self.settings.camera_location).into());
+                // Get a frame
+                let frame = surface.unwrap().get_current_texture().unwrap();
 
                 renderer.set_camera_data(Camera {
                     projection: CameraProjection::Perspective {
@@ -537,11 +573,6 @@ impl GameProgramme {
                     context: data.egui_ctx.clone(),
                 };
 
-                // Get a frame
-                let frame = surface.unwrap().get_current_texture().unwrap();
-
-                // Swap the instruction buffers so that our frame's changes can be processed.
-
                 // Swap the instruction buffers so that our frame's changes can be processed.
                 renderer.swap_instruction_buffers();
                 // Evaluate our frame's world-change instructions
@@ -549,9 +580,9 @@ impl GameProgramme {
 
                 // Lock the routines
                 let pbr_routine = lock(&routines.pbr);
-                let mut skybox_routine = lock(&routines.skybox);
+                //                let mut skybox_routine = lock(&routines.skybox);
                 let tonemapping_routine = lock(&routines.tonemapping);
-                skybox_routine.evaluate(renderer);
+                //                skybox_routine.evaluate(renderer);
                 /*
                 Build a rendergraph
                 */
@@ -565,83 +596,88 @@ impl GameProgramme {
                     rend3::graph::ViewportRect::from_size(resolution),
                 );
                 // Add the default rendergraph without a skybox
+
                 base_rendergraph.add_to_graph(
                     &mut graph,
-                    rend3_routine::base::BaseRenderGraphInputs {
-                        eval_output: &eval_output,
-                        routines: rend3_routine::base::BaseRenderGraphRoutines {
-                            pbr: &pbr_routine,
-                            skybox: Some(&skybox_routine),
-                            tonemapping: &tonemapping_routine,
-                        },
-                        target: rend3_routine::base::OutputRenderTarget {
-                            handle: frame_handle,
-                            resolution,
-                            samples: self.settings.samples,
-                        },
-                    },
-                    rend3_routine::base::BaseRenderGraphSettings {
-                        ambient_color: Vec3::splat(self.settings.ambient_light_level).extend(1.0),
-                        clear_color: glam::Vec4::new(0.0, 0.0, 0.0, 1.0),
-                    },
-                );
-                let mut inox_renderer = inox2d_wgpu::Renderer::new(
-                    &renderer.device,
-                    &renderer.queue,
-                    wgpu::TextureFormat::Bgra8Unorm,
-                    inox_model,
-                    uvec2(window.inner_size().width, window.inner_size().height),
+                    &eval_output,
+                    &pbr_routine,
+                    None,
+                    //Some(&skybox_routine),
+                    &tonemapping_routine,
+                    frame_handle,
+                    resolution,
+                    self.settings.samples,
+                    Vec3::splat(self.settings.ambient_light_level).extend(1.0),
+                    glam::Vec4::new(0.0, 0.0, 0.0, 1.0),
                 );
 
-                inox_renderer.camera.scale = Vec2::splat(0.15);
-
-                let texture_size = wgpu::Extent3d {
-                    width: 1920,
-                    height: 1080,
-                    depth_or_array_layers: 1,
-                };
-
-                let format = frame.texture.format();
-                let image_texture = renderer.device.create_texture(&wgpu::TextureDescriptor {
-                    size: texture_size,
-                    mip_level_count: 1,
-                    sample_count: 1,
-                    dimension: wgpu::TextureDimension::D2,
-                    format,
-                    usage: wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::RENDER_ATTACHMENT,
-                    label: Some("ok"),
-                    view_formats: &[format],
-                });
+                /*
+                                base_rendergraph.add_to_graph(
+                                    &mut graph,
+                                    rend3_routine::base::BaseRenderGraphInputs {
+                                        eval_output: &eval_output,
+                                        routines: rend3_routine::base::BaseRenderGraphRoutines {
+                                            pbr: &pbr_routine,
+                                            skybox: Some(&skybox_routine),
+                                            tonemapping: &tonemapping_routine,
+                                        },
+                                        target: rend3_routine::base::OutputRenderTarget {
+                                            handle: frame_handle,
+                                            resolution,
+                                            samples: self.settings.samples,
+                                        },
+                                    },
+                                    rend3_routine::base::BaseRenderGraphSettings {
+                                        ambient_color: Vec3::splat(self.settings.ambient_light_level).extend(1.0),
+                                        clear_color: glam::Vec4::new(0.0, 0.0, 0.0, 1.0),
+                                    },
+                                );
+                */
+                //                let format = frame.texture.format();
 
                 // Add egui on top of all the other passes
                 data.egui_routine
                     .add_to_graph(&mut graph, input, frame_handle);
 
-                let puppet = inox_model.puppet.borrow_mut();
-                puppet.begin_set_params();
-                let t = ctx.frame_nr() as f32;
-                puppet.set_param("Head:: Yaw-Pitch", vec2(t.cos(), t.sin()));
-                puppet.end_set_params();
-
-                let output = image_texture; //.create_view(&wgpu::TextureViewDescriptor::default());
-                let view = (output).create_view(&wgpu::TextureViewDescriptor::default());
-                inox_renderer.render(&renderer.queue, &renderer.device, puppet, &view);
-
                 // Dispatch a render using the built up rendergraph!
                 self.settings.previous_profiling_stats = graph.execute(renderer, &mut eval_output);
+                {
+                    let puppet = &mut self.settings.inox_model.puppet;
+                    puppet.begin_set_params();
 
-                let mut encoder =
-                    renderer
-                        .device
-                        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                            label: Some("Part Render Encoder"),
-                        });
-                encoder.copy_texture_to_texture(
-                    output.as_image_copy(),
-                    frame.texture.as_image_copy(),
-                    frame.texture.size(),
-                );
-                renderer.queue.submit(std::iter::once(encoder.finish()));
+                    let t = data.timestamp_start.elapsed().as_secs_f32();
+                    puppet.set_param("Head:: Yaw-Pitch", vec2(t.cos(), t.sin()));
+
+                    puppet.end_set_params();
+                }
+                if let Some(ref mut inox_texture) = self.settings.inox_texture {
+                    let temp_view =
+                        inox_texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+                    if let Some(ref mut ir) = self.settings.inox_renderer {
+                        ir.render(
+                            &renderer.queue,
+                            &renderer.device,
+                            &self.settings.inox_model.puppet,
+                            &temp_view,
+                        )
+                    };
+
+                    let mut encoder =
+                        renderer
+                            .device
+                            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                                label: Some("Part Render Encoder"),
+                            });
+
+                    encoder.copy_texture_to_texture(
+                        inox_texture.as_image_copy(),
+                        frame.texture.as_image_copy(),
+                        frame.texture.size(),
+                    );
+                    renderer.queue.submit(std::iter::once(encoder.finish()));
+                }
+
                 // Present the frame
                 frame.present();
                 // mark the end of the frame for tracy/other profilers
@@ -731,6 +767,8 @@ impl GameProgramme {
                         event_loop_window_target.exit();
                     }
                     winit::event::WindowEvent::Resized(size) => {
+                        //                        inox_renderer.resize(uvec2(size.width, size.height));
+
                         data.egui_routine.resize(
                             size.width,
                             size.height,
@@ -982,7 +1020,7 @@ impl GameProgramme {
             Some(window.scale_factor() as f32),
             None,
         );
-
+        let timestamp_start = time::Instant::now();
         //Images
 
         self.data = Some(GameProgrammeData {
@@ -996,6 +1034,7 @@ impl GameProgramme {
             test_lines,
             _test_text,
             random_line_effects,
+            timestamp_start,
         });
 
         let gltf_settings = self.settings.gltf_settings;
