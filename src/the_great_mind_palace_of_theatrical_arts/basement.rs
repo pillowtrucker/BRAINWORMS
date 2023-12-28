@@ -3,6 +3,7 @@ pub mod frame_rate;
 pub mod grab;
 pub mod logging;
 pub mod platform_scancodes;
+pub mod quad_damage;
 #[cfg(target_arch = "wasm32")]
 pub mod resize_observer;
 pub mod text_files;

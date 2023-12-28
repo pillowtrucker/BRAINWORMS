@@ -3,23 +3,30 @@ mod the_great_mind_palace_of_theatrical_arts;
 use egui::{Color32, TextStyle, Visuals};
 use frame_rate::FrameRate;
 use glam::{uvec2, vec2, DVec2, Mat3A, Mat4, UVec2, Vec2, Vec3};
-use inox2d::formats::inp::parse_inp;
 use log::info;
 use nanorand::{RandomGen, Rng};
 use parking_lot::Mutex;
 use rend3::{
-    types::{Camera, CameraProjection, DirectionalLight, SampleCount},
+    managers::InternalTexture,
+    types::{
+        Camera, CameraProjection, DirectionalLight, MipmapCount, RawResourceHandle, SampleCount,
+    },
     Renderer, ShaderPreProcessor,
 };
 
 use rend3_routine::base::BaseRenderGraph;
 
-use std::{borrow::BorrowMut, path::Path, process::exit, sync::Arc};
-use wgpu::{Extent3d, Features, Instance, PresentMode, Surface, Texture, TextureFormat};
+use std::{borrow::BorrowMut, default, num::NonZeroU32, path::Path, process::exit, sync::Arc};
+use wgpu::{
+    Extent3d, Features, Instance, PresentMode, Surface, TextureFormat, TextureViewDescriptor,
+};
 
 use the_great_mind_palace_of_theatrical_arts as theater;
-use theater::play::backstage::pyrotechnics::kinetic_narrative::{
-    Gay, KineticEffect, KineticLabel, ShakeLetters,
+use theater::{
+    basement::quad_damage::create_quad,
+    play::backstage::pyrotechnics::kinetic_narrative::{
+        Gay, KineticEffect, KineticLabel, ShakeLetters,
+    },
 };
 use theater::{
     basement::{
@@ -184,7 +191,7 @@ impl GameProgramme {
                     style.set_property("width", "100%").unwrap();
                     style.set_property("height", "100%").unwrap();
                 }
-                let inox_texture = renderer.device.create_texture(&wgpu::TextureDescriptor {
+                let inox_texture_descriptor = wgpu::TextureDescriptor {
                     label: Some("inox texture"),
                     size: Extent3d {
                         width: size.x,
@@ -197,8 +204,25 @@ impl GameProgramme {
                     format: wgpu::TextureFormat::Bgra8Unorm,
                     usage: wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::RENDER_ATTACHMENT,
                     view_formats: &[wgpu::TextureFormat::Bgra8Unorm],
-                });
-                self.settings.inox_texture = Some(inox_texture);
+                };
+                let inox_texture_wgpu = renderer.device.create_texture(&inox_texture_descriptor);
+                let inox_texture_wgpu_view =
+                    inox_texture_wgpu.create_view(&wgpu::TextureViewDescriptor::default());
+                let inox_texture_wgpu_internal = InternalTexture {
+                    texture: inox_texture_wgpu,
+                    view: inox_texture_wgpu_view,
+                    desc: inox_texture_descriptor,
+                };
+                if let Some(old_inox_texture_rend3_handle) =
+                    self.settings.inox_texture_rend3_handle.clone()
+                {
+                    let mut dc = renderer.data_core.lock();
+                    dc.d2_texture_manager.fill(
+                        old_inox_texture_rend3_handle.get_raw(),
+                        inox_texture_wgpu_internal,
+                    )
+                }
+
                 // Reconfigure the surface for the new size.
                 rend3::configure_surface(
                     surface.as_ref().unwrap(),
@@ -344,7 +368,7 @@ impl GameProgramme {
                 glam::UVec2::new(window_size.width, window_size.height),
                 rend3::types::PresentMode::Immediate,
             );
-            //            s.configure(&renderer.device, &config);
+            s.configure(&renderer.device, &config);
             format
         });
 
@@ -390,36 +414,104 @@ impl GameProgramme {
             sample_count: self.sample_count(),
             present_mode: self.present_mode(),
         };
+        let texture_size_uvec2 = uvec2(window.inner_size().width, window.inner_size().height);
+
+        let texture_size = wgpu::Extent3d {
+            width: texture_size_uvec2.x,
+            height: texture_size_uvec2.y,
+            depth_or_array_layers: 1,
+        };
 
         let mut inox_renderer = inox2d_wgpu::Renderer::new(
             &renderer.device,
             &renderer.queue,
-            wgpu::TextureFormat::Bgra8Unorm,
+            format,
             &self.settings.inox_model,
-            uvec2(window.inner_size().width, window.inner_size().height),
+            texture_size_uvec2,
         );
 
         inox_renderer.camera.scale = Vec2::splat(0.15);
 
-        let texture_size = wgpu::Extent3d {
-            width: window.inner_size().width,
-            height: window.inner_size().height,
-            depth_or_array_layers: 1,
-        };
-
-        let inox_texture = renderer.device.create_texture(&wgpu::TextureDescriptor {
-            //size: frame.texture.size(),
+        let inox_texture_descriptor = wgpu::TextureDescriptor {
             size: texture_size,
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format,
             usage: wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::RENDER_ATTACHMENT,
-            label: Some("ok"),
-            view_formats: &[format],
+            label: Some("inox texture"),
+            view_formats: &[wgpu::TextureFormat::Bgra8Unorm],
+        };
+
+        let inox_texture_wgpu = renderer.device.create_texture(&inox_texture_descriptor);
+        let inox_texture_wgpu_view = inox_texture_wgpu.create_view(&wgpu::TextureViewDescriptor {
+            mip_level_count: None,
+            base_mip_level: 0,
+            ..Default::default()
         });
-        self.settings.inox_texture = Some(inox_texture);
+
+        let inox_texture_rend3 = rend3::types::Texture {
+            label: Some("inox texture but rend3".to_owned()),
+            format,
+            size: texture_size_uvec2,
+            mip_count: MipmapCount::Specific(NonZeroU32::new(2).unwrap()),
+
+            mip_source: rend3::types::MipmapSource::Generated,
+            data: vec![0; (texture_size_uvec2.x * texture_size_uvec2.y * 4) as usize],
+        };
+        let inox_texture_rend3_handle = renderer.add_texture_2d(inox_texture_rend3).unwrap();
+
+        let inox_texture_rend3_raw_handle = inox_texture_rend3_handle.get_raw();
+
+        let inox_texture_wgpu_internal = InternalTexture {
+            texture: inox_texture_wgpu,
+            view: inox_texture_wgpu_view,
+            desc: inox_texture_descriptor,
+        };
+        {
+            renderer
+                .data_core
+                .lock()
+                .d2_texture_manager
+                .fill(inox_texture_rend3_raw_handle, inox_texture_wgpu_internal);
+        }
+
+        // Create mesh and calculate smooth normals based on vertices
+        let sprite_mesh = create_quad(300.0);
+        // Add mesh to renderer's world.
+        //
+        // All handles are refcounted, so we only need to hang onto the handle until we
+        // make an object.
+        let sprite_mesh_handle = renderer.add_mesh(sprite_mesh).unwrap();
+        let sprite_material = rend3_routine::pbr::PbrMaterial {
+            albedo: rend3_routine::pbr::AlbedoComponent::Texture(inox_texture_rend3_handle.clone()),
+            ..Default::default()
+        };
+
+        let sprite_material_handle = renderer.add_material(sprite_material);
+        // Combine the mesh and the material with a location to give an object.
+        let sprite_object = rend3::types::Object {
+            mesh_kind: rend3::types::ObjectMeshKind::Static(sprite_mesh_handle),
+            material: sprite_material_handle.clone(),
+            transform: glam::Mat4::from_scale_rotation_translation(
+                glam::Vec3::new(1.0, 1.0, 1.0),
+                glam::Quat::from_euler(glam::EulerRot::XYZ, 0.0, 0.0, 0.0),
+                glam::Vec3::new(0.0, 0.0, 0.0),
+            ),
+        };
+
+        // Creating an object will hold onto both the mesh and the material
+        // even if they are deleted.
+        //
+        // We need to keep the object handle alive.
+        let sprite_object_handle = renderer.add_object(sprite_object);
+        self.settings.sprite_object_handle = Some(sprite_object_handle);
+        //        self.settings.sprite_material_handle = Some(sprite_material_handle);
+        self.settings.inox_texture_rend3_handle = Some(inox_texture_rend3_handle);
+        //        self.settings.inox_texture_wgpu_view = Some(inox_texture_wgpu_view);
         self.settings.inox_renderer = Some(inox_renderer);
+
+        // IMPORTANT this is where the loop actually starts you dumbass
         // On native this is a result, but on wasm it's a unit type.
         #[allow(clippy::let_unit_value)]
         let _ = Self::winit_run(event_loop, move |event, event_loop_window_target| {
@@ -650,32 +742,39 @@ impl GameProgramme {
 
                     puppet.end_set_params();
                 }
-                if let Some(ref mut inox_texture) = self.settings.inox_texture {
-                    let temp_view =
-                        inox_texture.create_view(&wgpu::TextureViewDescriptor::default());
-
+                //                if let Some(ref mut inox_texture_wgpu) = self.settings.inox_texture_wgpu {
+                if let Some(inox_texture_rend3_handle) =
+                    self.settings.inox_texture_rend3_handle.clone()
+                {
                     if let Some(ref mut ir) = self.settings.inox_renderer {
+                        let dc = renderer.data_core.lock();
+                        let inox_texture_wgpu_view = &dc
+                            .d2_texture_manager
+                            .get_internal(inox_texture_rend3_handle.get_raw())
+                            .view;
                         ir.render(
                             &renderer.queue,
                             &renderer.device,
                             &self.settings.inox_model.puppet,
-                            &temp_view,
+                            inox_texture_wgpu_view,
                         )
                     };
-
-                    let mut encoder =
-                        renderer
-                            .device
-                            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                                label: Some("Part Render Encoder"),
-                            });
+                    /*
+                    let mut encoder = renderer.device.create_command_encoder(
+                        &wgpu::CommandEncoderDescriptor {
+                            label: Some("Part Render Encoder"),
+                        },
+                    );
 
                     encoder.copy_texture_to_texture(
-                        inox_texture.as_image_copy(),
+                        inox_texture_wgpu.as_image_copy(),
                         frame.texture.as_image_copy(),
                         frame.texture.size(),
                     );
+
                     renderer.queue.submit(std::iter::once(encoder.finish()));
+                    */
+                    //                    }
                 }
 
                 // Present the frame

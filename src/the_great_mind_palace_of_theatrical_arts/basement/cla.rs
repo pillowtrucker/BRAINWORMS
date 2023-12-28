@@ -1,7 +1,10 @@
+use std::sync::Arc;
+
 use glam::{DVec2, Vec3, Vec3A};
 use inox2d::formats::inp::parse_inp;
 use pico_args::Arguments;
 use rend3::{
+    managers::InternalTexture,
     types::{DirectionalLightHandle, SampleCount},
     util::typedefs::FastHashMap,
     RendererProfile,
@@ -167,7 +170,9 @@ pub struct GameProgrammeSettings {
     pub puppet_path: String,
     pub inox_model: inox2d::model::Model,
     pub inox_renderer: Option<inox2d_wgpu::Renderer>,
-    pub inox_texture: Option<wgpu::Texture>,
+    pub inox_texture_rend3_handle: Option<rend3::types::Texture2DHandle>,
+    //    pub sprite_material_handle: Option<rend3::types::MaterialHandle>,
+    pub sprite_object_handle: Option<rend3::types::ObjectHandle>,
 }
 impl Default for GameProgrammeSettings {
     fn default() -> Self {
@@ -321,7 +326,12 @@ impl GameProgrammeSettings {
             fullscreen,
             inox_model,
             inox_renderer: None,
-            inox_texture: None,
+            //            inox_texture_wgpu: None,
+            //            inox_texture_wgpu_view: None,
+            //inox_texture_wgpu_internal: None,
+            //            sprite_material_handle: None,
+            inox_texture_rend3_handle: None,
+            sprite_object_handle: None,
             scancode_status: FastHashMap::default(),
             camera_pitch: camera_info[3],
             camera_yaw: camera_info[4],
