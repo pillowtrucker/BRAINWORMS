@@ -498,6 +498,7 @@ impl GameProgramme {
         let sprite_mesh_handle = renderer.add_mesh(sprite_mesh).unwrap();
         let sprite_material = rend3_routine::pbr::PbrMaterial {
             albedo: rend3_routine::pbr::AlbedoComponent::Texture(inox_texture_rend3_handle.clone()),
+            transparency: rend3_routine::pbr::Transparency::Blend,
             ..Default::default()
         };
 
