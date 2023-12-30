@@ -119,8 +119,8 @@ impl GameProgramme {
     const _PDP11_CAM_INFO: [f32; 5] = [-3.729838, 4.512105, -0.103016704, -0.4487015, 0.025398161];
     const _VT100_CAM_INFO: [f32; 5] = [-5.068789, 1.3310424, -3.6215494, -0.31070346, 6.262584];
     const _THERAC_CAM_INFO: [f32; 5] = [-2.580962, 2.8690546, 2.878742, -0.27470315, 5.620602];
-    const _TOITOI_CAM_INFO: [f64; 5] = [-6.814362, 2.740766, 0.7109763, -0.17870337, 0.0073876693];
-    const _OVERVIEW_CAM_INFO: [f64; 5] = [-6.217338, 3.8491437, 5.883971, -0.40870047, 5.76257];
+    const _TOITOI_CAM_INFO: [f32; 5] = [-6.814362, 2.740766, 0.7109763, -0.17870337, 0.0073876693];
+    const _OVERVIEW_CAM_INFO: [f32; 5] = [-6.217338, 3.8491437, 5.883971, -0.40870047, 5.76257];
     const HANDEDNESS: rend3::types::Handedness = rend3::types::Handedness::Right;
     fn new() -> Self {
         Self {
@@ -159,11 +159,7 @@ impl GameProgramme {
             } => {
                 log::debug!("resize {:?}", size);
                 let size = UVec2::new(size.width, size.height);
-                /*
-                if let Some(ref mut inox_renderer) = self.settings.inox_renderer {
-                    inox_renderer.resize(size)
-                };
-                */
+
                 if size.x == 0 || size.y == 0 {
                     return Some(false);
                 }
@@ -188,50 +184,7 @@ impl GameProgramme {
                     style.set_property("width", "100%").unwrap();
                     style.set_property("height", "100%").unwrap();
                 }
-                /*
-                let inox_texture_descriptor = wgpu::TextureDescriptor {
-                    label: Some("inox texture"),
-                    size: Extent3d {
-                        width: size.x,
-                        height: size.y,
-                        depth_or_array_layers: 1,
-                    },
-                    mip_level_count: 1,
-                    sample_count: 1,
-                    dimension: wgpu::TextureDimension::D2,
-                    format: wgpu::TextureFormat::Bgra8Unorm,
-                    usage: wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::RENDER_ATTACHMENT,
-                    view_formats: &[wgpu::TextureFormat::Bgra8Unorm],
-                };
-                let inox_texture_wgpu = renderer.device.create_texture(&inox_texture_descriptor);
-                */
-                /*
-                let inox_texture_wgpu_view =
-                    inox_texture_wgpu.create_view(&wgpu::TextureViewDescriptor::default());
-                let inox_texture_wgpu_internal = InternalTexture {
-                    texture: inox_texture_wgpu,
-                    view: inox_texture_wgpu_view,
-                    desc: inox_texture_descriptor,
-                };
-                */
-                /*
-                if let Some(old_inox_texture_rend3_handle) =
-                    self.settings.inox_texture_rend3_handle.clone()
-                {
-                    let mut dc = renderer.data_core.lock();
 
-                    dc.d2_texture_manager
-                        .get_internal(old_inox_texture_rend3_handle.get_raw())
-                        .texture
-                        .usage()
-                        .extend(wgpu::TextureUsages::RENDER_ATTACHMENT);
-
-                    dc.d2_texture_manager.fill(
-                        old_inox_texture_rend3_handle.get_raw(),
-                        inox_texture_wgpu_internal,
-                    )
-                }
-                */
                 // Reconfigure the surface for the new size.
                 rend3::configure_surface(
                     surface.as_ref().unwrap(),
@@ -426,7 +379,6 @@ impl GameProgramme {
             present_mode: self.present_mode(),
         };
         let texture_size_uvec2 = uvec2(4096, 4096); // we no longer care about the surface size for the sprite texture
-                                                    //let texture_size_uvec2 = uvec2(window.inner_size().width, window.inner_size().height);
 
         let texture_size = wgpu::Extent3d {
             width: texture_size_uvec2.x,
@@ -474,21 +426,6 @@ impl GameProgramme {
         };
         let inox_texture_rend3_handle = renderer.add_texture_2d(inox_texture_rend3).unwrap();
 
-        // let inox_texture_rend3_raw_handle = inox_texture_rend3_handle.get_raw();
-        /*
-                let inox_texture_wgpu_internal = InternalTexture {
-                    texture: inox_texture_wgpu,
-                    view: inox_texture_wgpu_view,
-                    desc: inox_texture_descriptor,
-                };
-                {
-                    renderer
-                        .data_core
-                        .lock()
-                        .d2_texture_manager
-                        .fill(inox_texture_rend3_raw_handle, inox_texture_wgpu_internal);
-                }
-        */
         // Create mesh and calculate smooth normals based on vertices
         let sprite_mesh = create_quad(300.0);
         // Add mesh to renderer's world.
@@ -576,7 +513,6 @@ impl GameProgramme {
                 }
             }
 
-            // event loop starts here
             self.handle_event(
                 &window,
                 &renderer,
@@ -703,22 +639,6 @@ impl GameProgramme {
                     0..1,
                     rend3::graph::ViewportRect::from_size(resolution),
                 );
-                // Add the default rendergraph without a skybox
-                /*
-                                base_rendergraph.add_to_graph(
-                                    &mut graph,
-                                    &eval_output,
-                                    &pbr_routine,
-                                    None,
-                                    //Some(&skybox_routine),
-                                    &tonemapping_routine,
-                                    frame_handle,
-                                    resolution,
-                                    self.settings.samples,
-                                    Vec3::splat(self.settings.ambient_light_level).extend(1.0),
-                                    glam::Vec4::new(0.0, 0.0, 0.0, 1.0),
-                                );
-                */
 
                 base_rendergraph.add_to_graph(
                     &mut graph,
@@ -741,14 +661,13 @@ impl GameProgramme {
                     },
                 );
 
-                //                let format = frame.texture.format();
-
                 // Add egui on top of all the other passes
                 data.egui_routine
                     .add_to_graph(&mut graph, input, frame_handle);
 
                 // Dispatch a render using the built up rendergraph!
                 self.settings.previous_profiling_stats = graph.execute(renderer, &mut eval_output);
+                // animate puppet
                 {
                     let puppet = &mut self.settings.inox_model.puppet;
                     puppet.begin_set_params();
@@ -758,7 +677,7 @@ impl GameProgramme {
 
                     puppet.end_set_params();
                 }
-                //                if let Some(ref mut inox_texture_wgpu) = self.settings.inox_texture_wgpu {
+
                 if let Some(inox_texture_rend3_handle) =
                     self.settings.inox_texture_rend3_handle.clone()
                 {
@@ -770,14 +689,14 @@ impl GameProgramme {
                             .d2_texture_manager
                             .get_internal(inox_texture_rend3_handle.get_raw())
                             .texture;
-
+                        // render to the inox texture
                         ir.render(
                             &renderer.queue,
                             &renderer.device,
                             &self.settings.inox_model.puppet,
                             inox_texture_wgpu_view.unwrap(),
                         );
-
+                        // copy the data into sprite material texture
                         let mut encoder = renderer.device.create_command_encoder(
                             &wgpu::CommandEncoderDescriptor {
                                 label: Some("Part Render Encoder"),
