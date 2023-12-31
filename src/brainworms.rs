@@ -7,20 +7,25 @@ use log::info;
 use nanorand::{RandomGen, Rng};
 use parking_lot::Mutex;
 use rend3::{
-    types::{Camera, CameraProjection, DirectionalLight, MipmapCount, SampleCount},
+    types::{Camera, CameraProjection, DirectionalLight, MipmapCount, ObjectHandle, SampleCount},
     Renderer, ShaderPreProcessor,
 };
 
+use rend3_gltf::{GltfSceneInstance, LoadedGltfScene};
 use rend3_routine::base::BaseRenderGraph;
+use uuid::{uuid, Uuid};
 
-use std::{num::NonZeroU32, path::Path, process::exit, sync::Arc};
+use std::{collections::HashMap, num::NonZeroU32, path::Path, process::exit, sync::Arc};
 use wgpu::{Features, Instance, PresentMode, Surface, TextureFormat};
 
 use the_great_mind_palace_of_theatrical_arts as theater;
 use theater::{
     basement::quad_damage::create_quad,
-    play::backstage::pyrotechnics::kinetic_narrative::{
-        Gay, KineticEffect, KineticLabel, ShakeLetters,
+    play::{
+        backstage::pyrotechnics::kinetic_narrative::{
+            Gay, KineticEffect, KineticLabel, ShakeLetters,
+        },
+        scene,
     },
 };
 use theater::{
@@ -56,7 +61,54 @@ use winit::keyboard::PhysicalKey::Code;
 #[cfg(not(target_arch = "wasm32"))]
 use winit::platform::scancode::PhysicalKeyExtScancode;
 
+fn make_camera(
+    (name, cam_attributes @ [x, y, z, pitch, yaw]): (String, [f32; 5]),
+) -> scene::Camera {
+    let camera_location = glam::Vec3A::new(x, y, z);
+    let view = glam::Mat4::from_euler(glam::EulerRot::XYZ, -pitch, -yaw, 0.0);
+    let view = view * glam::Mat4::from_translation((-camera_location).into());
+
+    // Set camera location data
+    scene::Camera {
+        name,
+        renderer_camera: rend3::types::Camera {
+            projection: rend3::types::CameraProjection::Perspective {
+                vfov: 60.0,
+                near: 0.1,
+            },
+            view,
+        },
+        cam_attributes,
+    }
+}
+
 use crate::theater::play::scene::stage3d::lock;
+struct Actress {
+    object: ObjectHandle,
+    raw_textures: Option<HashMap<String, wgpu::Texture>>,
+}
+struct Prop {
+    object: ObjectHandle,
+    raw_textures: Option<HashMap<String, wgpu::Texture>>,
+}
+pub struct SceneDefinition {
+    stage_path: String,
+    actors: Vec<(String, String)>,
+    props: Vec<(String, String)>,
+    cameras: Vec<(String, [f32; 5])>,
+}
+pub struct Scene {
+    definition: SceneDefinition,
+    implementation: Option<SceneImplementation>,
+}
+pub struct SceneImplementation {
+    sceneid: Uuid,
+    stage3d: (LoadedGltfScene, GltfSceneInstance),
+    actresses: HashMap<String, Actress>,
+    props: HashMap<String, Prop>,
+    cameras: HashMap<String, scene::Camera>,
+    //    script: String, // I'm really kinda stuck on this chicken and egg problem with script <-> actual game logic
+}
 pub struct GameProgrammeData {
     pub egui_routine: rend3_egui::EguiRenderRoutine,
     pub egui_ctx: egui::Context,
@@ -69,6 +121,7 @@ pub struct GameProgrammeData {
     pub frame_rate: FrameRate,
     pub elapsed: f32,
     pub timestamp_start: time::Instant,
+    pub scenes: Vec<Uuid>,
 }
 
 pub struct GameProgramme {
@@ -116,11 +169,6 @@ pub fn start(gp: GameProgramme, window_builder: WindowBuilder) {
     }
 }
 impl GameProgramme {
-    const _PDP11_CAM_INFO: [f32; 5] = [-3.729838, 4.512105, -0.103016704, -0.4487015, 0.025398161];
-    const _VT100_CAM_INFO: [f32; 5] = [-5.068789, 1.3310424, -3.6215494, -0.31070346, 6.262584];
-    const _THERAC_CAM_INFO: [f32; 5] = [-2.580962, 2.8690546, 2.878742, -0.27470315, 5.620602];
-    const _TOITOI_CAM_INFO: [f32; 5] = [-6.814362, 2.740766, 0.7109763, -0.17870337, 0.0073876693];
-    const _OVERVIEW_CAM_INFO: [f32; 5] = [-6.217338, 3.8491437, 5.883971, -0.40870047, 5.76257];
     const HANDEDNESS: rend3::types::Handedness = rend3::types::Handedness::Right;
     fn new() -> Self {
         Self {
@@ -427,7 +475,7 @@ impl GameProgramme {
         let inox_texture_rend3_handle = renderer.add_texture_2d(inox_texture_rend3).unwrap();
 
         // Create mesh and calculate smooth normals based on vertices
-        let sprite_mesh = create_quad(300.0);
+        let sprite_mesh = create_quad(30.0);
         // Add mesh to renderer's world.
         //
         // All handles are refcounted, so we only need to hang onto the handle until we
@@ -978,6 +1026,49 @@ impl GameProgramme {
             );
         }
 
+        const _PDP11_CAM_INFO: [f32; 5] =
+            [-3.729838, 4.512105, -0.103016704, -0.4487015, 0.025398161];
+        const _VT100_CAM_INFO: [f32; 5] = [-5.068789, 1.3310424, -3.6215494, -0.31070346, 6.262584];
+        const _THERAC_CAM_INFO: [f32; 5] = [-2.580962, 2.8690546, 2.878742, -0.27470315, 5.620602];
+        const _TOITOI_CAM_INFO: [f32; 5] =
+            [-6.814362, 2.740766, 0.7109763, -0.17870337, 0.0073876693];
+        const _OVERVIEW_CAM_INFO: [f32; 5] = [-6.217338, 3.8491437, 5.883971, -0.40870047, 5.76257];
+
+        let scene1_definition = SceneDefinition {
+            stage_path: "gltf_scenes/LinacLab.glb".to_owned(),
+            actors: vec![("Midori".to_owned(), "inochi2d-models/Midori.inp".to_owned())],
+            props: vec![],
+            cameras: vec![("overview".to_owned(), _OVERVIEW_CAM_INFO)],
+        };
+        let mut scene1 = Scene {
+            definition: scene1_definition,
+            implementation: None,
+        };
+        // Set camera location data
+
+        let scene1_overview_cam_src = scene1.definition.cameras.pop().unwrap();
+        //let scene1_overview_cam_name = scene1_overview_cam_src.0;
+        let scene1_overview_cam_info = scene1_overview_cam_src.1;
+        self.settings.camera_location = glam::Vec3A::new(
+            scene1_overview_cam_info[0],
+            scene1_overview_cam_info[1],
+            scene1_overview_cam_info[2],
+        );
+        self.settings.camera_pitch = scene1_overview_cam_info[3];
+        self.settings.camera_yaw = scene1_overview_cam_info[4];
+        let scene1_overview_cam = make_camera(scene1_overview_cam_src);
+        let mut scene1_cameras = HashMap::new();
+        scene1_cameras.insert(scene1_overview_cam.name.clone(), scene1_overview_cam);
+        let scene1_implementation = SceneImplementation {
+            sceneid: uuid!("517e70e9-9f6d-48fe-a685-e24482d6d409"),
+            stage3d: todo!(),
+            actresses: todo!(),
+            props: HashMap::new(),
+            cameras: scene1_cameras,
+        };
+
+        //renderer.set_camera_data(scene1_overview_cam.renderer_camera);
+
         let window_size = window.inner_size();
 
         // Create the egui render routine
@@ -1032,23 +1123,6 @@ impl GameProgramme {
             random_line_effects.push(KineticEffect::random(&mut rng));
         }
 
-        let camera_pitch = std::f32::consts::FRAC_PI_4;
-        let camera_yaw = -std::f32::consts::FRAC_PI_4;
-        // These values may seem arbitrary, but they center the camera on the cube in
-        // the scene
-        let camera_location = glam::Vec3A::new(5.0, 7.5, -5.0);
-        let view = glam::Mat4::from_euler(glam::EulerRot::XYZ, -camera_pitch, -camera_yaw, 0.0);
-        let view = view * glam::Mat4::from_translation((-camera_location).into());
-
-        // Set camera location data
-        renderer.set_camera_data(rend3::types::Camera {
-            projection: rend3::types::CameraProjection::Perspective {
-                vfov: 60.0,
-                near: 0.1,
-            },
-            view,
-        });
-
         // Create the winit/egui integration.
         let platform = egui_winit::State::new(
             egui_ctx.clone(),
@@ -1059,7 +1133,6 @@ impl GameProgramme {
         );
         let timestamp_start = time::Instant::now();
         //Images
-
         self.data = Some(GameProgrammeData {
             _start_time: time::Instant::now(),
             last_update: time::Instant::now(),
@@ -1072,6 +1145,7 @@ impl GameProgramme {
             _test_text,
             random_line_effects,
             timestamp_start,
+            scenes: Vec::new(),
         });
 
         let gltf_settings = self.settings.gltf_settings;

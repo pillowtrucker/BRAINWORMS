@@ -39,3 +39,9 @@ impl Playable for Scene {
     }
 }
 */
+
+pub struct Camera {
+    pub name: String,
+    pub renderer_camera: rend3::types::Camera,
+    pub cam_attributes: [f32; 5],
+}
