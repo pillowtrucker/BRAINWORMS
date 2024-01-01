@@ -15,7 +15,9 @@ use rend3_gltf::{GltfSceneInstance, LoadedGltfScene};
 use rend3_routine::base::BaseRenderGraph;
 use uuid::{uuid, Uuid};
 
-use std::{collections::HashMap, num::NonZeroU32, path::Path, process::exit, sync::Arc};
+use std::{
+    collections::HashMap, future::Future, num::NonZeroU32, path::Path, process::exit, sync::Arc,
+};
 use wgpu::{Features, Instance, PresentMode, Surface, TextureFormat};
 
 use the_great_mind_palace_of_theatrical_arts as theater;
@@ -48,17 +50,11 @@ use winit::{
     window::{Fullscreen, Window, WindowBuilder, WindowId},
 };
 
-#[cfg(not(target_arch = "wasm32"))]
 use std::time;
 use theater::basement::platform_scancodes::Scancodes;
-#[cfg(target_arch = "wasm32")]
-use theater::basement::resize_observer::*;
-use theater::play::scene::stage3d::{button_pressed, load_gltf, load_skybox, spawn};
-#[cfg(target_arch = "wasm32")]
-use web_time as time;
-#[cfg(target_arch = "wasm32")]
-use winit::keyboard::PhysicalKey::Code;
-#[cfg(not(target_arch = "wasm32"))]
+
+use theater::play::scene::stage3d::{button_pressed, load_gltf, load_skybox};
+
 use winit::platform::scancode::PhysicalKeyExtScancode;
 
 fn make_camera(
@@ -101,9 +97,13 @@ pub struct Scene {
     definition: SceneDefinition,
     implementation: Option<SceneImplementation>,
 }
+pub enum AstinkScene {
+    Loaded((String, Uuid, (LoadedGltfScene, GltfSceneInstance))),
+    Loading,
+}
 pub struct SceneImplementation {
     sceneid: Uuid,
-    stage3d: (LoadedGltfScene, GltfSceneInstance),
+    stage3d: HashMap<String, AstinkScene>,
     actresses: HashMap<String, Actress>,
     props: HashMap<String, Prop>,
     cameras: HashMap<String, scene::Camera>,
@@ -121,12 +121,19 @@ pub struct GameProgrammeData {
     pub frame_rate: FrameRate,
     pub elapsed: f32,
     pub timestamp_start: time::Instant,
-    pub scenes: Vec<Uuid>,
+    pub scenes: HashMap<Uuid, Scene>,
 }
-
+/*
+enum AstinkRuntime {
+    Nothing, // nothing
+    WASM,    // use browser internal
+    Tokio(tokio::runtime::Runtime),
+}
+*/
 pub struct GameProgramme {
     pub data: Option<GameProgrammeData>,
     pub settings: GameProgrammeSettings,
+    pub rts: tokio::runtime::Runtime,
 }
 pub struct DefaultRoutines {
     pub pbr: Mutex<rend3_routine::pbr::PbrRoutine>,
@@ -139,7 +146,7 @@ struct StoredSurfaceInfo {
     sample_count: SampleCount,
     present_mode: PresentMode,
 }
-pub type Event = winit::event::Event<UserResizeEvent<()>>;
+pub type Event = winit::event::Event<UserResizeEvent<AstinkScene>>;
 /// User event which the framework uses to resize on wasm.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum UserResizeEvent<T: 'static> {
@@ -153,27 +160,26 @@ pub enum UserResizeEvent<T: 'static> {
 }
 
 pub fn start(gp: GameProgramme, window_builder: WindowBuilder) {
-    #[cfg(target_arch = "wasm32")]
     {
-        wasm_bindgen_futures::spawn_local(gp.async_start(window_builder));
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        /*
-                let Ok(wingman) = tokio::runtime::Runtime::new() else {
-                    panic!("no tokyo for you");
-                };
-        */
         pollster::block_on(gp.async_start(window_builder));
     }
 }
 impl GameProgramme {
     const HANDEDNESS: rend3::types::Handedness = rend3::types::Handedness::Right;
+
+    pub fn spawn<Fut>(&self, fut: Fut) -> tokio::task::JoinHandle<<Fut as Future>::Output>
+    where
+        Fut: Future + Send + 'static,
+        Fut::Output: Send + 'static,
+    {
+        self.rts.spawn(fut)
+    }
+
     fn new() -> Self {
         Self {
             data: None,
             settings: GameProgrammeSettings::new(),
+            rts: tokio::runtime::Runtime::new().unwrap(),
         }
     }
     #[allow(clippy::too_many_arguments)]
@@ -223,15 +229,6 @@ impl GameProgramme {
                 // after the event is sent.
                 //
                 // https://github.com/rust-windowing/winit/issues/3023
-                #[cfg(target_arch = "wasm32")]
-                {
-                    use winit::platform::web::WindowExtWebSys;
-                    let canvas = window.canvas().unwrap();
-                    let style = canvas.style();
-
-                    style.set_property("width", "100%").unwrap();
-                    style.set_property("height", "100%").unwrap();
-                }
 
                 // Reconfigure the surface for the new size.
                 rend3::configure_surface(
@@ -284,27 +281,11 @@ impl GameProgramme {
     fn create_window(
         &mut self,
         builder: WindowBuilder,
-    ) -> Result<(EventLoop<UserResizeEvent<()>>, Window), EventLoopError> {
+    ) -> Result<(EventLoop<UserResizeEvent<AstinkScene>>, Window), EventLoopError> {
         profiling::scope!("creating window");
 
         let event_loop = EventLoopBuilder::with_user_event().build()?;
         let window = builder.build(&event_loop).expect("Could not build window");
-
-        #[cfg(target_arch = "wasm32")]
-        {
-            use winit::platform::web::WindowExtWebSys;
-
-            let canvas = window.canvas().unwrap();
-            let style = canvas.style();
-            style.set_property("width", "100%").unwrap();
-            style.set_property("height", "100%").unwrap();
-
-            web_sys::window()
-                .and_then(|win| win.document())
-                .and_then(|doc| doc.body())
-                .and_then(|body| body.append_child(&canvas).ok())
-                .expect("couldn't append canvas to document body");
-        }
 
         Ok((event_loop, window))
     }
@@ -413,9 +394,6 @@ impl GameProgramme {
                          // SETUP CALLED HERE
         self.setup(&event_loop, &window, &renderer, &routines, format);
 
-        #[cfg(target_arch = "wasm32")]
-        let _observer = ResizeObserver::new(&window, event_loop.create_proxy());
-
         // We're ready, so lets make things visible
         window.set_visible(true);
         let mut suspended = cfg!(target_os = "android");
@@ -523,6 +501,7 @@ impl GameProgramme {
                         event: WindowEvent::Resized(size),
                     }
                 }
+
                 e => e,
             };
             let mut control_flow = event_loop_window_target.control_flow();
@@ -590,7 +569,7 @@ impl GameProgramme {
         resolution: glam::UVec2,
         event: Event,
         control_flow: impl FnOnce(winit::event_loop::ControlFlow),
-        event_loop_window_target: &EventLoopWindowTarget<UserResizeEvent<()>>,
+        event_loop_window_target: &EventLoopWindowTarget<UserResizeEvent<AstinkScene>>,
     ) {
         let data = self.data.as_mut().unwrap();
 
@@ -870,14 +849,8 @@ impl GameProgramme {
                             },
                         ..
                     } => {
-                        #[cfg(not(target_arch = "wasm32"))]
                         let scancode = PhysicalKeyExtScancode::to_scancode(physical_key).unwrap();
-                        #[cfg(target_arch = "wasm32")]
-                        let scancode = if let Code(kk) = physical_key {
-                            kk as u32
-                        } else {
-                            0
-                        };
+
                         log::info!("WE scancode {:x}", scancode);
                         self.settings.scancode_status.insert(
                             scancode,
@@ -942,11 +915,27 @@ impl GameProgramme {
                     std::f32::consts::FRAC_PI_2 - 0.0001,
                 )
             }
+            Event::UserEvent(UserResizeEvent::Other(AstinkScene::Loaded((
+                name,
+                sc_id,
+                scdata,
+            )))) => {
+                info!("Actually caught the user event and assigned the stage3d data to scene");
+                let sc_imp = data
+                    .scenes
+                    .get_mut(&sc_id.clone())
+                    .unwrap()
+                    .implementation
+                    .as_mut()
+                    .unwrap();
+                sc_imp
+                    .stage3d
+                    .insert(name.clone(), AstinkScene::Loaded((name, sc_id, scdata)));
+            }
             _ => {}
         }
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
     fn winit_run<F, T>(
         event_loop: winit::event_loop::EventLoop<T>,
         event_handler: F,
@@ -956,38 +945,6 @@ impl GameProgramme {
         T: 'static,
     {
         event_loop.run(event_handler)
-    }
-
-    #[cfg(target_arch = "wasm32")]
-    fn winit_run<F, T>(event_loop: EventLoop<T>, event_handler: F)
-    where
-        F: FnMut(winit::event::Event<T>, &EventLoopWindowTarget<T>) + 'static,
-        T: 'static,
-    {
-        use wasm_bindgen::prelude::*;
-
-        let winit_closure =
-            Closure::once_into_js(move || event_loop.run(event_handler).expect("Init failed"));
-
-        // make sure to handle JS exceptions thrown inside start.
-        // Otherwise wasm_bindgen_futures Queue would break and never handle any tasks
-        // again. This is required, because winit uses JS exception for control flow
-        // to escape from `run`.
-        if let Err(error) = call_catch(&winit_closure) {
-            let is_control_flow_exception = error.dyn_ref::<js_sys::Error>().map_or(false, |e| {
-                e.message().includes("Using exceptions for control flow", 0)
-            });
-
-            if !is_control_flow_exception {
-                web_sys::console::error_1(&error);
-            }
-        }
-
-        #[wasm_bindgen]
-        extern "C" {
-            #[wasm_bindgen(catch, js_namespace = Function, js_name = "prototype.call.call")]
-            fn call_catch(this: &JsValue) -> Result<(), JsValue>;
-        }
     }
 
     fn scale_factor(&self) -> f32 {
@@ -1004,7 +961,7 @@ impl GameProgramme {
 
     fn setup(
         &mut self,
-        _event_loop: &winit::event_loop::EventLoop<UserResizeEvent<()>>,
+        event_loop: &winit::event_loop::EventLoop<UserResizeEvent<AstinkScene>>,
         window: &winit::window::Window,
         renderer: &Arc<rend3::Renderer>,
         routines: &Arc<DefaultRoutines>,
@@ -1013,7 +970,7 @@ impl GameProgramme {
         self.settings.grabber = Some(Grabber::new(window));
         if let Some(direction) = self.settings.directional_light_direction {
             self.settings.directional_light = Some(
-                renderer.add_directional_light(DirectionalLight {
+                renderer.clone().add_directional_light(DirectionalLight {
                     color: Vec3::splat(1.), //Vec3::new(1., 0.9, 0.8),
                     intensity: self.settings.directional_light_intensity,
                     direction,
@@ -1059,13 +1016,6 @@ impl GameProgramme {
         let scene1_overview_cam = make_camera(scene1_overview_cam_src);
         let mut scene1_cameras = HashMap::new();
         scene1_cameras.insert(scene1_overview_cam.name.clone(), scene1_overview_cam);
-        let scene1_implementation = SceneImplementation {
-            sceneid: uuid!("517e70e9-9f6d-48fe-a685-e24482d6d409"),
-            stage3d: todo!(),
-            actresses: todo!(),
-            props: HashMap::new(),
-            cameras: scene1_cameras,
-        };
 
         //renderer.set_camera_data(scene1_overview_cam.renderer_camera);
 
@@ -1073,13 +1023,57 @@ impl GameProgramme {
 
         // Create the egui render routine
         let egui_routine = rend3_egui::EguiRenderRoutine::new(
-            renderer,
+            &renderer,
             surface_format,
             rend3::types::SampleCount::One,
             window_size.width,
             window_size.height,
             window.scale_factor() as f32,
         );
+        let gltf_settings = self.settings.gltf_settings;
+        let file_to_load = self.settings.file_to_load.take();
+        let renderer = Arc::clone(&renderer);
+        let routines = Arc::clone(&routines);
+        let event_loop_proxy = event_loop.create_proxy();
+        let scene1_gltf_scene = self.spawn(async move {
+            let name = "LinacLab";
+            let sc_id = uuid!("517e70e9-9f6d-48fe-a685-e24482d6d409");
+            let loader = AssetLoader::new_local(
+                concat!(env!("CARGO_MANIFEST_DIR"), "/assets/"),
+                "",
+                "http://localhost:8000/assets/",
+            );
+            if let Err(e) = load_skybox(&renderer, &loader, &routines.skybox).await {
+                println!("Failed to load skybox {}", e)
+            };
+            let ret = Box::new(
+                load_gltf(
+                    &renderer,
+                    &loader,
+                    &gltf_settings,
+                    file_to_load.as_deref().map_or_else(
+                        || AssetPath::Internal("gltf_scenes/LinacLab.glb"),
+                        AssetPath::External,
+                    ),
+                )
+                .await,
+            );
+            event_loop_proxy.send_event(UserResizeEvent::Other(AstinkScene::Loaded((
+                name.to_owned(),
+                sc_id,
+                ret.unwrap(),
+            ))))
+        });
+        let mut scene1_stage3d = HashMap::new();
+        scene1_stage3d.insert("LinacLab".to_owned(), AstinkScene::Loading);
+        let scene1_implementation = SceneImplementation {
+            sceneid: uuid!("517e70e9-9f6d-48fe-a685-e24482d6d409"),
+            stage3d: scene1_stage3d,
+            actresses: HashMap::new(), //todo!(),
+            props: HashMap::new(),
+            cameras: scene1_cameras,
+        };
+        scene1.implementation = Some(scene1_implementation);
         // Create the egui context
         let egui_ctx = egui::Context::default();
         egui_ctx.set_visuals(Visuals {
@@ -1133,6 +1127,11 @@ impl GameProgramme {
         );
         let timestamp_start = time::Instant::now();
         //Images
+        let mut scenes = HashMap::new();
+        scenes.insert(
+            scene1.implementation.as_ref().unwrap().sceneid.clone(),
+            scene1,
+        );
         self.data = Some(GameProgrammeData {
             _start_time: time::Instant::now(),
             last_update: time::Instant::now(),
@@ -1145,33 +1144,7 @@ impl GameProgramme {
             _test_text,
             random_line_effects,
             timestamp_start,
-            scenes: Vec::new(),
-        });
-
-        let gltf_settings = self.settings.gltf_settings;
-        let file_to_load = self.settings.file_to_load.take();
-        let renderer = Arc::clone(renderer);
-        let routines = Arc::clone(routines);
-        spawn(async move {
-            let loader = AssetLoader::new_local(
-                concat!(env!("CARGO_MANIFEST_DIR"), "/assets/"),
-                "",
-                "http://localhost:8000/assets/",
-            );
-            if let Err(e) = load_skybox(&renderer, &loader, &routines.skybox).await {
-                println!("Failed to load skybox {}", e)
-            };
-            Box::leak(Box::new(
-                load_gltf(
-                    &renderer,
-                    &loader,
-                    &gltf_settings,
-                    file_to_load
-                        .as_deref()
-                        .map_or_else(|| AssetPath::Internal("LinacLab.glb"), AssetPath::External),
-                )
-                .await,
-            ));
+            scenes,
         });
     }
     fn sample_count(&self) -> rend3::types::SampleCount {

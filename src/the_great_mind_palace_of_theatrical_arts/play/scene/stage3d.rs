@@ -127,23 +127,3 @@ pub(crate) async fn load_gltf(
 pub(crate) fn button_pressed<Hash: BuildHasher>(map: &HashMap<u32, bool, Hash>, key: u32) -> bool {
     map.get(&key).map_or(false, |b| *b)
 }
-
-#[cfg(not(target_arch = "wasm32"))]
-pub fn spawn<Fut>(fut: Fut)
-where
-    Fut: Future + Send + 'static,
-    Fut::Output: Send + 'static,
-{
-    std::thread::spawn(|| pollster::block_on(fut));
-}
-
-#[cfg(target_arch = "wasm32")]
-pub fn spawn<Fut>(fut: Fut)
-where
-    Fut: Future + 'static,
-    Fut::Output: 'static,
-{
-    wasm_bindgen_futures::spawn_local(async move {
-        fut.await;
-    });
-}
