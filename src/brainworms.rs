@@ -1,7 +1,6 @@
 #![feature(variant_count)]
 mod the_great_mind_palace_of_theatrical_arts;
 use egui::{Color32, TextStyle, Visuals};
-use frame_rate::FrameRate;
 use glam::{uvec2, vec2, DVec2, Mat3A, Mat4, UVec2, Vec2, Vec3};
 use log::info;
 use nanorand::{RandomGen, Rng};
@@ -17,92 +16,64 @@ use uuid::{uuid, Uuid};
 
 use std::{
     collections::HashMap, future::Future, num::NonZeroU32, path::Path, process::exit, sync::Arc,
+    time,
 };
 use wgpu::{Features, Instance, PresentMode, Surface, TextureFormat};
 
 use the_great_mind_palace_of_theatrical_arts as theater;
-use theater::{
-    basement::quad_damage::create_quad,
-    play::{
-        backstage::pyrotechnics::kinetic_narrative::{
-            Gay, KineticEffect, KineticLabel, ShakeLetters,
-        },
-        scene,
-    },
-};
+use theater::play::scene::stage3d::lock;
 use theater::{
     basement::{
-        cla::GameProgrammeSettings, grab::Grabber, logging::register_logger,
-        logging::register_panic_hook,
+        cla::GameProgrammeSettings, frame_rate::FrameRate, grab::Grabber, logging::register_logger,
+        platform_scancodes::Scancodes, quad_damage::create_quad, text_files::read_lines,
     },
-    play::backstage::plumbing::asset_loader::AssetLoader,
+    play::{
+        backstage::{
+            plumbing::asset_loader::{AssetLoader, AssetPath},
+            pyrotechnics::kinetic_narrative::{Gay, KineticEffect, KineticLabel, ShakeLetters},
+        },
+        scene::{
+            self,
+            definitions::linac_lab::define_scene1,
+            stage3d::{button_pressed, load_gltf, load_skybox, make_camera},
+        },
+    },
 };
-use theater::{
-    basement::{frame_rate, text_files::read_lines},
-    play::backstage::plumbing::asset_loader::AssetPath,
-};
-
 use winit::{
-    dpi::PhysicalSize,
     error::EventLoopError,
     event::{DeviceEvent, ElementState, KeyEvent, MouseButton, WindowEvent},
     event_loop::{ControlFlow, EventLoop, EventLoopBuilder, EventLoopWindowTarget},
-    window::{Fullscreen, Window, WindowBuilder, WindowId},
+    platform::scancode::PhysicalKeyExtScancode,
+    window::{Fullscreen, Window, WindowBuilder},
 };
 
-use std::time;
-use theater::basement::platform_scancodes::Scancodes;
-
-use theater::play::scene::stage3d::{button_pressed, load_gltf, load_skybox};
-
-use winit::platform::scancode::PhysicalKeyExtScancode;
-
-fn make_camera(
-    (name, cam_attributes @ [x, y, z, pitch, yaw]): (String, [f32; 5]),
-) -> scene::Camera {
-    let camera_location = glam::Vec3A::new(x, y, z);
-    let view = glam::Mat4::from_euler(glam::EulerRot::XYZ, -pitch, -yaw, 0.0);
-    let view = view * glam::Mat4::from_translation((-camera_location).into());
-
-    // Set camera location data
-    scene::Camera {
-        name,
-        renderer_camera: rend3::types::Camera {
-            projection: rend3::types::CameraProjection::Perspective {
-                vfov: 60.0,
-                near: 0.1,
-            },
-            view,
-        },
-        cam_attributes,
-    }
+pub struct Actress {
+    pub object: ObjectHandle,
+    pub raw_textures: Option<HashMap<String, wgpu::Texture>>,
 }
-
-use crate::theater::play::scene::stage3d::lock;
-struct Actress {
-    object: ObjectHandle,
-    raw_textures: Option<HashMap<String, wgpu::Texture>>,
+pub struct Prop {
+    pub object: ObjectHandle,
+    pub raw_textures: Option<HashMap<String, wgpu::Texture>>,
 }
-struct Prop {
-    object: ObjectHandle,
-    raw_textures: Option<HashMap<String, wgpu::Texture>>,
-}
+type CamInfo = [f32; 5];
 pub struct SceneDefinition {
-    stage_path: String,
+    stage_name: String,
     actors: Vec<(String, String)>,
     props: Vec<(String, String)>,
-    cameras: Vec<(String, [f32; 5])>,
+    start_cam: String,
+    cameras: HashMap<String, CamInfo>,
 }
 pub struct Scene {
+    scene_uuid: Uuid,
     definition: SceneDefinition,
     implementation: Option<SceneImplementation>,
 }
+#[allow(clippy::large_enum_variant)]
 pub enum AstinkScene {
     Loaded((String, Uuid, (LoadedGltfScene, GltfSceneInstance))),
     Loading,
 }
 pub struct SceneImplementation {
-    sceneid: Uuid,
     stage3d: HashMap<String, AstinkScene>,
     actresses: HashMap<String, Actress>,
     props: HashMap<String, Prop>,
@@ -122,6 +93,7 @@ pub struct GameProgrammeData {
     pub elapsed: f32,
     pub timestamp_start: time::Instant,
     pub scenes: HashMap<Uuid, Scene>,
+    pub first_scene: Uuid,
 }
 /*
 enum AstinkRuntime {
@@ -146,17 +118,17 @@ struct StoredSurfaceInfo {
     sample_count: SampleCount,
     present_mode: PresentMode,
 }
-pub type Event = winit::event::Event<UserResizeEvent<AstinkScene>>;
-/// User event which the framework uses to resize on wasm.
+pub enum AstinkSprite {
+    Loading,
+    Loaded(Actress),
+}
+pub type Event = winit::event::Event<MyWinitEvent<AstinkScene, AstinkSprite>>;
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum UserResizeEvent<T: 'static> {
-    /// Used to fire off resizing on wasm
-    Resize {
-        window_id: WindowId,
-        size: PhysicalSize<u32>,
-    },
-    /// Custom user event type
-    Other(T),
+pub enum MyWinitEvent<TS, TA: 'static> {
+    /// Custom user event types
+    Stage3D(TS),
+    Actress(TA),
 }
 
 pub fn start(gp: GameProgramme, window_builder: WindowBuilder) {
@@ -281,7 +253,7 @@ impl GameProgramme {
     fn create_window(
         &mut self,
         builder: WindowBuilder,
-    ) -> Result<(EventLoop<UserResizeEvent<AstinkScene>>, Window), EventLoopError> {
+    ) -> Result<(EventLoop<MyWinitEvent<AstinkScene, AstinkSprite>>, Window), EventLoopError> {
         profiling::scope!("creating window");
 
         let event_loop = EventLoopBuilder::with_user_event().build()?;
@@ -494,16 +466,6 @@ impl GameProgramme {
         // On native this is a result, but on wasm it's a unit type.
         #[allow(clippy::let_unit_value)]
         let _ = Self::winit_run(event_loop, move |event, event_loop_window_target| {
-            let event = match event {
-                Event::UserEvent(UserResizeEvent::Resize { size, window_id }) => {
-                    Event::WindowEvent {
-                        window_id,
-                        event: WindowEvent::Resized(size),
-                    }
-                }
-
-                e => e,
-            };
             let mut control_flow = event_loop_window_target.control_flow();
             if let Some(suspend) = Self::handle_surface(
                 &mut self,
@@ -569,7 +531,7 @@ impl GameProgramme {
         resolution: glam::UVec2,
         event: Event,
         control_flow: impl FnOnce(winit::event_loop::ControlFlow),
-        event_loop_window_target: &EventLoopWindowTarget<UserResizeEvent<AstinkScene>>,
+        event_loop_window_target: &EventLoopWindowTarget<MyWinitEvent<AstinkScene, AstinkSprite>>,
     ) {
         let data = self.data.as_mut().unwrap();
 
@@ -915,15 +877,11 @@ impl GameProgramme {
                     std::f32::consts::FRAC_PI_2 - 0.0001,
                 )
             }
-            Event::UserEvent(UserResizeEvent::Other(AstinkScene::Loaded((
-                name,
-                sc_id,
-                scdata,
-            )))) => {
+            Event::UserEvent(MyWinitEvent::Stage3D(AstinkScene::Loaded((name, sc_id, scdata)))) => {
                 info!("Actually caught the user event and assigned the stage3d data to scene");
                 let sc_imp = data
                     .scenes
-                    .get_mut(&sc_id.clone())
+                    .get_mut(&sc_id)
                     .unwrap()
                     .implementation
                     .as_mut()
@@ -961,7 +919,7 @@ impl GameProgramme {
 
     fn setup(
         &mut self,
-        event_loop: &winit::event_loop::EventLoop<UserResizeEvent<AstinkScene>>,
+        event_loop: &winit::event_loop::EventLoop<MyWinitEvent<AstinkScene, AstinkSprite>>,
         window: &winit::window::Window,
         renderer: &Arc<rend3::Renderer>,
         routines: &Arc<DefaultRoutines>,
@@ -982,98 +940,23 @@ impl GameProgramme {
                 }),
             );
         }
-
-        const _PDP11_CAM_INFO: [f32; 5] =
-            [-3.729838, 4.512105, -0.103016704, -0.4487015, 0.025398161];
-        const _VT100_CAM_INFO: [f32; 5] = [-5.068789, 1.3310424, -3.6215494, -0.31070346, 6.262584];
-        const _THERAC_CAM_INFO: [f32; 5] = [-2.580962, 2.8690546, 2.878742, -0.27470315, 5.620602];
-        const _TOITOI_CAM_INFO: [f32; 5] =
-            [-6.814362, 2.740766, 0.7109763, -0.17870337, 0.0073876693];
-        const _OVERVIEW_CAM_INFO: [f32; 5] = [-6.217338, 3.8491437, 5.883971, -0.40870047, 5.76257];
-
-        let scene1_definition = SceneDefinition {
-            stage_path: "gltf_scenes/LinacLab.glb".to_owned(),
-            actors: vec![("Midori".to_owned(), "inochi2d-models/Midori.inp".to_owned())],
-            props: vec![],
-            cameras: vec![("overview".to_owned(), _OVERVIEW_CAM_INFO)],
-        };
-        let mut scene1 = Scene {
-            definition: scene1_definition,
-            implementation: None,
-        };
-        // Set camera location data
-
-        let scene1_overview_cam_src = scene1.definition.cameras.pop().unwrap();
-        //let scene1_overview_cam_name = scene1_overview_cam_src.0;
-        let scene1_overview_cam_info = scene1_overview_cam_src.1;
-        self.settings.camera_location = glam::Vec3A::new(
-            scene1_overview_cam_info[0],
-            scene1_overview_cam_info[1],
-            scene1_overview_cam_info[2],
-        );
-        self.settings.camera_pitch = scene1_overview_cam_info[3];
-        self.settings.camera_yaw = scene1_overview_cam_info[4];
-        let scene1_overview_cam = make_camera(scene1_overview_cam_src);
-        let mut scene1_cameras = HashMap::new();
-        scene1_cameras.insert(scene1_overview_cam.name.clone(), scene1_overview_cam);
-
-        //renderer.set_camera_data(scene1_overview_cam.renderer_camera);
+        let first_scene = uuid!("517e70e9-9f6d-48fe-a685-e24482d6d409"); // this is redundant on purpose, this has to be stored separately to point to the first scene. Good use for a linked list!
+        let scene1 = define_scene1();
+        let mut scenes = HashMap::new();
+        scenes.insert(scene1.scene_uuid, scene1);
 
         let window_size = window.inner_size();
 
         // Create the egui render routine
         let egui_routine = rend3_egui::EguiRenderRoutine::new(
-            &renderer,
+            renderer,
             surface_format,
             rend3::types::SampleCount::One,
             window_size.width,
             window_size.height,
             window.scale_factor() as f32,
         );
-        let gltf_settings = self.settings.gltf_settings;
-        let file_to_load = self.settings.file_to_load.take();
-        let renderer = Arc::clone(&renderer);
-        let routines = Arc::clone(&routines);
-        let event_loop_proxy = event_loop.create_proxy();
-        let scene1_gltf_scene = self.spawn(async move {
-            let name = "LinacLab";
-            let sc_id = uuid!("517e70e9-9f6d-48fe-a685-e24482d6d409");
-            let loader = AssetLoader::new_local(
-                concat!(env!("CARGO_MANIFEST_DIR"), "/assets/"),
-                "",
-                "http://localhost:8000/assets/",
-            );
-            if let Err(e) = load_skybox(&renderer, &loader, &routines.skybox).await {
-                println!("Failed to load skybox {}", e)
-            };
-            let ret = Box::new(
-                load_gltf(
-                    &renderer,
-                    &loader,
-                    &gltf_settings,
-                    file_to_load.as_deref().map_or_else(
-                        || AssetPath::Internal("gltf_scenes/LinacLab.glb"),
-                        AssetPath::External,
-                    ),
-                )
-                .await,
-            );
-            event_loop_proxy.send_event(UserResizeEvent::Other(AstinkScene::Loaded((
-                name.to_owned(),
-                sc_id,
-                ret.unwrap(),
-            ))))
-        });
-        let mut scene1_stage3d = HashMap::new();
-        scene1_stage3d.insert("LinacLab".to_owned(), AstinkScene::Loading);
-        let scene1_implementation = SceneImplementation {
-            sceneid: uuid!("517e70e9-9f6d-48fe-a685-e24482d6d409"),
-            stage3d: scene1_stage3d,
-            actresses: HashMap::new(), //todo!(),
-            props: HashMap::new(),
-            cameras: scene1_cameras,
-        };
-        scene1.implementation = Some(scene1_implementation);
+
         // Create the egui context
         let egui_ctx = egui::Context::default();
         egui_ctx.set_visuals(Visuals {
@@ -1126,12 +1009,7 @@ impl GameProgramme {
             None,
         );
         let timestamp_start = time::Instant::now();
-        //Images
-        let mut scenes = HashMap::new();
-        scenes.insert(
-            scene1.implementation.as_ref().unwrap().sceneid.clone(),
-            scene1,
-        );
+
         self.data = Some(GameProgrammeData {
             _start_time: time::Instant::now(),
             last_update: time::Instant::now(),
@@ -1145,6 +1023,76 @@ impl GameProgramme {
             random_line_effects,
             timestamp_start,
             scenes,
+            first_scene,
+        });
+        let data = self.data.as_mut().unwrap();
+        let scene1 = data.scenes.get_mut(&first_scene).unwrap();
+        // Set camera location data
+        let scene1_starting_cam_info = *scene1
+            .definition
+            .cameras
+            .get(&scene1.definition.start_cam)
+            .unwrap();
+        //let scene1_overview_cam_name = scene1_overview_cam_src.0;
+        //let scene1_starting_cam_info = scene1_starting_cam_src;
+        self.settings.camera_location = glam::Vec3A::new(
+            scene1_starting_cam_info[0],
+            scene1_starting_cam_info[1],
+            scene1_starting_cam_info[2],
+        );
+        self.settings.camera_pitch = scene1_starting_cam_info[3];
+        self.settings.camera_yaw = scene1_starting_cam_info[4];
+        let scene1_starting_cam = make_camera((
+            scene1.definition.start_cam.clone(),
+            scene1_starting_cam_info,
+        ));
+        let mut scene1_cameras = HashMap::new();
+        scene1_cameras.insert(scene1_starting_cam.name.clone(), scene1_starting_cam);
+        let gltf_settings = self.settings.gltf_settings;
+        let file_to_load = self.settings.file_to_load.take();
+        let renderer = Arc::clone(renderer);
+        let routines = Arc::clone(routines);
+        let event_loop_proxy = event_loop.create_proxy();
+        let scene1_uuid = scene1.scene_uuid;
+        let scene1_stage_name = scene1.definition.stage_name.clone();
+        let mut scene1_stage3d = HashMap::new();
+        scene1_stage3d.insert(scene1_stage_name.clone(), AstinkScene::Loading);
+        let scene1_implementation = SceneImplementation {
+            stage3d: scene1_stage3d,
+            actresses: HashMap::new(), //todo!(),
+            props: HashMap::new(),
+            cameras: scene1_cameras,
+        };
+
+        scene1.implementation = Some(scene1_implementation);
+        self.spawn(async move {
+            let name = scene1_stage_name;
+            let path = format!("gltf_scenes/{}.glb", name);
+            let sc_id = scene1_uuid;
+            let loader = AssetLoader::new_local(
+                concat!(env!("CARGO_MANIFEST_DIR"), "/assets/"),
+                "",
+                "http://localhost:8000/assets/",
+            );
+            if let Err(e) = load_skybox(&renderer, &loader, &routines.skybox).await {
+                println!("Failed to load skybox {}", e)
+            };
+            let ret = Box::new(
+                load_gltf(
+                    &renderer,
+                    &loader,
+                    &gltf_settings,
+                    file_to_load
+                        .as_deref()
+                        .map_or_else(|| AssetPath::Internal(&path), AssetPath::External),
+                )
+                .await,
+            );
+            event_loop_proxy.send_event(MyWinitEvent::Stage3D(AstinkScene::Loaded((
+                name,
+                sc_id,
+                ret.unwrap(),
+            ))))
         });
     }
     fn sample_count(&self) -> rend3::types::SampleCount {
@@ -1163,7 +1111,6 @@ fn main() {
         .with_fullscreen(Some(Fullscreen::Borderless(None)))
         .with_decorations(false);
     register_logger();
-    register_panic_hook();
 
     let the_game_programme = GameProgramme::new();
     start(the_game_programme, window_builder);

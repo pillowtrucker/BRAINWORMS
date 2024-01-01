@@ -9,6 +9,7 @@ use self::{actors::Actor, props::Prop};
 use super::{ActorUUID, Playable, PlayableUUID, PropUUID, Script};
 */
 pub mod actors;
+pub mod definitions;
 pub mod props;
 pub mod stage2d;
 pub mod stage3d;

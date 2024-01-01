@@ -1,6 +1,6 @@
 // how to set the stage for a 3d scene
 // for now I'm going to test and experiment in main() and then dump the results here
-use std::{collections::HashMap, future::Future, hash::BuildHasher, path::Path, sync::Arc};
+use std::{collections::HashMap, hash::BuildHasher, path::Path, sync::Arc};
 
 use glam::UVec2;
 
@@ -11,17 +11,12 @@ use rend3::{
 };
 use rend3_gltf::GltfSceneInstance;
 use rend3_routine::skybox::SkyboxRoutine;
-#[cfg(not(wasm_platform))]
-use std::time;
-#[cfg(wasm_platform)]
-use web_time as time;
 
-use crate::theater::play::backstage::plumbing::asset_loader::{AssetLoader, AssetPath};
+use std::time;
+
+use crate::theater::play::backstage::plumbing::asset_loader::{AssetError, AssetLoader, AssetPath};
 
 pub fn lock<T>(lock: &parking_lot::Mutex<T>) -> parking_lot::MutexGuard<'_, T> {
-    #[cfg(target_arch = "wasm32")]
-    let guard = lock.try_lock().expect("Could not lock mutex on single-threaded wasm. Do not hold locks open while an .await causes you to yield execution.");
-    #[cfg(not(target_arch = "wasm32"))]
     let guard = lock.lock();
 
     guard
@@ -73,7 +68,6 @@ pub(crate) async fn load_gltf(
 ) -> Option<(rend3_gltf::LoadedGltfScene, GltfSceneInstance)> {
     // profiling::scope!("loading gltf");
     let gltf_start = time::Instant::now();
-    let is_default_scene = matches!(location, AssetPath::Internal(_));
     let path = loader.get_asset_path(location);
     let path = Path::new(&*path);
     let parent = path.parent().unwrap();
@@ -85,20 +79,9 @@ pub(crate) async fn load_gltf(
 
     let gltf_data = match gltf_data_result {
         Ok(d) => d,
-        Err(_) if is_default_scene => {
-            indoc::eprintdoc!(
-                "
-                *** WARNING ***
-
-                It appears you are running scene-viewer with no file to display.
-
-                ***************
-            "
-            );
-
-            return None;
+        Err(AssetError::FileError { path, error }) => {
+            panic!("Error Loading gltf file {} E: {}", path, error)
         }
-        e => e.unwrap(),
     };
 
     let gltf_elapsed = gltf_start.elapsed();
@@ -126,4 +109,24 @@ pub(crate) async fn load_gltf(
 
 pub(crate) fn button_pressed<Hash: BuildHasher>(map: &HashMap<u32, bool, Hash>, key: u32) -> bool {
     map.get(&key).map_or(false, |b| *b)
+}
+pub fn make_camera(
+    (name, cam_attributes @ [x, y, z, pitch, yaw]): (String, [f32; 5]),
+) -> super::Camera {
+    let camera_location = glam::Vec3A::new(x, y, z);
+    let view = glam::Mat4::from_euler(glam::EulerRot::XYZ, -pitch, -yaw, 0.0);
+    let view = view * glam::Mat4::from_translation((-camera_location).into());
+
+    // Set camera location data
+    super::Camera {
+        name,
+        renderer_camera: rend3::types::Camera {
+            projection: rend3::types::CameraProjection::Perspective {
+                vfov: 60.0,
+                near: 0.1,
+            },
+            view,
+        },
+        cam_attributes,
+    }
 }

@@ -7,7 +7,7 @@ homepage = "https://github.com/pillowtrucker/BRAINWORMS"
 license = "AGPL-3.0-or-later"
 repository = "https://github.com/pillowtrucker/BRAINWORMS"
 description = "a programme"
-keywords = ["wgpu", "wasm", "rend3", "not-bevy", "no-ecs", "game", "program"]
+keywords = ["wgpu", "rend3", "not-bevy", "no-ecs", "game", "program"]
 
 [dependencies]
 wgpu = { version = "0.18.0", default-features = false }
@@ -17,7 +17,6 @@ log = "0.4.20"
 winit = "0.29.8"
 
 env_logger = "0.10.1"
-wasm-bindgen = "0.2.89"
 
 egui-wgpu = {version = "0.24.2", git = "https://github.com/emilk/egui.git", branch="master", features = ["winit"] }
 #egui-winit = { version = "0.24.1", default-features = false, features = ["clipboard", "links", "wayland"] }
@@ -41,7 +40,6 @@ webbrowser = "0.8.2"
 inox2d = {path = "inox2d/inox2d"}
 inox2d-wgpu = {path = "inox2d/inox2d-wgpu"}
 bytemuck = { version = "1.14.0", features = ["derive"] }
-web-time = "0.2.4"
 nanorand = { version = "0.7", default-features = false, features = ["wyrand"] }
 pico-args = "0.5"
 wgpu-profiler = "0.15.0"
@@ -55,10 +53,11 @@ parking_lot = "0.12.1"
 thiserror = { version = "1" }
 #rayon = "1.8"
 
-[features]
-webgl = ["wgpu/webgl"]
-wgsl = ["wgpu/wgsl"]
-default = ["webgl"]
+tokio = { version = "1", features = ["full"] }
+egui-winit = {version = "0.24.2", git = "https://github.com/emilk/egui.git", branch="master", default-features = false, features = ["clipboard", "links", "wayland"] }
+notify = "6.1.1"
+rust-embed = "8.2.0" # Enable shader hot reload for native compilation.
+
 
 [[bin]]
 name = "brainworms"
@@ -71,25 +70,6 @@ opt-level = 0
 [profile.dev.package."*"]
 opt-level = 1
 
-[target.'cfg(not(target_family = "wasm"))'.dependencies]
-tokio = { version = "1", features = ["full"] }
-egui-winit = {version = "0.24.2", git = "https://github.com/emilk/egui.git", branch="master", default-features = false, features = ["clipboard", "links", "wayland"] }
-notify = "6.1.1"
-rust-embed = "8.2.0" # Enable shader hot reload for native compilation.
-pollster = "0.3"
-[target.'cfg(target_family = "wasm")'.dependencies]
-egui-winit = { version = "0.24.2", git = "https://github.com/emilk/egui.git", branch="master", default-features = false, features = ["links"] }
-wasm-bindgen-futures = "0.4.39"
-web-sys = "=0.3.64"
-console_error_panic_hook = "0.1.7"
-console_log = "1.0.0"
-js-sys = "0.3"
-reqwest = "0.11"
-once_cell = "1.8"
-wasm-bindgen = "0.2.87"
-
-# Embed shaders in wasm.
-rust-embed = { version = "8.2.0", features = ["debug-embed"] }
 [package.metadata.android]
 build_targets = ["aarch64-linux-android"]
 assets = "resources"
