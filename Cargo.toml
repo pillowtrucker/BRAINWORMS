@@ -75,7 +75,7 @@ opt-level = 1
 tokio = { version = "1", features = ["full"] }
 egui-winit = {version = "0.24.2", git = "https://github.com/emilk/egui.git", branch="master", default-features = false, features = ["clipboard", "links", "wayland"] }
 notify = "6.1.1"
-rust-embed = "8.1.0" # Enable shader hot reload for native compilation.
+rust-embed = "8.2.0" # Enable shader hot reload for native compilation.
 pollster = "0.3"
 [target.'cfg(target_family = "wasm")'.dependencies]
 egui-winit = { version = "0.24.2", git = "https://github.com/emilk/egui.git", branch="master", default-features = false, features = ["links"] }
@@ -89,7 +89,7 @@ once_cell = "1.8"
 wasm-bindgen = "0.2.87"
 
 # Embed shaders in wasm.
-rust-embed = { version = "8.0.0", features = ["debug-embed"] }
+rust-embed = { version = "8.2.0", features = ["debug-embed"] }
 [package.metadata.android]
 build_targets = ["aarch64-linux-android"]
 assets = "resources"
