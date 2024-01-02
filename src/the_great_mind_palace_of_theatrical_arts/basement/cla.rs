@@ -1,5 +1,4 @@
 use glam::{DVec2, Vec3, Vec3A};
-use inox2d::formats::inp::parse_inp;
 use pico_args::Arguments;
 use rend3::{
     types::{DirectionalLightHandle, SampleCount},
@@ -9,8 +8,6 @@ use rend3::{
 use rend3_routine::pbr::NormalTextureYDirection;
 use wgpu::Backend;
 use wgpu_profiler::GpuTimerScopeResult;
-
-use crate::theater::play::backstage::plumbing::asset_loader::{AssetLoader, AssetPath};
 
 use super::grab::Grabber;
 
@@ -44,7 +41,6 @@ Assets:
   --scale <scale>                        Scale all objects loaded by this factor. Defaults to 1.0.
   --shadow-distance <value>              Distance from the camera there will be directional shadows. Lower values means higher quality shadows. Defaults to 100.
   --shadow-resolution <value>            Resolution of the shadow map. Higher values mean higher quality shadows with high performance cost. Defaults to 2048.
-  --puppet <path-to-inp-file>            inochi2d puppet
 
 Controls:
   --walk <speed>               Walk speed (speed without holding shift) in units/second (typically meters). Default 10.
@@ -164,15 +160,6 @@ pub struct GameProgrammeSettings {
     pub previous_profiling_stats: Option<Vec<GpuTimerScopeResult>>,
     pub last_mouse_delta: Option<DVec2>,
     pub grabber: Option<Grabber>,
-    pub puppet_path: String,
-    pub inox_model: inox2d::model::Model,
-    pub inox_renderer: Option<inox2d_wgpu::Renderer>,
-    pub inox_texture_wgpu: Option<wgpu::Texture>,
-    pub inox_texture_wgpu_view: Option<wgpu::TextureView>,
-    //pub inox_texture_wgpu_internal: Option<InternalTexture>,
-    pub inox_texture_rend3_handle: Option<rend3::types::Texture2DHandle>,
-    //    pub sprite_material_handle: Option<rend3::types::MaterialHandle>,
-    pub sprite_object_handle: Option<rend3::types::ObjectHandle>,
 }
 impl Default for GameProgrammeSettings {
     fn default() -> Self {
@@ -238,9 +225,6 @@ impl GameProgrammeSettings {
         let gltf_disable_directional_light: bool =
             args.contains("--gltf-disable-directional-lights");
 
-        let puppet_path: String = option_arg(args.opt_value_from_str("--puppet"), HELP)
-            .unwrap_or("inochi2d-models/Midori.inp".to_owned());
-
         // Controls
         let walk_speed = args.value_from_str("--walk").unwrap_or(10.0_f32);
         let run_speed = args.value_from_str("--run").unwrap_or(50.0_f32);
@@ -291,21 +275,6 @@ impl GameProgrammeSettings {
         }
 
         gltf_settings.directional_light_resolution = shadow_resolution;
-        let inox_model = parse_inp(
-            pollster::block_on(async {
-                let loader = AssetLoader::new_local(
-                    concat!(env!("CARGO_MANIFEST_DIR"), "/assets/"),
-                    "",
-                    "http://localhost:8000/assets/",
-                );
-                loader
-                    .get_asset(AssetPath::Internal(&puppet_path))
-                    .await
-                    .unwrap()
-            })
-            .as_slice(),
-        )
-        .unwrap();
 
         Self {
             absolute_mouse,
@@ -322,16 +291,7 @@ impl GameProgrammeSettings {
             ambient_light_level,
             present_mode,
             samples,
-            puppet_path,
             fullscreen,
-            inox_model,
-            inox_renderer: None,
-            inox_texture_wgpu: None,
-            inox_texture_wgpu_view: None,
-            //inox_texture_wgpu_internal: None,
-            //            sprite_material_handle: None,
-            inox_texture_rend3_handle: None,
-            sprite_object_handle: None,
             scancode_status: FastHashMap::default(),
             camera_pitch: camera_info[3],
             camera_yaw: camera_info[4],

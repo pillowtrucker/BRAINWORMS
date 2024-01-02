@@ -41,12 +41,12 @@ pub(crate) async fn load_skybox(
     skybox_routine: &Mutex<SkyboxRoutine>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut data = Vec::new();
-    load_skybox_image(loader, &mut data, "skybox/right.jpg").await;
-    load_skybox_image(loader, &mut data, "skybox/left.jpg").await;
-    load_skybox_image(loader, &mut data, "skybox/top.jpg").await;
-    load_skybox_image(loader, &mut data, "skybox/bottom.jpg").await;
-    load_skybox_image(loader, &mut data, "skybox/front.jpg").await;
-    load_skybox_image(loader, &mut data, "skybox/back.jpg").await;
+    load_skybox_image(loader, &mut data, "assets/skybox/right.jpg").await;
+    load_skybox_image(loader, &mut data, "assets/skybox/left.jpg").await;
+    load_skybox_image(loader, &mut data, "assets/skybox/top.jpg").await;
+    load_skybox_image(loader, &mut data, "assets/skybox/bottom.jpg").await;
+    load_skybox_image(loader, &mut data, "assets/skybox/front.jpg").await;
+    load_skybox_image(loader, &mut data, "assets/skybox/back.jpg").await;
 
     let handle = renderer.add_texture_cube(Texture {
         format: TextureFormat::Bgra8UnormSrgb,
