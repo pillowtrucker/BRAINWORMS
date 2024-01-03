@@ -1,24 +1,18 @@
 #![feature(variant_count)]
 mod the_great_mind_palace_of_theatrical_arts;
 use egui::{Color32, TextStyle, Visuals};
-use glam::{uvec2, vec2, DVec2, Mat3A, Mat4, UVec2, Vec2, Vec3};
+
+use glam::{uvec2, vec2, DVec2, Mat3A, Mat4, Vec2, Vec3};
 use inox2d::formats::inp::parse_inp;
 use log::info;
 use nanorand::{RandomGen, Rng};
 use parking_lot::Mutex;
-use rend3::{
-    types::{Camera, CameraProjection, DirectionalLight, MipmapCount, SampleCount},
-    Renderer, ShaderPreProcessor,
-};
+use rend3::types::{Camera, CameraProjection, DirectionalLight, MipmapCount};
 
-use rend3_routine::base::BaseRenderGraph;
 use uuid::Uuid;
 
-use std::{
-    collections::HashMap, future::Future, num::NonZeroU32, path::Path, process::exit, sync::Arc,
-    time,
-};
-use wgpu::{Features, Instance, PresentMode, Surface, TextureFormat};
+use std::{collections::HashMap, num::NonZeroU32, path::Path, process::exit, sync::Arc, time};
+use wgpu::TextureFormat;
 
 use the_great_mind_palace_of_theatrical_arts as theater;
 use theater::{
@@ -28,7 +22,10 @@ use theater::{
     },
     play::{
         backstage::{
-            plumbing::asset_loader::{AssetLoader, AssetPath},
+            plumbing::{
+                asset_loader::{AssetLoader, AssetPath},
+                start, DefaultRoutines, StoredSurfaceInfo,
+            },
             pyrotechnics::kinetic_narrative::{Gay, KineticEffect, KineticLabel, ShakeLetters},
         },
         definition::define_play,
@@ -41,11 +38,10 @@ use theater::{
     },
 };
 use winit::{
-    error::EventLoopError,
     event::{DeviceEvent, ElementState, KeyEvent, MouseButton, WindowEvent},
-    event_loop::{ControlFlow, EventLoop, EventLoopBuilder, EventLoopWindowTarget},
+    event_loop::{ControlFlow, EventLoopWindowTarget},
     platform::scancode::PhysicalKeyExtScancode,
-    window::{Fullscreen, Window, WindowBuilder},
+    window::{Fullscreen, WindowBuilder},
 };
 
 pub struct GameProgrammeData {
@@ -69,17 +65,6 @@ pub struct GameProgramme {
     pub settings: GameProgrammeSettings,
     pub rts: tokio::runtime::Runtime,
 }
-pub struct DefaultRoutines {
-    pub pbr: Mutex<rend3_routine::pbr::PbrRoutine>,
-    pub skybox: Mutex<rend3_routine::skybox::SkyboxRoutine>,
-    pub tonemapping: Mutex<rend3_routine::tonemapping::TonemappingRoutine>,
-}
-struct StoredSurfaceInfo {
-    size: UVec2,
-    scale_factor: f32,
-    sample_count: SampleCount,
-    present_mode: PresentMode,
-}
 
 pub type Event = winit::event::Event<MyWinitEvent<AstinkScene, AstinkSprite>>;
 
@@ -90,139 +75,8 @@ pub enum MyWinitEvent<TS, TA: 'static> {
     Actress(TA),
 }
 
-pub fn start(gp: GameProgramme, window_builder: WindowBuilder) {
-    {
-        pollster::block_on(gp.async_start(window_builder));
-    }
-}
 impl GameProgramme {
     const HANDEDNESS: rend3::types::Handedness = rend3::types::Handedness::Right;
-
-    pub fn spawn<Fut>(&self, fut: Fut) -> tokio::task::JoinHandle<<Fut as Future>::Output>
-    where
-        Fut: Future + Send + 'static,
-        Fut::Output: Send + 'static,
-    {
-        self.rts.spawn(fut)
-    }
-
-    fn new() -> Self {
-        Self {
-            data: None,
-            settings: GameProgrammeSettings::new(),
-            rts: tokio::runtime::Runtime::new().unwrap(),
-        }
-    }
-    #[allow(clippy::too_many_arguments)]
-    fn handle_surface(
-        &mut self,
-        window: &Window,
-        event: &Event,
-        instance: &Instance,
-        surface: &mut Option<Arc<Surface>>,
-        renderer: &Arc<Renderer>,
-        format: rend3::types::TextureFormat,
-        surface_info: &mut StoredSurfaceInfo,
-    ) -> Option<bool> {
-        match *event {
-            Event::Resumed => {
-                if surface.is_none() {
-                    // uhh this is still the same one line of unsafe I guess but for android
-                    *surface = Some(Arc::new(
-                        unsafe { instance.create_surface(window) }.unwrap(),
-                    ));
-                }
-                Some(false)
-            }
-            Event::Suspended => {
-                *surface = None;
-                Some(true)
-            }
-            Event::WindowEvent {
-                event: winit::event::WindowEvent::Resized(size),
-                ..
-            } => {
-                log::debug!("resize {:?}", size);
-                let size = UVec2::new(size.width, size.height);
-
-                if size.x == 0 || size.y == 0 {
-                    return Some(false);
-                }
-
-                surface_info.size = size;
-                surface_info.scale_factor = self.scale_factor();
-                surface_info.sample_count = self.sample_count();
-                surface_info.present_mode = self.present_mode();
-
-                // Reconfigure the surface for the new size.
-                rend3::configure_surface(
-                    surface.as_ref().unwrap(),
-                    &renderer.device,
-                    format,
-                    size,
-                    surface_info.present_mode,
-                );
-
-                let alpha_mode = wgpu::CompositeAlphaMode::Auto;
-
-                let config = wgpu::SurfaceConfiguration {
-                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_DST,
-                    format: wgpu::TextureFormat::Bgra8Unorm,
-                    width: window.inner_size().width,
-                    height: window.inner_size().height,
-                    present_mode: wgpu::PresentMode::Immediate,
-                    alpha_mode,
-                    view_formats: Vec::new(),
-                };
-
-                surface
-                    .as_ref()
-                    .unwrap()
-                    .configure(&renderer.device, &config);
-
-                // Tell the renderer about the new aspect ratio.
-                renderer.set_aspect_ratio(size.x as f32 / size.y as f32);
-                Some(false)
-            }
-            _ => None,
-        }
-    }
-    fn create_iad<'a>(
-        &'a mut self,
-    ) -> std::pin::Pin<
-        Box<dyn std::future::Future<Output = anyhow::Result<rend3::InstanceAdapterDevice>> + 'a>,
-    > {
-        Box::pin(async move {
-            Ok(rend3::create_iad(
-                self.settings.desired_backend,
-                self.settings.desired_device_name.clone(),
-                self.settings.desired_profile,
-                Some(Features::ADDRESS_MODE_CLAMP_TO_BORDER),
-            )
-            .await?)
-        })
-    }
-    fn create_window(
-        &mut self,
-        builder: WindowBuilder,
-    ) -> Result<(EventLoop<MyWinitEvent<AstinkScene, AstinkSprite>>, Window), EventLoopError> {
-        profiling::scope!("creating window");
-
-        let event_loop = EventLoopBuilder::with_user_event().build()?;
-        let window = builder.build(&event_loop).expect("Could not build window");
-
-        Ok((event_loop, window))
-    }
-    fn create_base_rendergraph(
-        &mut self,
-        renderer: &Arc<Renderer>,
-        spp: &ShaderPreProcessor,
-    ) -> BaseRenderGraph {
-        BaseRenderGraph::new(renderer, spp)
-    }
-    fn present_mode(&self) -> rend3::types::PresentMode {
-        self.settings.present_mode
-    }
 
     pub async fn async_start(mut self, window_builder: WindowBuilder) {
         let iad = self.create_iad().await.unwrap();
@@ -254,7 +108,7 @@ impl GameProgramme {
         // Get the preferred format for the surface.
         //
         // Assume android supports Rgba8Srgb, as it has 100% device coverage
-        let format = surface.as_ref().map_or(TextureFormat::Rgba8Unorm, |s| {
+        let format = surface.as_ref().map_or(TextureFormat::Bgra8Unorm, |s| {
             let format = wgpu::TextureFormat::Bgra8Unorm;
 
             /*
@@ -746,7 +600,7 @@ impl GameProgramme {
                 sc_id,
                 acdata,
             )))) => {
-                info!("Actually caught the user event and assigned sprite data to an actress");
+                info!("Actually caught the user event and assigned sprite data to {name}");
                 let sc_imp = data
                     .play
                     .scenes
@@ -760,29 +614,6 @@ impl GameProgramme {
                     .insert(name.clone(), AstinkSprite::Loaded((name, sc_id, acdata)));
             }
             _ => {}
-        }
-    }
-
-    fn winit_run<F, T>(
-        event_loop: winit::event_loop::EventLoop<T>,
-        event_handler: F,
-    ) -> Result<(), EventLoopError>
-    where
-        F: FnMut(winit::event::Event<T>, &EventLoopWindowTarget<T>) + 'static,
-        T: 'static,
-    {
-        event_loop.run(event_handler)
-    }
-
-    fn scale_factor(&self) -> f32 {
-        // Android has very low memory bandwidth, so lets run internal buffers at half
-        // res by default
-        cfg_if::cfg_if! {
-            if #[cfg(target_os = "android")] {
-                0.5
-            } else {
-                1.0
-            }
         }
     }
 
@@ -933,8 +764,8 @@ impl GameProgramme {
         }
         let scene1_implementation = SceneImplementation {
             stage3d: scene1_stage3d,
-            actresses: HashMap::new(), //todo!(),
-            props: HashMap::new(),
+            actresses: HashMap::new(),
+            props: HashMap::new(), // todo!(),
             cameras: scene1_cameras,
         };
 
@@ -1082,9 +913,6 @@ impl GameProgramme {
                 ret.unwrap(),
             ))))
         });
-    }
-    fn sample_count(&self) -> rend3::types::SampleCount {
-        self.settings.samples
     }
 }
 
