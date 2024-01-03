@@ -2,35 +2,31 @@
 mod the_great_mind_palace_of_theatrical_arts;
 use egui::{Color32, TextStyle, Visuals};
 
-use glam::{uvec2, DVec2, Mat3A, Mat4, Vec2, Vec3};
-use inox2d::formats::inp::parse_inp;
+use glam::{DVec2, Mat3A, Mat4, Vec3};
 use log::info;
 use nanorand::{RandomGen, Rng};
 use parking_lot::Mutex;
-use rend3::types::{Camera, CameraProjection, DirectionalLight, MipmapCount};
+use rend3::types::{Camera, CameraProjection, DirectionalLight};
 
 use uuid::Uuid;
 
-use std::{collections::HashMap, num::NonZeroU32, path::Path, process::exit, sync::Arc, time};
+use std::{collections::HashMap, path::Path, process::exit, sync::Arc, time};
 use wgpu::TextureFormat;
 
 use the_great_mind_palace_of_theatrical_arts as theater;
 use theater::{
     basement::{
         cla::GameProgrammeSettings, frame_rate::FrameRate, grab::Grabber, logging::register_logger,
-        platform_scancodes::Scancodes, quad_damage::create_quad, text_files::read_lines,
+        platform_scancodes::Scancodes, text_files::read_lines,
     },
     play::{
         backstage::{
-            plumbing::{
-                asset_loader::{AssetLoader, AssetPath},
-                start, DefaultRoutines, StoredSurfaceInfo,
-            },
+            plumbing::{start, DefaultRoutines, StoredSurfaceInfo},
             pyrotechnics::kinetic_narrative::{Gay, KineticEffect, KineticLabel, ShakeLetters},
         },
         definition::define_play,
         scene::{
-            actors::{Actress, AstinkSprite},
+            actors::{create_actor, AstinkSprite},
             stage3d::{button_pressed, load_skybox, load_stage3d, lock, make_camera},
             AstinkScene, SceneImplementation,
         },
@@ -459,8 +455,6 @@ impl GameProgramme {
                         event_loop_window_target.exit();
                     }
                     winit::event::WindowEvent::Resized(size) => {
-                        //                        inox_renderer.resize(uvec2(size.width, size.height));
-
                         data.egui_routine.resize(
                             size.width,
                             size.height,
@@ -744,111 +738,7 @@ impl GameProgramme {
             let event_loop_proxy = event_loop.create_proxy();
             let name = name.to_owned();
             self.spawn(async move {
-                let path = format!("{}/{}.inp", &directory, name);
-                let format = TextureFormat::Bgra8Unorm;
-                let texture_size_uvec2 = uvec2(4096, 4096); // we no longer care about the surface size for the sprite texture
-
-                let texture_size = wgpu::Extent3d {
-                    width: texture_size_uvec2.x,
-                    height: texture_size_uvec2.y,
-                    depth_or_array_layers: 1,
-                };
-                let loader = AssetLoader::new_local(
-                    concat!(env!("CARGO_MANIFEST_DIR"), "/"),
-                    "",
-                    "http://localhost:8000/",
-                );
-                let loaded_data = loader.get_asset(AssetPath::Internal(&path)).await.unwrap();
-                let inox_model = parse_inp(loaded_data.as_slice()).unwrap();
-
-                let mut inox_renderer = inox2d_wgpu::Renderer::new(
-                    &renderer.device,
-                    &renderer.queue,
-                    format,
-                    &inox_model,
-                    texture_size_uvec2,
-                );
-
-                inox_renderer.camera.scale = Vec2::splat(0.15);
-
-                let inox_texture_descriptor = wgpu::TextureDescriptor {
-                    size: texture_size,
-                    mip_level_count: 1,
-                    sample_count: 1,
-                    dimension: wgpu::TextureDimension::D2,
-                    format,
-                    usage: wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::RENDER_ATTACHMENT,
-                    label: Some("inox texture"),
-                    view_formats: &[wgpu::TextureFormat::Bgra8Unorm],
-                };
-
-                let inox_texture_wgpu = renderer.device.create_texture(&inox_texture_descriptor);
-
-                let inox_texture_wgpu_view =
-                    inox_texture_wgpu.create_view(&wgpu::TextureViewDescriptor {
-                        mip_level_count: None,
-                        base_mip_level: 0,
-                        ..Default::default()
-                    });
-
-                let inox_texture_rend3 = rend3::types::Texture {
-                    label: Some("inox texture but rend3".to_owned()),
-                    format,
-                    size: texture_size_uvec2,
-                    mip_count: MipmapCount::Specific(NonZeroU32::new(1).unwrap()),
-
-                    mip_source: rend3::types::MipmapSource::Uploaded,
-                    data: vec![0; (texture_size_uvec2.x * texture_size_uvec2.y * 4) as usize],
-                };
-                let inox_texture_rend3_handle =
-                    renderer.add_texture_2d(inox_texture_rend3).unwrap();
-
-                // Create mesh and calculate smooth normals based on vertices
-                let sprite_mesh = create_quad(30.0);
-                // Add mesh to renderer's world.
-                //
-                // All handles are refcounted, so we only need to hang onto the handle until we
-                // make an object.
-                let sprite_mesh_handle = renderer.add_mesh(sprite_mesh).unwrap();
-                let sprite_material = rend3_routine::pbr::PbrMaterial {
-                    albedo: rend3_routine::pbr::AlbedoComponent::Texture(
-                        inox_texture_rend3_handle.clone(),
-                    ),
-                    transparency: rend3_routine::pbr::Transparency::Blend,
-                    ..Default::default()
-                };
-
-                let sprite_material_handle = renderer.add_material(sprite_material);
-                // Combine the mesh and the material with a location to give an object.
-                let sprite_object = rend3::types::Object {
-                    mesh_kind: rend3::types::ObjectMeshKind::Static(sprite_mesh_handle),
-                    material: sprite_material_handle.clone(),
-                    transform: glam::Mat4::from_scale_rotation_translation(
-                        glam::Vec3::new(1.0, 1.0, 1.0),
-                        glam::Quat::from_euler(glam::EulerRot::XYZ, 0.0, 0.0, 0.0),
-                        glam::Vec3::new(0.0, 0.0, 0.0),
-                    ),
-                };
-
-                // Creating an object will hold onto both the mesh and the material
-                // even if they are deleted.
-                //
-                // We need to keep the object handle alive.
-                let sprite_object_handle = renderer.add_object(sprite_object);
-
-                let built_actress = Actress {
-                    sprite_object_handle,
-                    texture_wgpu: inox_texture_wgpu,
-                    texture_rend3_handle: inox_texture_rend3_handle,
-                    inox_renderer,
-                    texture_wgpu_view: inox_texture_wgpu_view,
-                    inox_model,
-                };
-                event_loop_proxy.send_event(MyWinitEvent::Actress(AstinkSprite::Loaded((
-                    name,
-                    scene1_uuid,
-                    built_actress,
-                ))))
+                create_actor(name, directory, renderer, event_loop_proxy, scene1_uuid).await
             });
         }
         let skybox_renderer_copy = Arc::clone(&renderer);
