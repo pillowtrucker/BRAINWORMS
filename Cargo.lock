@@ -304,7 +304,7 @@ dependencies = [
  "egui-wgpu",
  "egui-winit",
  "env_logger",
- "glam",
+ "glam 0.25.0",
  "gluon",
  "image",
  "indoc",
@@ -829,7 +829,7 @@ checksum = "8fce2eeef77fd4a293a54b62aa00ac9daebfbcda4bf8998c5a815635b004aa1c"
 dependencies = [
  "const_panic",
  "encase_derive",
- "glam",
+ "glam 0.24.2",
  "thiserror",
 ]
 
@@ -1194,6 +1194,12 @@ checksum = "b5418c17512bdf42730f9032c74e1ae39afc408745ebb2acf72fbc4691c17945"
 dependencies = [
  "bytemuck",
 ]
+
+[[package]]
+name = "glam"
+version = "0.25.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "151665d9be52f9bb40fc7966565d39666f2d1e69233571b71b87791c7e0528b3"
 
 [[package]]
 name = "glow"
@@ -1670,7 +1676,7 @@ dependencies = [
 name = "inox2d"
 version = "0.1.0"
 dependencies = [
- "glam",
+ "glam 0.24.2",
  "image",
  "indextree",
  "json",
@@ -1684,7 +1690,7 @@ version = "0.1.0"
 dependencies = [
  "bytemuck",
  "encase",
- "glam",
+ "glam 0.24.2",
  "inox2d",
  "thiserror",
  "tracing",
@@ -2773,7 +2779,7 @@ dependencies = [
  "bytemuck",
  "encase",
  "flume",
- "glam",
+ "glam 0.24.2",
  "handlebars",
  "indexmap 2.1.0",
  "list-any",
@@ -2801,7 +2807,7 @@ version = "0.3.0"
 dependencies = [
  "egui",
  "egui-wgpu",
- "glam",
+ "glam 0.24.2",
  "rend3",
  "wgpu",
  "wgpu-types",
@@ -2816,7 +2822,7 @@ dependencies = [
  "bytemuck",
  "ddsfile",
  "float-ord",
- "glam",
+ "glam 0.24.2",
  "gltf",
  "image",
  "ktx2",
@@ -2838,7 +2844,7 @@ dependencies = [
  "codespan-reporting",
  "encase",
  "flume",
- "glam",
+ "glam 0.24.2",
  "log",
  "naga",
  "ordered-float 4.2.0",
@@ -2860,7 +2866,7 @@ dependencies = [
  "bytemuck",
  "cfg-if 1.0.0",
  "encase",
- "glam",
+ "glam 0.24.2",
  "list-any",
  "once_cell",
  "thiserror",
