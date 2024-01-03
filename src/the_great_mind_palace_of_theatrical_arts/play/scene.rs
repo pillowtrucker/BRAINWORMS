@@ -1,5 +1,6 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
+use parking_lot::Mutex;
 use uuid::Uuid;
 
 pub mod actors;
@@ -42,7 +43,7 @@ pub enum AstinkScene {
 }
 pub struct SceneImplementation {
     pub stage3d: HashMap<String, AstinkScene>,
-    pub actresses: HashMap<String, actors::AstinkSprite>,
+    pub actresses: HashMap<String, Arc<Mutex<actors::AstinkSprite>>>,
     pub props: HashMap<String, props::Prop>,
     pub cameras: HashMap<String, Camera>,
     //    script: String, // I'm really kinda stuck on this chicken and egg problem with script <-> actual game logic

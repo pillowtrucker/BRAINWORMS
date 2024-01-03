@@ -2,7 +2,7 @@
 mod the_great_mind_palace_of_theatrical_arts;
 use egui::{Color32, TextStyle, Visuals};
 
-use glam::{uvec2, vec2, DVec2, Mat3A, Mat4, Vec2, Vec3};
+use glam::{uvec2, DVec2, Mat3A, Mat4, Vec2, Vec3};
 use inox2d::formats::inp::parse_inp;
 use log::info;
 use nanorand::{RandomGen, Rng};
@@ -43,6 +43,8 @@ use winit::{
     platform::scancode::PhysicalKeyExtScancode,
     window::{Fullscreen, WindowBuilder},
 };
+
+use crate::theater::play::scene::actors::draw_actor;
 
 pub struct GameProgrammeData {
     pub egui_routine: rend3_egui::EguiRenderRoutine,
@@ -358,55 +360,16 @@ impl GameProgramme {
                 let current_scene_id = data.current_scene.unwrap();
                 let current_scene = data.play.scenes.get_mut(&current_scene_id).unwrap();
                 let cs_implementation = current_scene.implementation.as_mut().unwrap();
-
-                for a in cs_implementation.actresses.values_mut() {
-                    let AstinkSprite::Loaded((_, _, actress)) = a else {
-                        continue;
-                    };
-                    // animate puppet
-                    {
-                        let puppet = &mut actress.inox_model.puppet;
-                        puppet.begin_set_params();
-
-                        let t = data.timestamp_start.elapsed().as_secs_f32();
-                        puppet.set_param("Head:: Yaw-Pitch", vec2(t.cos(), t.sin()));
-
-                        puppet.end_set_params();
-                    }
-
-                    let inox_texture_rend3_handle = actress.texture_rend3_handle.clone();
-                    let ir = &mut actress.inox_renderer;
-                    let dc = renderer.data_core.lock();
-                    let inox_texture_wgpu_view = &actress.texture_wgpu_view;
-                    let inox_texture_wgpu = &actress.texture_wgpu;
-                    let inox_texture_rend3_raw = &dc
-                        .d2_texture_manager
-                        .get_internal(inox_texture_rend3_handle.get_raw())
-                        .texture;
-                    // render to the inox texture
-                    ir.render(
-                        &renderer.queue,
-                        &renderer.device,
-                        &actress.inox_model.puppet,
-                        inox_texture_wgpu_view,
-                    );
-                    // copy the data into sprite material texture
-                    let mut encoder =
-                        renderer
-                            .device
-                            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                                label: Some("Part Render Encoder"),
-                            });
-
-                    encoder.copy_texture_to_texture(
-                        inox_texture_wgpu.as_image_copy(),
-                        inox_texture_rend3_raw.as_image_copy(),
-                        inox_texture_wgpu.size(),
-                    );
-
-                    renderer.queue.submit(std::iter::once(encoder.finish()));
+                let t = data.timestamp_start.elapsed().as_secs_f32();
+                let actresses = cs_implementation.actresses.values();
+                for a in actresses {
+                    let renderer = Arc::clone(renderer);
+                    let a = Arc::clone(a);
+                    // this kind of makes self.spawn at best useless and probably counter-productive
+                    self.rts.spawn(async move {
+                        draw_actor(a, renderer, t);
+                    });
                 }
-
                 // Present the frame
                 frame.present();
                 // mark the end of the frame for tracy/other profilers
@@ -610,9 +573,10 @@ impl GameProgramme {
                     .implementation
                     .as_mut()
                     .unwrap();
-                sc_imp
-                    .actresses
-                    .insert(name.clone(), AstinkSprite::Loaded((name, sc_id, acdata)));
+                sc_imp.actresses.insert(
+                    name.clone(),
+                    Arc::new(Mutex::new(AstinkSprite::Loaded((name, sc_id, acdata)))),
+                );
             }
             _ => {}
         }
