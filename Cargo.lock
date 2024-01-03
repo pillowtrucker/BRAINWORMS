@@ -752,7 +752,7 @@ checksum = "9ea835d29036a4087793836fa931b08837ad5e957da9e23886b29586fb9b6650"
 [[package]]
 name = "ecolor"
 version = "0.24.2"
-source = "git+https://github.com/emilk/egui.git?branch=master#5cf8a085e3555ac92a9ca22a435a53c292ce237b"
+source = "git+https://github.com/emilk/egui.git?branch=master#e2c1d9f90d360b8ba91d9c0388df3f9828490d86"
 dependencies = [
  "bytemuck",
 ]
@@ -760,7 +760,7 @@ dependencies = [
 [[package]]
 name = "egui"
 version = "0.24.2"
-source = "git+https://github.com/emilk/egui.git?branch=master#5cf8a085e3555ac92a9ca22a435a53c292ce237b"
+source = "git+https://github.com/emilk/egui.git?branch=master#e2c1d9f90d360b8ba91d9c0388df3f9828490d86"
 dependencies = [
  "ahash 0.8.6",
  "epaint",
@@ -771,7 +771,7 @@ dependencies = [
 [[package]]
 name = "egui-wgpu"
 version = "0.24.2"
-source = "git+https://github.com/emilk/egui.git?branch=master#5cf8a085e3555ac92a9ca22a435a53c292ce237b"
+source = "git+https://github.com/emilk/egui.git?branch=master#e2c1d9f90d360b8ba91d9c0388df3f9828490d86"
 dependencies = [
  "bytemuck",
  "egui",
@@ -786,7 +786,7 @@ dependencies = [
 [[package]]
 name = "egui-winit"
 version = "0.24.2"
-source = "git+https://github.com/emilk/egui.git?branch=master#5cf8a085e3555ac92a9ca22a435a53c292ce237b"
+source = "git+https://github.com/emilk/egui.git?branch=master#e2c1d9f90d360b8ba91d9c0388df3f9828490d86"
 dependencies = [
  "arboard",
  "egui",
@@ -807,7 +807,7 @@ checksum = "a26ae43d7bcc3b814de94796a5e736d4029efb0ee900c12e2d54c993ad1a1e07"
 [[package]]
 name = "emath"
 version = "0.24.2"
-source = "git+https://github.com/emilk/egui.git?branch=master#5cf8a085e3555ac92a9ca22a435a53c292ce237b"
+source = "git+https://github.com/emilk/egui.git?branch=master#e2c1d9f90d360b8ba91d9c0388df3f9828490d86"
 dependencies = [
  "bytemuck",
 ]
@@ -880,7 +880,7 @@ dependencies = [
 [[package]]
 name = "epaint"
 version = "0.24.2"
-source = "git+https://github.com/emilk/egui.git?branch=master#5cf8a085e3555ac92a9ca22a435a53c292ce237b"
+source = "git+https://github.com/emilk/egui.git?branch=master#e2c1d9f90d360b8ba91d9c0388df3f9828490d86"
 dependencies = [
  "ab_glyph",
  "ahash 0.8.6",
@@ -3753,7 +3753,7 @@ dependencies = [
  "js-sys",
  "log",
  "naga",
- "parking_lot 0.12.1",
+ "parking_lot 0.11.2",
  "profiling",
  "raw-window-handle 0.5.2",
  "smallvec",
@@ -3778,7 +3778,7 @@ dependencies = [
  "codespan-reporting",
  "log",
  "naga",
- "parking_lot 0.12.1",
+ "parking_lot 0.11.2",
  "profiling",
  "raw-window-handle 0.5.2",
  "rustc-hash",
@@ -3818,7 +3818,7 @@ dependencies = [
  "naga",
  "objc",
  "once_cell",
- "parking_lot 0.12.1",
+ "parking_lot 0.11.2",
  "profiling",
  "range-alloc",
  "raw-window-handle 0.5.2",
