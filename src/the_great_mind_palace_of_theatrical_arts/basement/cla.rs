@@ -16,7 +16,7 @@ scene-viewer
 
 gltf and glb scene viewer powered by the rend3 rendering library.
 
-usage: scene-viewer --options ./path/to/gltf/file.gltf
+usage: scene-viewer --options
 
 Meta:
   --help            This menu.
@@ -142,7 +142,6 @@ pub struct GameProgrammeSettings {
     pub desired_backend: Option<Backend>,
     pub desired_device_name: Option<String>,
     pub desired_profile: Option<RendererProfile>,
-    pub file_to_load: Option<String>,
     pub walk_speed: f32,
     pub run_speed: f32,
     pub gltf_settings: rend3_gltf::GltfLoadSettings,
@@ -241,9 +240,6 @@ impl GameProgrammeSettings {
                 extract_array(&s, camera_default).unwrap()
             });
 
-        // Free args
-        let file_to_load: Option<String> = args.free_from_str().ok();
-
         let remaining = args.finish();
 
         if !remaining.is_empty() {
@@ -281,7 +277,6 @@ impl GameProgrammeSettings {
             desired_backend,
             desired_device_name,
             desired_profile: desired_mode,
-            file_to_load,
             walk_speed,
             run_speed,
             gltf_settings,

@@ -31,7 +31,7 @@ use theater::{
         definition::define_play,
         scene::{
             actors::{Actress, AstinkSprite},
-            stage3d::{button_pressed, load_gltf, load_skybox, lock, make_camera},
+            stage3d::{button_pressed, load_skybox, load_stage3d, lock, make_camera},
             AstinkScene, SceneImplementation,
         },
         Play,
@@ -65,8 +65,8 @@ pub struct GameProgramme {
     pub settings: GameProgrammeSettings,
     pub rts: tokio::runtime::Runtime,
 }
-
-pub type Event = winit::event::Event<MyWinitEvent<AstinkScene, AstinkSprite>>;
+type MyEvent = MyWinitEvent<AstinkScene, AstinkSprite>;
+pub type Event = winit::event::Event<MyEvent>;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum MyWinitEvent<TS, TA: 'static> {
@@ -165,7 +165,6 @@ impl GameProgramme {
         };
 
         // IMPORTANT this is where the loop actually starts you dumbass
-        // On native this is a result, but on wasm it's a unit type.
         Self::winit_run(event_loop, move |event, event_loop_window_target| {
             let mut control_flow = event_loop_window_target.control_flow();
             if let Some(suspend) = Self::handle_surface(
@@ -232,7 +231,7 @@ impl GameProgramme {
         resolution: glam::UVec2,
         event: Event,
         control_flow: impl FnOnce(winit::event_loop::ControlFlow),
-        event_loop_window_target: &EventLoopWindowTarget<MyWinitEvent<AstinkScene, AstinkSprite>>,
+        event_loop_window_target: &EventLoopWindowTarget<MyEvent>,
     ) {
         let data = self.data.as_mut().unwrap();
         match event {
@@ -582,7 +581,9 @@ impl GameProgramme {
                 )
             }
             Event::UserEvent(MyWinitEvent::Stage3D(AstinkScene::Loaded((name, sc_id, scdata)))) => {
-                info!("Actually caught the user event and assigned the stage3d data to scene");
+                info!(
+                    "Actually caught the user event and assigned the stage3d data to current scene"
+                );
                 let sc_imp = data
                     .play
                     .scenes
@@ -619,7 +620,7 @@ impl GameProgramme {
 
     fn setup(
         &mut self,
-        event_loop: &winit::event_loop::EventLoop<MyWinitEvent<AstinkScene, AstinkSprite>>,
+        event_loop: &winit::event_loop::EventLoop<MyEvent>,
         window: &winit::window::Window,
         renderer: &Arc<rend3::Renderer>,
         routines: &Arc<DefaultRoutines>,
@@ -640,6 +641,10 @@ impl GameProgramme {
                 }),
             );
         }
+        /*
+        recursively load the play->scene->actor/etc definitions
+        TODO: Read this from script/data file
+        */
         let play = define_play();
 
         let window_size = window.inner_size();
@@ -664,7 +669,7 @@ impl GameProgramme {
             faint_bg_color: Color32::TRANSPARENT,
             ..Default::default()
         });
-
+        // increase font size
         egui_ctx.style_mut(|style| {
             if let Some(hum) = style.text_styles.get_mut(&TextStyle::Body) {
                 hum.size = 24.;
@@ -675,7 +680,7 @@ impl GameProgramme {
             Ok(test_text) => {
                 let the_body = test_text.fold("".to_owned(), |acc: String, l| {
                     if let Ok(l) = l {
-                        format!("{}{}\n", acc, l)
+                        format!("{}{}\n", acc, l) // this is probably quadratic but fuck rust's string concatenation options wholesale
                     } else {
                         acc
                     }
@@ -692,7 +697,7 @@ impl GameProgramme {
             exit(1);
         };
         let mut random_line_effects = vec![];
-        //        let mut rng = nanorand::tls_rng();
+
         for _ in test_lines.lines() {
             random_line_effects.push(KineticEffect::random(&mut rng));
         }
@@ -748,7 +753,6 @@ impl GameProgramme {
         let mut scene1_cameras = HashMap::new();
         scene1_cameras.insert(scene1_starting_cam.name.clone(), scene1_starting_cam);
         let gltf_settings = self.settings.gltf_settings;
-        let file_to_load = self.settings.file_to_load.take();
         let renderer = Arc::clone(renderer);
         let routines = Arc::clone(routines);
         let event_loop_proxy = event_loop.create_proxy();
@@ -883,35 +887,24 @@ impl GameProgramme {
                 ))))
             });
         }
+        let skybox_renderer_copy = Arc::clone(&renderer);
+        let skybox_routines_copy = Arc::clone(&routines);
         self.spawn(async move {
-            let name = scene1_stage_name;
-            let directory = scene1_stage_directory;
-            let path = format!("{}/{}.glb", directory, name);
-            let sc_id = scene1_uuid;
-            let loader = AssetLoader::new_local(
-                concat!(env!("CARGO_MANIFEST_DIR"), "/"),
-                "",
-                "http://localhost:8000/",
-            );
-            if let Err(e) = load_skybox(&renderer, &loader, &routines.skybox).await {
-                println!("Failed to load skybox {}", e)
+            if let Err(e) = load_skybox(&skybox_renderer_copy, &skybox_routines_copy.skybox).await {
+                info!("Failed to load skybox {}", e)
             };
-            let ret = Box::new(
-                load_gltf(
-                    &renderer,
-                    &loader,
-                    &gltf_settings,
-                    file_to_load
-                        .as_deref()
-                        .map_or_else(|| AssetPath::Internal(&path), AssetPath::External),
-                )
-                .await,
-            );
-            event_loop_proxy.send_event(MyWinitEvent::Stage3D(AstinkScene::Loaded((
-                name,
-                sc_id,
-                ret.unwrap(),
-            ))))
+        });
+
+        self.spawn(async move {
+            load_stage3d(
+                scene1_stage_name,
+                scene1_stage_directory,
+                scene1_uuid,
+                renderer,
+                gltf_settings,
+                event_loop_proxy,
+            )
+            .await;
         });
     }
 }

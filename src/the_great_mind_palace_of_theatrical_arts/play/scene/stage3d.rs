@@ -9,18 +9,27 @@ use rend3::{
     types::{Texture, TextureFormat},
     Renderer,
 };
-use rend3_gltf::GltfSceneInstance;
+use rend3_gltf::{GltfLoadSettings, GltfSceneInstance};
 use rend3_routine::skybox::SkyboxRoutine;
+use uuid::Uuid;
+use winit::event_loop::EventLoopProxy;
 
 use std::time;
 
-use crate::theater::play::backstage::plumbing::asset_loader::{AssetError, AssetLoader, AssetPath};
+use crate::{
+    theater::play::backstage::plumbing::asset_loader::{AssetError, AssetLoader, AssetPath},
+    MyEvent, MyWinitEvent,
+};
+
+use super::AstinkScene;
 
 pub fn lock<T>(lock: &parking_lot::Mutex<T>) -> parking_lot::MutexGuard<'_, T> {
     let guard = lock.lock();
 
     guard
 }
+
+//pub(crate) async fn
 
 pub(crate) async fn load_skybox_image(loader: &AssetLoader, data: &mut Vec<u8>, path: &str) {
     let decoded = image::load_from_memory(
@@ -35,11 +44,37 @@ pub(crate) async fn load_skybox_image(loader: &AssetLoader, data: &mut Vec<u8>, 
     data.extend_from_slice(decoded.as_raw());
 }
 
+pub(crate) async fn load_stage3d(
+    name: String,
+    directory: String,
+    sc_id: Uuid,
+    renderer: Arc<Renderer>,
+    gltf_settings: GltfLoadSettings,
+    event_loop_proxy: EventLoopProxy<MyEvent>,
+) {
+    let loader = AssetLoader::default();
+    let path = format!("{}/{}.glb", directory, name);
+    let ret = Box::new(
+        load_gltf(
+            &renderer,
+            &loader,
+            &gltf_settings,
+            AssetPath::Internal(&path),
+        )
+        .await,
+    );
+    let _ = event_loop_proxy.send_event(MyWinitEvent::Stage3D(AstinkScene::Loaded((
+        name,
+        sc_id,
+        ret.unwrap(),
+    ))));
+}
+
 pub(crate) async fn load_skybox(
     renderer: &Arc<Renderer>,
-    loader: &AssetLoader,
     skybox_routine: &Mutex<SkyboxRoutine>,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let loader = &AssetLoader::default();
     let mut data = Vec::new();
     load_skybox_image(loader, &mut data, "assets/skybox/right.jpg").await;
     load_skybox_image(loader, &mut data, "assets/skybox/left.jpg").await;

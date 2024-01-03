@@ -29,6 +29,15 @@ impl<'a> AssetPath<'a> {
 pub struct AssetLoader {
     base: SsoString,
 }
+impl Default for AssetLoader {
+    fn default() -> Self {
+        Self::new_local(
+            concat!(env!("CARGO_MANIFEST_DIR"), "/"),
+            "",
+            "http://localhost:8000/",
+        )
+    }
+}
 impl AssetLoader {
     pub fn new_local(_base_file: &str, _base_asset: &str, _base_url: &str) -> Self {
         cfg_if::cfg_if!(
