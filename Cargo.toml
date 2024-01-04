@@ -57,7 +57,7 @@ tokio = { version = "1", features = ["full"] }
 egui-winit = {version = "0.24.2", git = "https://github.com/emilk/egui.git", branch="master", default-features = false, features = ["clipboard", "links", "wayland"] }
 notify = "6.1.1"
 rust-embed = "8.2.0" # Enable shader hot reload for native compilation.
-
+enum_dispatch = "0.3.12"
 
 [[bin]]
 name = "brainworms"
@@ -83,3 +83,8 @@ compile_sdk_version = 28
 orientation = "landscape"
 [target.'cfg(target_os = "android")'.dependencies]
 ndk-glue = "0.7"
+
+[workspace]
+members = [
+"proc-macros"
+]

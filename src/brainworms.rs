@@ -22,7 +22,7 @@ use theater::{
     play::{
         backstage::{
             plumbing::{start, DefaultRoutines, StoredSurfaceInfo},
-            pyrotechnics::kinetic_narrative::{Gay, KineticEffect, KineticLabel, ShakeLetters},
+            pyrotechnics::kinetic_narrative::KineticEffect,
         },
         definition::define_play,
         scene::{
@@ -55,7 +55,7 @@ pub struct GameProgrammeData {
     pub elapsed: f32,
     pub timestamp_start: time::Instant,
     pub play: Play,
-    pub current_scene: Option<Uuid>,
+    pub current_playable: Option<Uuid>,
 }
 
 pub struct GameProgramme {
@@ -265,27 +265,9 @@ impl GameProgramme {
 
                 // Insert egui commands here
                 let ctx = &data.egui_ctx;
-
-                egui::Window::new("egui widget testing").show(ctx, |ui| {
-                    ui.label(std::format!("framerate: {:.0}fps", data.frame_rate.get()));
-                    ui.horizontal(|ui| {
-                        ui.add(KineticLabel::new("blabla"));
-                        ui.add(KineticLabel::new("same").kinesis(vec![&KineticEffect::default()]));
-                        ui.add(KineticLabel::new("line").kinesis(vec![
-                            &KineticEffect::ShakeLetters {
-                                params: ShakeLetters::default(),
-                            },
-                        ]));
-                        ui.add(
-                            KineticLabel::new("still").kinesis(vec![&KineticEffect::Gay {
-                                params: Gay::default(),
-                            }]),
-                        );
-                    });
-                    for (i, line) in data.test_lines.lines().enumerate() {
-                        ui.add(KineticLabel::new(line).kinesis(vec![&data.random_line_effects[i]]));
-                    }
-                });
+                let current_scene_id = data.current_scene.unwrap();
+                let current_scene = data.play.scenes.get_mut(&current_scene_id).unwrap();
+                current_scene.sing(ctx);
                 // End the UI frame. Now let's draw the UI with our Backend, we could also
                 // handle the output here
                 let egui::FullOutput {
@@ -353,8 +335,7 @@ impl GameProgramme {
 
                 // Dispatch a render using the built up rendergraph!
                 self.settings.previous_profiling_stats = graph.execute(renderer, &mut eval_output);
-                let current_scene_id = data.current_scene.unwrap();
-                let current_scene = data.play.scenes.get_mut(&current_scene_id).unwrap();
+
                 let cs_implementation = current_scene.implementation.as_mut().unwrap();
                 let t = data.timestamp_start.elapsed().as_secs_f32();
                 let actresses = cs_implementation.actresses.values();
@@ -683,12 +664,12 @@ impl GameProgramme {
             random_line_effects,
             timestamp_start,
             play,
-            current_scene: None,
+            current_playable: None,
         });
         // Implementations for Play/Scene/etc go below
         let data = self.data.as_mut().unwrap();
         let play = &mut data.play;
-        data.current_scene = Some(play.first_scene);
+        data.current_playable = Some(play.first_playable);
         let scene1 = play.scenes.get_mut(&play.first_scene).unwrap();
         // Set camera location data
         let scene1_starting_cam_info = *scene1
