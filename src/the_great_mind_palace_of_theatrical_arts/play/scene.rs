@@ -1,9 +1,17 @@
 use std::{collections::HashMap, sync::Arc};
 
+use egui::Context;
 use parking_lot::Mutex;
+use rend3::Renderer;
+use tokio::runtime::Runtime;
 use uuid::Uuid;
+use winit::event_loop::EventLoop;
 
-use super::Playable;
+use crate::{theater::basement::cla::GameProgrammeSettings, GameProgrammeData, MyEvent};
+
+use self::chorus::Choral;
+
+use super::{backstage::plumbing::DefaultRoutines, Definitions, Implementations, Playable};
 
 pub mod actors;
 pub mod chorus;
@@ -53,26 +61,60 @@ pub struct SceneImplementation {
     //    script: String, // I'm really kinda stuck on this chicken and egg problem with script <-> actual game logic
 }
 pub trait Scenic {
-    fn get_scene_definition(&mut self) -> &mut SceneDefinition;
-    fn get_scene_implementation(&mut self) -> &mut Option<SceneImplementation>;
-    fn get_scene_uuid(&self) -> Uuid;
-    fn get_scene_name(&self) -> &str;
-    fn define(&mut self);
-    fn implement(&mut self);
-    fn get_starting_cam_info(&self) -> CamInfo;
+    //    fn scene_definition(&mut self) -> &mut SceneDefinition;
+    //    fn scene_implementation(&mut self) -> &mut Option<SceneImplementation>;
+    fn scene_uuid(&self) -> Uuid;
+    fn scene_name(&self) -> &str;
+    fn define_scene(&mut self);
+    fn implement_scene(
+        &mut self,
+        settings: &GameProgrammeSettings,
+        event_loop: &EventLoop<MyEvent>,
+        renderer: Arc<Renderer>,
+        routines: Arc<DefaultRoutines>,
+        rts: &Runtime,
+    );
+    fn scene_starting_cam_info(&self) -> CamInfo;
+    fn raw_definition(&mut self) -> &mut Definitions;
+    fn raw_implementation(&mut self) -> &mut Option<Implementations>;
 }
-/*
-impl Playable for dyn Scenic {
-    fn get_playable_uuid(&self) -> Uuid {
-        self.get_scene_uuid()
+
+impl<T: Scenic + Choral> Playable for T {
+    fn playable_uuid(&self) -> Uuid {
+        self.scene_uuid()
     }
 
-    fn get_playable_name(&self) -> &str {
-        self.get_scene_name()
+    fn playable_name(&self) -> &str {
+        self.scene_name()
     }
 
-    fn get_starting_cam_info(&self) -> CamInfo {
-        self.get_starting_cam_info()
+    fn starting_cam_info(&self) -> CamInfo {
+        self.scene_starting_cam_info()
+    }
+
+    fn implement_playable(
+        &mut self,
+        settings: &GameProgrammeSettings,
+        event_loop: &EventLoop<MyEvent>,
+        renderer: Arc<Renderer>,
+        routines: Arc<DefaultRoutines>,
+        rts: &Runtime,
+    ) {
+        self.implement_scene(settings, event_loop, renderer, routines, rts)
+    }
+
+    fn define_playable(&mut self) {
+        self.define_scene()
+    }
+    fn implement_chorus_for_playable(&self, egui_ctx: &mut Context, data: &GameProgrammeData) {
+        self.implement_chorus_for_choral(egui_ctx, data);
+    }
+
+    fn playable_definition(&mut self) -> &mut Definitions {
+        self.raw_definition()
+    }
+
+    fn playable_implementation(&mut self) -> &mut Option<Implementations> {
+        self.raw_implementation()
     }
 }
-*/

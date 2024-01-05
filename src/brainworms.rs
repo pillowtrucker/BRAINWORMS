@@ -30,7 +30,7 @@ use theater::{
             stage3d::{button_pressed, load_skybox, load_stage3d, lock, make_camera},
             AstinkScene, SceneImplementation,
         },
-        Play,
+        Definitions, Play, Playable, Playables,
     },
 };
 use winit::{
@@ -264,10 +264,10 @@ impl GameProgramme {
                     .begin_frame(data.platform.take_egui_input(window));
 
                 // Insert egui commands here
-                let ctx = &data.egui_ctx;
-                let current_scene_id = data.current_scene.unwrap();
-                let current_scene = data.play.scenes.get_mut(&current_scene_id).unwrap();
-                current_scene.sing(ctx);
+                let ctx = &mut data.egui_ctx;
+                let current_scene_id = data.current_playable.unwrap();
+                let current_scene = data.play.playables.get_mut(&current_scene_id).unwrap();
+                current_scene.implement_chorus_for_playable(ctx, data);
                 // End the UI frame. Now let's draw the UI with our Backend, we could also
                 // handle the output here
                 let egui::FullOutput {
@@ -670,76 +670,30 @@ impl GameProgramme {
         let data = self.data.as_mut().unwrap();
         let play = &mut data.play;
         data.current_playable = Some(play.first_playable);
-        let scene1 = play.scenes.get_mut(&play.first_scene).unwrap();
+        let scene1 = play.playables.get_mut(&play.first_playable).unwrap();
+
         // Set camera location data
-        let scene1_starting_cam_info = *scene1
-            .definition
-            .cameras
-            .get(&scene1.definition.start_cam)
-            .unwrap();
+        if let Definitions::SceneDefinition(definition) = scene1.playable_definition() {
+            let scene1_starting_cam_info = definition.cameras.get(&definition.start_cam).unwrap();
 
-        self.settings.camera_location = glam::Vec3A::new(
-            scene1_starting_cam_info[0],
-            scene1_starting_cam_info[1],
-            scene1_starting_cam_info[2],
-        );
-        self.settings.camera_pitch = scene1_starting_cam_info[3];
-        self.settings.camera_yaw = scene1_starting_cam_info[4];
-        let scene1_starting_cam = make_camera((
-            scene1.definition.start_cam.clone(),
-            scene1_starting_cam_info,
-        ));
-        let mut scene1_cameras = HashMap::new();
-        scene1_cameras.insert(scene1_starting_cam.name.clone(), scene1_starting_cam);
-        let gltf_settings = self.settings.gltf_settings;
-        let renderer = Arc::clone(renderer);
-        let routines = Arc::clone(routines);
-        let event_loop_proxy = event_loop.create_proxy();
-        let scene1_uuid = scene1.scene_uuid;
-        let scene1_stage_name = scene1.definition.stage.0.clone();
-        let scene1_stage_directory = scene1.definition.stage.1.clone();
-        let mut scene1_stage3d = HashMap::new();
-        scene1_stage3d.insert(scene1_stage_name.clone(), AstinkScene::Loading);
-
-        let mut scene1_actor_impls = HashMap::new();
-        for (name, _) in scene1.definition.actors.clone() {
-            scene1_actor_impls.insert(name.clone(), AstinkSprite::Loading);
+            self.settings.camera_location = glam::Vec3A::new(
+                scene1_starting_cam_info[0],
+                scene1_starting_cam_info[1],
+                scene1_starting_cam_info[2],
+            );
+            self.settings.camera_pitch = scene1_starting_cam_info[3];
+            self.settings.camera_yaw = scene1_starting_cam_info[4];
+            let scene1_starting_cam =
+                make_camera((definition.start_cam.clone(), *scene1_starting_cam_info));
         }
-        let scene1_implementation = SceneImplementation {
-            stage3d: scene1_stage3d,
-            actresses: HashMap::new(),
-            props: HashMap::new(), // todo!(),
-            cameras: scene1_cameras,
-        };
+        scene1.implement_playable();
 
-        scene1.implementation = Some(scene1_implementation);
-        let scene1_actors = scene1.definition.actors.clone();
-        for (name, directory) in scene1_actors {
-            let renderer = Arc::clone(&renderer);
-            let event_loop_proxy = event_loop.create_proxy();
-            let name = name.to_owned();
-            self.spawn(async move {
-                create_actor(name, directory, renderer, event_loop_proxy, scene1_uuid).await
-            });
-        }
         let skybox_renderer_copy = Arc::clone(&renderer);
         let skybox_routines_copy = Arc::clone(&routines);
         self.spawn(async move {
             if let Err(e) = load_skybox(&skybox_renderer_copy, &skybox_routines_copy.skybox).await {
                 info!("Failed to load skybox {}", e)
             };
-        });
-
-        self.spawn(async move {
-            load_stage3d(
-                scene1_stage_name,
-                scene1_stage_directory,
-                scene1_uuid,
-                renderer,
-                gltf_settings,
-                event_loop_proxy,
-            )
-            .await;
         });
     }
 }

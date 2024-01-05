@@ -1,17 +1,15 @@
 [package]
 name = "proc_macros"
-version = "0.1.0"
+version = "0.0.0"
+authors = ["pillowtrucker"]
+description = "A `cargo generate` template for quick-starting a procedural macro crate"
+keywords = ["template", "proc_macro", "procmacro"]
 edition = "2021"
-authors = [ "pillowtrucker" ]
 
 [lib]
 proc-macro = true
 
 [dependencies]
-syn = { version = "~1.0", features = ["full"] }
-quote = "~1.0"
-proc-macro2 = "~1.0"
-proc-macro-error = "~1.0"
-
-[dev-dependencies]
-trybuild = "~1.0"
+quote = "1"
+proc-macro2 = "1"
+syn = {version = "1", features = ["full"]}
