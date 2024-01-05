@@ -4,33 +4,29 @@ use egui::{Color32, TextStyle, Visuals};
 
 use glam::{DVec2, Mat3A, Mat4, Vec3};
 use log::info;
-use nanorand::{RandomGen, Rng};
 use parking_lot::Mutex;
 use rend3::types::{Camera, CameraProjection, DirectionalLight};
 
 use uuid::Uuid;
 
-use std::{collections::HashMap, path::Path, process::exit, sync::Arc, time};
+use std::{path::Path, sync::Arc, time};
 use wgpu::TextureFormat;
 
 use the_great_mind_palace_of_theatrical_arts as theater;
 use theater::{
     basement::{
         cla::GameProgrammeSettings, frame_rate::FrameRate, grab::Grabber, logging::register_logger,
-        platform_scancodes::Scancodes, text_files::read_lines,
+        platform_scancodes::Scancodes,
     },
     play::{
-        backstage::{
-            plumbing::{start, DefaultRoutines, StoredSurfaceInfo},
-            pyrotechnics::kinetic_narrative::KineticEffect,
-        },
+        backstage::plumbing::{start, DefaultRoutines, StoredSurfaceInfo},
         definition::define_play,
         scene::{
-            actors::{create_actor, AstinkSprite},
-            stage3d::{button_pressed, load_skybox, load_stage3d, lock, make_camera},
-            AstinkScene, SceneImplementation,
+            actors::AstinkSprite,
+            stage3d::{button_pressed, load_skybox, lock},
+            AstinkScene,
         },
-        Definitions, Play, Playable, Playables,
+        Definitions, Play, Playable,
     },
 };
 use winit::{
@@ -46,9 +42,6 @@ pub struct GameProgrammeData {
     pub egui_routine: rend3_egui::EguiRenderRoutine,
     pub egui_ctx: egui::Context,
     pub platform: egui_winit::State,
-    pub _test_text: String,
-    pub test_lines: String,
-    pub random_line_effects: Vec<KineticEffect>,
     pub _start_time: time::Instant,
     pub last_update: time::Instant,
     pub frame_rate: FrameRate,
@@ -264,10 +257,13 @@ impl GameProgramme {
                     .begin_frame(data.platform.take_egui_input(window));
 
                 // Insert egui commands here
-                let ctx = &mut data.egui_ctx;
                 let current_scene_id = data.current_playable.unwrap();
                 let current_scene = data.play.playables.get_mut(&current_scene_id).unwrap();
-                current_scene.implement_chorus_for_playable(ctx, data);
+
+                current_scene.implement_chorus_for_playable(data.egui_ctx.clone());
+                egui::Window::new("FPS").show(&data.egui_ctx, |ui| {
+                    ui.label(std::format!("framerate: {:.0}fps", data.frame_rate.get()))
+                });
                 // End the UI frame. Now let's draw the UI with our Backend, we could also
                 // handle the output here
                 let egui::FullOutput {
@@ -336,16 +332,27 @@ impl GameProgramme {
                 // Dispatch a render using the built up rendergraph!
                 self.settings.previous_profiling_stats = graph.execute(renderer, &mut eval_output);
 
-                let cs_implementation = current_scene.implementation.as_mut().unwrap();
-                let t = data.timestamp_start.elapsed().as_secs_f32();
-                let actresses = cs_implementation.actresses.values();
-                for a in actresses {
-                    let renderer = Arc::clone(renderer);
-                    let a = Arc::clone(a);
-                    // this kind of makes self.spawn at best useless and probably counter-productive
-                    self.rts.spawn(async move {
-                        draw_actor(a, renderer, t);
-                    });
+                if let theater::play::Implementations::SceneImplementation(
+                    ref mut cs_implementation,
+                ) = data
+                    .play
+                    .playables
+                    .get_mut(&current_scene_id)
+                    .unwrap()
+                    .playable_implementation()
+                    .as_mut()
+                    .unwrap()
+                {
+                    let t = data.timestamp_start.elapsed().as_secs_f32();
+                    let actresses = cs_implementation.actresses.values();
+                    for a in actresses {
+                        let renderer = Arc::clone(renderer);
+                        let a = Arc::clone(a);
+                        // this kind of makes self.spawn at best useless and probably counter-productive
+                        self.rts.spawn(async move {
+                            draw_actor(a, renderer, t);
+                        });
+                    }
                 }
                 // Present the frame
                 frame.present();
@@ -522,17 +529,19 @@ impl GameProgramme {
                 info!(
                     "Actually caught the user event and assigned the stage3d data to current scene"
                 );
-                let sc_imp = data
+                if let theater::play::Implementations::SceneImplementation(sc_imp) = data
                     .play
-                    .scenes
+                    .playables
                     .get_mut(&sc_id)
                     .unwrap()
-                    .implementation
+                    .playable_implementation()
                     .as_mut()
-                    .unwrap();
-                sc_imp
-                    .stage3d
-                    .insert(name.clone(), AstinkScene::Loaded((name, sc_id, scdata)));
+                    .unwrap()
+                {
+                    sc_imp
+                        .stage3d
+                        .insert(name.clone(), AstinkScene::Loaded((name, sc_id, scdata)));
+                }
             }
             Event::UserEvent(MyWinitEvent::Actress(AstinkSprite::Loaded((
                 name,
@@ -540,18 +549,21 @@ impl GameProgramme {
                 acdata,
             )))) => {
                 info!("Actually caught the user event and assigned sprite data to {name}");
-                let sc_imp = data
+
+                if let theater::play::Implementations::SceneImplementation(sc_imp) = data
                     .play
-                    .scenes
+                    .playables
                     .get_mut(&sc_id)
                     .unwrap()
-                    .implementation
+                    .playable_implementation()
                     .as_mut()
-                    .unwrap();
-                sc_imp.actresses.insert(
-                    name.clone(),
-                    Arc::new(Mutex::new(AstinkSprite::Loaded((name, sc_id, acdata)))),
-                );
+                    .unwrap()
+                {
+                    sc_imp.actresses.insert(
+                        name.clone(),
+                        Arc::new(Mutex::new(AstinkSprite::Loaded((name, sc_id, acdata)))),
+                    );
+                }
             }
             _ => {}
         }
@@ -614,32 +626,6 @@ impl GameProgramme {
                 hum.size = 24.;
             }
         });
-        let mut rng = nanorand::tls_rng();
-        let Some((_test_text, test_lines)) = (match read_lines("assets/texts/PARADISE_LOST.txt") {
-            Ok(test_text) => {
-                let the_body = test_text.fold("".to_owned(), |acc: String, l| {
-                    if let Ok(l) = l {
-                        format!("{}{}\n", acc, l) // this is probably quadratic but fuck rust's string concatenation options wholesale
-                    } else {
-                        acc
-                    }
-                });
-                let good_number = rng.generate_range(0..(the_body.lines().count() - 66));
-                let random_lines = the_body.lines().collect::<Vec<&str>>()
-                    [good_number..good_number + 66]
-                    .to_owned();
-                Some((the_body.to_owned(), random_lines.to_owned().join("\n")))
-            }
-            Err(_) => None,
-        }) else {
-            info!("couldnt read text file");
-            exit(1);
-        };
-        let mut random_line_effects = vec![];
-
-        for _ in test_lines.lines() {
-            random_line_effects.push(KineticEffect::random(&mut rng));
-        }
 
         // Create the winit/egui integration.
         let platform = egui_winit::State::new(
@@ -659,9 +645,6 @@ impl GameProgramme {
             egui_routine,
             egui_ctx,
             platform,
-            test_lines,
-            _test_text,
-            random_line_effects,
             timestamp_start,
             play,
             current_playable: None,
@@ -683,13 +666,19 @@ impl GameProgramme {
             );
             self.settings.camera_pitch = scene1_starting_cam_info[3];
             self.settings.camera_yaw = scene1_starting_cam_info[4];
-            let scene1_starting_cam =
-                make_camera((definition.start_cam.clone(), *scene1_starting_cam_info));
         }
-        scene1.implement_playable();
+        let playable_renderer_copy = Arc::clone(renderer);
+        let playable_routines_copy = Arc::clone(routines);
+        scene1.implement_playable(
+            &self.settings,
+            event_loop,
+            playable_renderer_copy,
+            playable_routines_copy,
+            &self.rts,
+        );
 
-        let skybox_renderer_copy = Arc::clone(&renderer);
-        let skybox_routines_copy = Arc::clone(&routines);
+        let skybox_renderer_copy = Arc::clone(renderer);
+        let skybox_routines_copy = Arc::clone(routines);
         self.spawn(async move {
             if let Err(e) = load_skybox(&skybox_renderer_copy, &skybox_routines_copy.skybox).await {
                 info!("Failed to load skybox {}", e)

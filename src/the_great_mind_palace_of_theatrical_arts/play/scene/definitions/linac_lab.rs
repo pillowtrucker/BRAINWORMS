@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use crate::{
     theater::{
-        basement::cla::GameProgrammeSettings,
+        basement::{cla::GameProgrammeSettings, text_files::read_lines},
         play::{
             backstage::{
                 plumbing::DefaultRoutines,
@@ -10,16 +10,16 @@ use crate::{
             },
             scene::{
                 actors::{create_actor, AstinkSprite},
-                chorus::Choral,
                 stage3d::{load_stage3d, make_camera},
-                AstinkScene, CamInfo, SceneDefinition, SceneImplementation, Scenic,
+                AstinkScene, CamInfo, SceneDefinition, SceneImplementation,
             },
             Definitions, Implementations,
         },
     },
-    GameProgrammeData, MyEvent,
+    MyEvent,
 };
 use egui::Context;
+use nanorand::{RandomGen, Rng};
 use proc_macros::{Choral, Scenic};
 use rend3::Renderer;
 use tokio::runtime::Runtime;
@@ -38,6 +38,9 @@ pub struct LinacLabScene {
     pub name: String,
     pub definition: Definitions,
     pub implementation: Option<Implementations>,
+    pub test_text: String,
+    pub test_lines: String,
+    pub random_line_effects: Vec<KineticEffect>,
 }
 
 impl LinacLabScene {
@@ -62,6 +65,35 @@ impl LinacLabScene {
             }),
         });
         self.name = "LinacLab".to_owned();
+
+        let mut rng = nanorand::tls_rng();
+        let Some((test_text, test_lines)) = (match read_lines("assets/texts/PARADISE_LOST.txt") {
+            Ok(test_text) => {
+                let the_body = test_text.fold("".to_owned(), |acc: String, l| {
+                    if let Ok(l) = l {
+                        format!("{}{}\n", acc, l) // this is probably quadratic but fuck rust's string concatenation options wholesale
+                    } else {
+                        acc
+                    }
+                });
+                let good_number = rng.generate_range(0..(the_body.lines().count() - 66));
+                let random_lines = the_body.lines().collect::<Vec<&str>>()
+                    [good_number..good_number + 66]
+                    .to_owned();
+                Some((the_body.to_owned(), random_lines.to_owned().join("\n")))
+            }
+            Err(_) => None,
+        }) else {
+            panic!("couldnt read text file");
+        };
+        let mut random_line_effects = vec![];
+
+        for _ in test_lines.lines() {
+            random_line_effects.push(KineticEffect::random(&mut rng));
+        }
+        self.test_text = test_text;
+        self.test_lines = test_lines;
+        self.random_line_effects = random_line_effects;
     }
 
     fn implement(
@@ -69,10 +101,10 @@ impl LinacLabScene {
         settings: &GameProgrammeSettings,
         event_loop: &EventLoop<MyEvent>,
         renderer: Arc<Renderer>,
-        routines: Arc<DefaultRoutines>,
+        _routines: Arc<DefaultRoutines>,
         rts: &Runtime,
     ) {
-        let Definitions::SceneDefinition(definition) = self.definition else {
+        let Definitions::SceneDefinition(definition) = &self.definition else {
             panic!("scene has non-scene definition")
         };
         let scene1_starting_cam =
@@ -128,16 +160,12 @@ impl LinacLabScene {
         let Definitions::SceneDefinition(definition) = &self.definition else {
             panic!("scene has non-scene definition")
         };
-        definition
-            .cameras
-            .get(&definition.start_cam)
-            .unwrap()
-            .clone()
+        *definition.cameras.get(&definition.start_cam).unwrap()
     }
 
-    fn implement_chorus(&self, egui_ctx: &mut Context, data: &GameProgrammeData) {
-        egui::Window::new("egui widget testing").show(egui_ctx, |ui| {
-            ui.label(std::format!("framerate: {:.0}fps", data.frame_rate.get()));
+    fn implement_chorus(&self, egui_ctx: Context) {
+        egui::Window::new("egui widget testing").show(&egui_ctx, |ui| {
+            //
             ui.horizontal(|ui| {
                 ui.add(KineticLabel::new("blabla"));
                 ui.add(KineticLabel::new("same").kinesis(vec![&KineticEffect::default()]));
@@ -152,8 +180,8 @@ impl LinacLabScene {
                     }]),
                 );
             });
-            for (i, line) in data.test_lines.lines().enumerate() {
-                ui.add(KineticLabel::new(line).kinesis(vec![&data.random_line_effects[i]]));
+            for (i, line) in self.test_lines.lines().enumerate() {
+                ui.add(KineticLabel::new(line).kinesis(vec![&self.random_line_effects[i]]));
             }
         });
     }

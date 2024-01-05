@@ -7,7 +7,7 @@ use tokio::runtime::Runtime;
 use uuid::Uuid;
 use winit::event_loop::EventLoop;
 
-use crate::{GameProgrammeData, MyEvent};
+use crate::MyEvent;
 
 use self::{
     backstage::plumbing::DefaultRoutines,
@@ -48,10 +48,11 @@ pub trait Playable {
         rts: &Runtime,
     );
     fn define_playable(&mut self);
-    fn implement_chorus_for_playable(&self, egui_ctx: &mut Context, data: &GameProgrammeData);
+    fn implement_chorus_for_playable(&self, egui_ctx: Context);
 }
 pub enum Definitions {
     SceneDefinition(SceneDefinition),
+    BogusDefinition, // because fucking clippy that's why
 }
 
 impl Default for Definitions {
@@ -61,4 +62,5 @@ impl Default for Definitions {
 }
 pub enum Implementations {
     SceneImplementation(SceneImplementation),
+    BogusImplementation,
 }

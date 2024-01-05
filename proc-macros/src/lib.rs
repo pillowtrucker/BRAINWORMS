@@ -27,6 +27,7 @@ pub fn derive_scenic_partial(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let ident = input.ident;
     let tokens = quote! {
+        use crate::theater::play::scene::Scenic;
         impl Scenic for #ident {
             /*
             fn scene_definition(&mut self) -> &mut SceneDefinition {
@@ -84,9 +85,10 @@ pub fn derive_choral_partial(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let ident = input.ident;
     let tokens = quote! {
+        use crate::theater::play::scene::chorus::Choral;
         impl Choral for #ident {
-            fn implement_chorus_for_choral(&self, egui_ctx: &mut Context, data: &GameProgrammeData) {
-                self.implement_chorus(egui_ctx, data);
+            fn implement_chorus_for_choral(&self, egui_ctx: Context) {
+                self.implement_chorus(egui_ctx);
             }
 
         }

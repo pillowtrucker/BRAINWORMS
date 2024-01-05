@@ -7,7 +7,7 @@ use tokio::runtime::Runtime;
 use uuid::Uuid;
 use winit::event_loop::EventLoop;
 
-use crate::{theater::basement::cla::GameProgrammeSettings, GameProgrammeData, MyEvent};
+use crate::{theater::basement::cla::GameProgrammeSettings, MyEvent};
 
 use self::chorus::Choral;
 
@@ -106,8 +106,8 @@ impl<T: Scenic + Choral> Playable for T {
     fn define_playable(&mut self) {
         self.define_scene()
     }
-    fn implement_chorus_for_playable(&self, egui_ctx: &mut Context, data: &GameProgrammeData) {
-        self.implement_chorus_for_choral(egui_ctx, data);
+    fn implement_chorus_for_playable(&self, egui_ctx: Context) {
+        self.implement_chorus_for_choral(egui_ctx);
     }
 
     fn playable_definition(&mut self) -> &mut Definitions {
