@@ -2,10 +2,10 @@
 mod the_great_mind_palace_of_theatrical_arts;
 use egui::{Color32, TextStyle, Visuals};
 
-use glam::{DVec2, Mat3A, Mat4, Vec3};
+use glam::{vec3, vec4, DVec2, Mat3A, Mat4, Vec3};
 use log::info;
 use parking_lot::Mutex;
-use rend3::types::{Camera, CameraProjection, DirectionalLight};
+use rend3::types::{Camera, CameraProjection, DirectionalLight, Handedness};
 
 use uuid::Uuid;
 
@@ -30,13 +30,14 @@ use theater::{
     },
 };
 use winit::{
+    dpi::PhysicalPosition,
     event::{DeviceEvent, ElementState, KeyEvent, MouseButton, WindowEvent},
     event_loop::{ControlFlow, EventLoopWindowTarget},
     platform::scancode::PhysicalKeyExtScancode,
     window::{Fullscreen, WindowBuilder},
 };
 
-use crate::theater::play::scene::actors::draw_actor;
+use crate::theater::play::scene::{actors::draw_actor, stage3d::make_camera};
 
 pub struct GameProgrammeData {
     pub egui_routine: rend3_egui::EguiRenderRoutine,
@@ -49,6 +50,7 @@ pub struct GameProgrammeData {
     pub timestamp_start: time::Instant,
     pub play: Play,
     pub current_playable: Option<Uuid>,
+    pub mouse_physical_poz: PhysicalPosition<f64>,
 }
 
 pub struct GameProgramme {
@@ -399,14 +401,42 @@ impl GameProgramme {
                         up * velocity * data.last_update.elapsed().as_secs_f32();
                 }
                 if button_pressed(&self.settings.scancode_status, Scancodes::PERIOD) {
+                    let cam_x = self.settings.camera_location.x;
+                    let cam_y = self.settings.camera_location.y;
+                    let cam_z = self.settings.camera_location.z;
+                    let cam_pitch = self.settings.camera_pitch;
+                    let cam_yaw = self.settings.camera_yaw;
+                    println!("{cam_x},{cam_y},{cam_z},{cam_pitch},{cam_yaw}",);
                     println!(
-                        "{x},{y},{z},{pitch},{yaw}",
-                        x = self.settings.camera_location.x,
-                        y = self.settings.camera_location.y,
-                        z = self.settings.camera_location.z,
-                        pitch = self.settings.camera_pitch,
-                        yaw = self.settings.camera_yaw
+                        "mouse at {},{}",
+                        data.mouse_physical_poz.x, data.mouse_physical_poz.y
                     );
+                    let win_w = window.inner_size().width as f64;
+                    let win_h = window.inner_size().height as f64;
+                    let mouse_x = data.mouse_physical_poz.x;
+                    let mouse_y = data.mouse_physical_poz.y;
+                    let x = (2.0 * mouse_x) / win_w - 1.0;
+
+                    let y = 1.0 - (2.0 * mouse_y) / win_h;
+                    let z = 1.0;
+                    let ray_nds = vec3(x as f32, y as f32, z as f32);
+                    println!("ray_nds: {ray_nds}");
+                    let ray_clip = vec4(ray_nds.x, ray_nds.y, -1.0, 1.0);
+                    let cur_camera =
+                        make_camera(("".to_owned(), [cam_x, cam_y, cam_z, cam_pitch, cam_yaw]));
+                    let ray_eye = compute_projection_matrix(
+                        cur_camera.renderer_camera,
+                        Self::HANDEDNESS,
+                        (win_w / win_h) as f32,
+                    )
+                    .inverse()
+                        * ray_clip;
+                    let ray_eye = vec4(ray_eye.x, ray_eye.y, -1.0, 0.0);
+                    println!("ray_eye: {ray_eye}");
+                    let ray_wor4 = cur_camera.renderer_camera.view.inverse() * ray_eye;
+                    let ray_wor = vec3(ray_wor4.x, ray_wor4.y, ray_wor4.z);
+                    let ray_wor = ray_wor.normalize();
+                    println!("ray_world: {ray_wor}");
                 }
 
                 if button_pressed(&self.settings.scancode_status, Scancodes::ESCAPE) {
@@ -480,6 +510,12 @@ impl GameProgramme {
                         if !grabber.grabbed() {
                             grabber.request_grab(window);
                         }
+                    }
+                    WindowEvent::CursorMoved {
+                        device_id: _,
+                        position,
+                    } => {
+                        data.mouse_physical_poz = position;
                     }
 
                     _ => {}
@@ -648,6 +684,7 @@ impl GameProgramme {
             timestamp_start,
             play,
             current_playable: None,
+            mouse_physical_poz: PhysicalPosition::default(),
         });
         // Implementations for Play/Scene/etc go below
         let data = self.data.as_mut().unwrap();
@@ -701,4 +738,28 @@ fn main() {
 
     let the_game_programme = GameProgramme::new();
     start(the_game_programme, window_builder);
+}
+pub(crate) fn compute_projection_matrix(
+    data: Camera,
+    handedness: Handedness,
+    aspect_ratio: f32,
+) -> Mat4 {
+    match data.projection {
+        CameraProjection::Orthographic { size } => {
+            let half = size * 0.5;
+            if handedness == Handedness::Left {
+                Mat4::orthographic_lh(-half.x, half.x, -half.y, half.y, half.z, -half.z)
+            } else {
+                Mat4::orthographic_rh(-half.x, half.x, -half.y, half.y, half.z, -half.z)
+            }
+        }
+        CameraProjection::Perspective { vfov, near } => {
+            if handedness == Handedness::Left {
+                Mat4::perspective_infinite_reverse_lh(vfov.to_radians(), aspect_ratio, near)
+            } else {
+                Mat4::perspective_infinite_reverse_rh(vfov.to_radians(), aspect_ratio, near)
+            }
+        }
+        CameraProjection::Raw(proj) => proj,
+    }
 }
