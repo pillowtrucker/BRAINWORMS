@@ -4,7 +4,9 @@ use egui::{Color32, TextStyle, Visuals};
 
 use glam::{vec3, vec4, DVec2, Mat3A, Mat4, Vec3};
 use log::info;
+use nalgebra::Point3;
 use parking_lot::Mutex;
+use parry3d::query::{Ray, RayCast};
 use rend3::types::{Camera, CameraProjection, DirectionalLight, Handedness};
 
 use uuid::Uuid;
@@ -37,7 +39,10 @@ use winit::{
     window::{Fullscreen, WindowBuilder},
 };
 
-use crate::theater::play::scene::{actors::draw_actor, stage3d::make_camera};
+use crate::theater::play::{
+    scene::{actors::draw_actor, stage3d::make_camera},
+    Implementations,
+};
 
 pub struct GameProgrammeData {
     pub egui_routine: rend3_egui::EguiRenderRoutine,
@@ -437,6 +442,89 @@ impl GameProgramme {
                     let ray_wor = vec3(ray_wor4.x, ray_wor4.y, ray_wor4.z);
                     let ray_wor = ray_wor.normalize();
                     println!("ray_world: {ray_wor}");
+                    let rayman = Ray::new(Point3::new(cam_x, cam_y, cam_z), ray_wor.into());
+                    if let Implementations::SceneImplementation(sc_imp) = data
+                        .play
+                        .playables
+                        .get_mut(data.current_playable.as_ref().unwrap())
+                        .as_mut()
+                        .unwrap()
+                        .playable_implementation()
+                        .as_mut()
+                        .unwrap()
+                    {
+                        if let AstinkScene::Loaded(stage3d) = &sc_imp.stage3d {
+                            let scdata = &stage3d.2;
+                            for ok in &scdata.0.meshes {
+                                if let Some(l) = &ok.label {
+                                    //if l == "vt100" {
+                                    //                                    println!("{:?}", ok);
+                                    for wat in &ok.inner.primitives {
+                                        let parosphere;
+                                        {
+                                            let hng = &renderer.mesh_manager.lock_internal_data()
+                                                [*wat.handle];
+                                            parosphere =
+                                                parry3d::bounding_volume::BoundingSphere::new(
+                                                    hng.bounding_sphere.center.into(),
+                                                    hng.bounding_sphere.radius,
+                                                );
+                                        }
+                                        const MAX_TOI: f32 = 1000000.0;
+                                        if parosphere.intersects_local_ray(&rayman, MAX_TOI) {
+                                            let toi = parosphere
+                                                .cast_local_ray(&rayman, MAX_TOI, true)
+                                                .unwrap();
+                                            let intersection = rayman.point_at(toi);
+
+                                            if Point3::from([cam_x, cam_y, cam_z]) != intersection {
+                                                println!(
+                                                    "{} intersects mouse ray at {}",
+                                                    l, intersection
+                                                );
+                                                let line = draw_line(vec![
+                                                    [cam_x, cam_y, cam_z],
+                                                    [
+                                                        intersection.x,
+                                                        intersection.y,
+                                                        intersection.z,
+                                                    ],
+                                                ]);
+                                                let line_mesh_handle =
+                                                    renderer.add_mesh(line).unwrap();
+
+                                                let line_mesh_material_handle = renderer
+                                                    .add_material(
+                                                        rend3_routine::pbr::PbrMaterial::default(),
+                                                    );
+                                                let line_mesh_object = rend3::types::Object {
+                                                    mesh_kind: rend3::types::ObjectMeshKind::Static(
+                                                        line_mesh_handle,
+                                                    ),
+                                                    material: line_mesh_material_handle,
+                                                    transform:
+                                                        glam::Mat4::from_scale_rotation_translation(
+                                                            glam::Vec3::new(1.0, 1.0, 1.0),
+                                                            glam::Quat::from_euler(
+                                                                glam::EulerRot::XYZ,
+                                                                0.0,
+                                                                0.0,
+                                                                0.0,
+                                                            ),
+                                                            glam::Vec3::new(0.0, 0.0, 0.0),
+                                                        ),
+                                                };
+                                                Box::leak(Box::new(
+                                                    renderer.add_object(line_mesh_object),
+                                                ));
+                                            }
+                                        }
+                                    }
+                                    //                                    }
+                                }
+                            }
+                        }
+                    }
                 }
 
                 if button_pressed(&self.settings.scancode_status, Scancodes::ESCAPE) {
@@ -574,9 +662,7 @@ impl GameProgramme {
                     .as_mut()
                     .unwrap()
                 {
-                    sc_imp
-                        .stage3d
-                        .insert(name.clone(), AstinkScene::Loaded((name, sc_id, scdata)));
+                    sc_imp.stage3d = AstinkScene::Loaded((name, sc_id, scdata));
                 }
             }
             Event::UserEvent(MyWinitEvent::Actress(AstinkSprite::Loaded((
@@ -762,4 +848,43 @@ pub(crate) fn compute_projection_matrix(
         }
         CameraProjection::Raw(proj) => proj,
     }
+}
+
+pub fn draw_line(points: Vec<[f32; 3]>) -> rend3::types::Mesh {
+    const WIDTH: f32 = 0.5;
+    let mut vertices: Vec<glam::Vec3> = Vec::new();
+    let mut indices: Vec<u32> = Vec::new();
+
+    let w = WIDTH / 2.0;
+
+    let x1 = points[0][0];
+    let x2 = points[1][0];
+    let y1 = points[0][1];
+    let y2 = points[1][1];
+    let z1 = points[0][2];
+    let z2 = points[1][2];
+    //    let color: [f32; 3] = [1.0, 1.0, 1.0];
+
+    //let dx = x2 - x1;
+    //let dy = y2 - y1;
+    //let l = dx.hypot(dy);
+    //let u = dx * WIDTH * 0.5 / l;
+    //let v = dy * WIDTH * 0.5 / l;
+
+    vertices.push(glam::Vec3::from([x1 + w, y1 - w, z1]));
+    vertices.push(glam::Vec3::from([x1 - w, y1 + w, z1]));
+    vertices.push(glam::Vec3::from([x2 - w, y2 + w, z2]));
+    vertices.push(glam::Vec3::from([x2 + w, y2 - w, z2]));
+
+    indices.push(2);
+    indices.push(1);
+    indices.push(0);
+    indices.push(2);
+    indices.push(0);
+    indices.push(3);
+
+    rend3::types::MeshBuilder::new(vertices, rend3::types::Handedness::Right)
+        .with_indices(indices)
+        .build()
+        .unwrap()
 }

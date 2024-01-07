@@ -54,7 +54,7 @@ pub enum AstinkScene {
     Loading,
 }
 pub struct SceneImplementation {
-    pub stage3d: HashMap<String, AstinkScene>,
+    pub stage3d: AstinkScene,
     pub actresses: HashMap<String, Arc<Mutex<actors::AstinkSprite>>>,
     pub props: HashMap<String, props::Prop>,
     pub cameras: HashMap<String, Camera>,

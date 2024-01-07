@@ -118,8 +118,7 @@ impl LinacLabScene {
         let scene1_uuid = self.uuid;
         let scene1_stage_name = definition.stage.0.clone();
         let scene1_stage_directory = definition.stage.1.clone();
-        let mut scene1_stage3d = HashMap::new();
-        scene1_stage3d.insert(scene1_stage_name.clone(), AstinkScene::Loading);
+        let scene1_stage3d = AstinkScene::Loading;
 
         let mut scene1_actor_impls = HashMap::new();
         for (name, _) in definition.actors.clone() {
