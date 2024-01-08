@@ -9,7 +9,7 @@ use winit::event_loop::EventLoop;
 
 use crate::{theater::basement::cla::GameProgrammeSettings, MyEvent};
 
-use self::chorus::Choral;
+use self::{actors::ActressDefinition, chorus::Choral};
 
 use super::{backstage::plumbing::DefaultRoutines, Definitions, Implementations, Playable};
 
@@ -29,7 +29,7 @@ pub struct Camera {
 #[derive(Default)]
 pub struct SceneDefinition {
     pub stage: (String, String),
-    pub actors: Vec<(String, String)>,
+    pub actors: Vec<ActressDefinition>,
     pub props: Vec<(String, String)>,
     pub start_cam: String,
     pub cameras: HashMap<String, CamInfo>,

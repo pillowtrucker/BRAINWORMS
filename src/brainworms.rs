@@ -7,7 +7,7 @@ use log::info;
 use nalgebra::Point3;
 use parking_lot::Mutex;
 use parry3d::query::{Ray, RayCast};
-use rend3::types::{Camera, CameraProjection, DirectionalLight, Handedness};
+use rend3::types::{Camera, CameraProjection, DirectionalLight, Handedness, VertexAttributeId};
 
 use uuid::Uuid;
 
@@ -406,6 +406,7 @@ impl GameProgramme {
                         up * velocity * data.last_update.elapsed().as_secs_f32();
                 }
                 if button_pressed(&self.settings.scancode_status, Scancodes::PERIOD) {
+                    // this kind of works but there is basically no way for me to create accurate colliders because at no point do I get access to the gltf data..
                     let cam_x = self.settings.camera_location.x;
                     let cam_y = self.settings.camera_location.y;
                     let cam_z = self.settings.camera_location.z;
@@ -464,6 +465,7 @@ impl GameProgramme {
                                         {
                                             let hng = &renderer.mesh_manager.lock_internal_data()
                                                 [*wat.handle];
+
                                             parosphere =
                                                 parry3d::bounding_volume::BoundingSphere::new(
                                                     hng.bounding_sphere.center.into(),
@@ -662,6 +664,13 @@ impl GameProgramme {
                     .as_mut()
                     .unwrap()
                 {
+                    /*
+                    for hng in scdata.0.meshes {
+                        for prims in hng.inner.primitives {
+                            // this won't work
+                        }
+                    }
+                    */
                     sc_imp.stage3d = AstinkScene::Loaded((name, sc_id, scdata));
                 }
             }

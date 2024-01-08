@@ -2,9 +2,11 @@
 // for now I'm going to test and experiment in main() and then dump the results here
 use std::{collections::HashMap, hash::BuildHasher, path::Path, sync::Arc};
 
+use egui::TextBuffer;
 use glam::UVec2;
 
 use parking_lot::Mutex;
+use parry3d::shape::TriMesh;
 use rend3::{
     types::{Texture, TextureFormat},
     Renderer,
@@ -121,6 +123,7 @@ pub(crate) async fn load_gltf(
 
     let gltf_elapsed = gltf_start.elapsed();
     let resources_start = time::Instant::now();
+    //let colliders = load_colliders_from_gltf(collider_ids, &gltf_data, settings);
     let (scene, instance) = rend3_gltf::load_gltf(renderer, &gltf_data, settings, |uri| async {
         if let Some(base64) = rend3_gltf::try_load_base64(&uri) {
             Ok(base64)
@@ -141,7 +144,33 @@ pub(crate) async fn load_gltf(
     );
     Some((scene, instance))
 }
+/*
+pub(crate) fn load_colliders_from_gltf(
+    collider_ids: Vec<String>,
+    gltf_data: &Vec<u8>,
+    settings: &GltfLoadSettings,
+) -> Result<Vec<(String, TriMesh)>, _> {
+    let file = gltf::Gltf::from_slice_without_validation(gltf_data)?;
+    for n in file.document.nodes() {
+        if n.name()
+            .is_some_and(|n| collider_ids.contains(&n.to_owned()))
+        {
+            let mut c = n.children();
 
+            while (!c.is_empty()) {
+                for cc in c {
+                    if cc.mesh().is_some() {
+                        for p in cc.mesh().unwrap().primitives() {
+                            p.
+                        }
+                    }
+                }
+            }
+
+        }
+    }
+}
+*/
 pub(crate) fn button_pressed<Hash: BuildHasher>(map: &HashMap<u32, bool, Hash>, key: u32) -> bool {
     map.get(&key).map_or(false, |b| *b)
 }
