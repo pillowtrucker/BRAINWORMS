@@ -8,7 +8,7 @@ use tokio::runtime::Runtime;
 use uuid::Uuid;
 use winit::event_loop::EventLoop;
 
-use crate::{theater::basement::cla::GameProgrammeSettings, MyEvent};
+use crate::{theater::basement::cla::GameProgrammeSettings, Colliders, MyEvent};
 
 use self::{actors::ActressDefinition, chorus::Choral};
 
@@ -52,7 +52,7 @@ pub enum AstinkScene {
             (
                 rend3_gltf::LoadedGltfScene,
                 rend3_gltf::GltfSceneInstance,
-                HashMap<String, Vec<Aabb>>,
+                Colliders,
             ),
         ),
     ),

@@ -1,12 +1,15 @@
-#![feature(variant_count, exact_size_is_empty)]
+#![feature(variant_count, exact_size_is_empty, array_chunks, iter_array_chunks)]
 mod the_great_mind_palace_of_theatrical_arts;
-use egui::{Color32, TextStyle, Visuals};
+use egui::{ahash::HashMap, Color32, TextStyle, Visuals};
 
 use glam::{vec3, vec4, DVec2, Mat3A, Mat4, Vec3};
 use log::info;
 use nalgebra::Point3;
 use parking_lot::Mutex;
-use parry3d::query::{Ray, RayCast};
+use parry3d::{
+    bounding_volume::Aabb,
+    query::{Ray, RayCast},
+};
 use rend3::types::{
     Camera, CameraProjection, DirectionalLight, Handedness, ObjectHandle, ObjectMeshKind,
     ResourceHandle, VertexAttributeId, VERTEX_ATTRIBUTE_POSITION,
@@ -14,6 +17,9 @@ use rend3::types::{
 
 use uuid::Uuid;
 
+struct Colliders {
+    pub col_map: HashMap<String, Vec<parry3d::shape::TriMesh>>,
+}
 use std::{path::Path, sync::Arc, time};
 use wgpu::{ComputePassDescriptor, TextureFormat};
 
@@ -459,7 +465,7 @@ impl GameProgramme {
                     {
                         const MAX_TOI: f32 = 100000.0;
                         if let AstinkScene::Loaded(stage3d) = &sc_imp.stage3d {
-                            for (c_name, colliders) in stage3d.2 .2.iter() {
+                            for (c_name, colliders) in stage3d.2 .2.col_map.iter() {
                                 for c in colliders {
                                     if let Some(toi) = c.cast_local_ray(&rayman, MAX_TOI, true) {
                                         let intersection = rayman.point_at(toi);
@@ -469,6 +475,7 @@ impl GameProgramme {
                                                 "{} intersects mouse ray at {}",
                                                 c_name, intersection
                                             );
+
                                             let line = draw_line(vec![
                                                 [cam_x, cam_y, cam_z],
                                                 [intersection.x, intersection.y, intersection.z],
@@ -478,6 +485,8 @@ impl GameProgramme {
                                             let line_mesh_material_handle = renderer.add_material(
                                                 rend3_routine::pbr::PbrMaterial::default(),
                                             );
+                                            let col_mesh_material_handle =
+                                                line_mesh_material_handle.clone();
                                             let line_mesh_object = rend3::types::Object {
                                                 mesh_kind: rend3::types::ObjectMeshKind::Static(
                                                     line_mesh_handle,
@@ -495,6 +504,38 @@ impl GameProgramme {
                                                         glam::Vec3::new(0.0, 0.0, 0.0),
                                                     ),
                                             };
+                                            let col_mesh = rend3::types::MeshBuilder::new(
+                                                c.vertices()
+                                                    .iter()
+                                                    .map(|v| Vec3::new(v.x, v.y, v.z))
+                                                    .collect(),
+                                                Self::HANDEDNESS,
+                                            )
+                                            .with_indices(c.flat_indices().into())
+                                            .build()
+                                            .unwrap();
+                                            let col_mesh_handle =
+                                                renderer.add_mesh(col_mesh).unwrap();
+                                            let col_mesh_object = rend3::types::Object {
+                                                mesh_kind: rend3::types::ObjectMeshKind::Static(
+                                                    col_mesh_handle,
+                                                ),
+                                                material: col_mesh_material_handle,
+                                                transform:
+                                                    glam::Mat4::from_scale_rotation_translation(
+                                                        glam::Vec3::new(1.0, 1.0, 1.0),
+                                                        glam::Quat::from_euler(
+                                                            glam::EulerRot::XYZ,
+                                                            0.0,
+                                                            0.0,
+                                                            0.0,
+                                                        ),
+                                                        glam::Vec3::new(0.0, 0.0, 0.0),
+                                                    ),
+                                            };
+                                            Box::leak(Box::new(
+                                                renderer.add_object(col_mesh_object),
+                                            ));
                                             Box::leak(Box::new(
                                                 renderer.add_object(line_mesh_object),
                                             ));
