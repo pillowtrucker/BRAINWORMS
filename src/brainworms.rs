@@ -1,4 +1,4 @@
-#![feature(variant_count)]
+#![feature(variant_count, exact_size_is_empty)]
 mod the_great_mind_palace_of_theatrical_arts;
 use egui::{Color32, TextStyle, Visuals};
 
@@ -7,12 +7,15 @@ use log::info;
 use nalgebra::Point3;
 use parking_lot::Mutex;
 use parry3d::query::{Ray, RayCast};
-use rend3::types::{Camera, CameraProjection, DirectionalLight, Handedness, VertexAttributeId};
+use rend3::types::{
+    Camera, CameraProjection, DirectionalLight, Handedness, ObjectHandle, ObjectMeshKind,
+    ResourceHandle, VertexAttributeId, VERTEX_ATTRIBUTE_POSITION,
+};
 
 use uuid::Uuid;
 
 use std::{path::Path, sync::Arc, time};
-use wgpu::TextureFormat;
+use wgpu::{ComputePassDescriptor, TextureFormat};
 
 use the_great_mind_palace_of_theatrical_arts as theater;
 use theater::{
@@ -406,7 +409,6 @@ impl GameProgramme {
                         up * velocity * data.last_update.elapsed().as_secs_f32();
                 }
                 if button_pressed(&self.settings.scancode_status, Scancodes::PERIOD) {
-                    // this kind of works but there is basically no way for me to create accurate colliders because at no point do I get access to the gltf data..
                     let cam_x = self.settings.camera_location.x;
                     let cam_y = self.settings.camera_location.y;
                     let cam_z = self.settings.camera_location.z;
@@ -444,6 +446,8 @@ impl GameProgramme {
                     let ray_wor = ray_wor.normalize();
                     println!("ray_world: {ray_wor}");
                     let rayman = Ray::new(Point3::new(cam_x, cam_y, cam_z), ray_wor.into());
+
+                    /* this wouldnt work
                     if let Implementations::SceneImplementation(sc_imp) = data
                         .play
                         .playables
@@ -456,6 +460,28 @@ impl GameProgramme {
                     {
                         if let AstinkScene::Loaded(stage3d) = &sc_imp.stage3d {
                             let scdata = &stage3d.2;
+
+                            for humpf in &scdata.1.topological_order {
+                                let n = scdata.1.nodes.get(*humpf).unwrap();
+                                if let Some(l) = n.label {
+                                    for p in n.inner.object.unwrap().inner.primitives {
+                                        for obj in renderer
+                                            .data_core
+                                            .lock()
+                                            .object_manager
+                                            .enumerated_objects()
+                                            .unwrap()
+                                        {
+                                            if let ObjectMeshKind::Static(m) = obj.1.mesh_kind {
+                                                let mm = m.get_raw();
+
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            //
+
                             for ok in &scdata.0.meshes {
                                 if let Some(l) = &ok.label {
                                     //if l == "vt100" {
@@ -463,9 +489,17 @@ impl GameProgramme {
                                     for wat in &ok.inner.primitives {
                                         let parosphere;
                                         {
-                                            let hng = &renderer.mesh_manager.lock_internal_data()
-                                                [*wat.handle];
+                                            let mesh_mgr_internal =
+                                                &renderer.mesh_manager.lock_internal_data();
+                                            let hng = &mesh_mgr_internal[*wat.handle];
 
+                                            let pos = hng
+                                                .get_attribute(&VERTEX_ATTRIBUTE_POSITION)
+                                                .unwrap();
+                                            for wtf in pos {
+
+
+                                            }
                                             parosphere =
                                                 parry3d::bounding_volume::BoundingSphere::new(
                                                     hng.bounding_sphere.center.into(),
@@ -525,8 +559,11 @@ impl GameProgramme {
                                     //                                    }
                                 }
                             }
+
                         }
+
                     }
+                    */
                 }
 
                 if button_pressed(&self.settings.scancode_status, Scancodes::ESCAPE) {

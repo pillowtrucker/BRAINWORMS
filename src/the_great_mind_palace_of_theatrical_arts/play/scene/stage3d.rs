@@ -1,17 +1,22 @@
 // how to set the stage for a 3d scene
 // for now I'm going to test and experiment in main() and then dump the results here
-use std::{collections::HashMap, hash::BuildHasher, path::Path, sync::Arc};
+
+use std::{borrow::BorrowMut, collections::HashMap, hash::BuildHasher, path::Path, sync::Arc};
 
 use egui::TextBuffer;
 use glam::UVec2;
 
+use log::info;
 use parking_lot::Mutex;
-use parry3d::shape::TriMesh;
+use parry3d::{
+    bounding_volume::{Aabb, BoundingVolume},
+    shape::TriMesh,
+};
 use rend3::{
     types::{Texture, TextureFormat},
     Renderer,
 };
-use rend3_gltf::{GltfLoadSettings, GltfSceneInstance};
+use rend3_gltf::{GltfLoadError, GltfLoadSettings, GltfSceneInstance};
 use rend3_routine::skybox::SkyboxRoutine;
 use uuid::Uuid;
 use winit::event_loop::EventLoopProxy;
@@ -56,15 +61,33 @@ pub(crate) async fn load_stage3d(
 ) {
     let loader = AssetLoader::default();
     let path = format!("{}/{}.glb", directory, name);
-    let ret = Box::new(
-        load_gltf(
-            &renderer,
-            &loader,
-            &gltf_settings,
-            AssetPath::Internal(&path),
-        )
-        .await,
-    );
+    let mut collider_ids = HashMap::new();
+    [
+        "Therac-25",
+        "PortaPotty",
+        "vt100",
+        "pdp11",
+        "Podloga",
+        "Przedzialek",
+        "Sciana1",
+        "Sciana2",
+        "Sciana3",
+        "Sciana4",
+    ]
+    .iter()
+    .for_each(|c| {
+        let k = (*c).to_owned();
+        let v = k.clone();
+        collider_ids.insert(k, v.to_owned());
+    });
+    let ret = load_gltf(
+        &renderer,
+        &loader,
+        &gltf_settings,
+        AssetPath::Internal(&path),
+        collider_ids,
+    )
+    .await;
     let _ = event_loop_proxy.send_event(MyWinitEvent::Stage3D(AstinkScene::Loaded((
         name,
         sc_id,
@@ -102,7 +125,12 @@ pub(crate) async fn load_gltf(
     loader: &AssetLoader,
     settings: &rend3_gltf::GltfLoadSettings,
     location: AssetPath<'_>,
-) -> Option<(rend3_gltf::LoadedGltfScene, GltfSceneInstance)> {
+    collider_ids: HashMap<String, String>,
+) -> Option<(
+    rend3_gltf::LoadedGltfScene,
+    GltfSceneInstance,
+    HashMap<String, Vec<Aabb>>,
+)> {
     // profiling::scope!("loading gltf");
     let gltf_start = time::Instant::now();
     let path = loader.get_asset_path(location);
@@ -123,7 +151,10 @@ pub(crate) async fn load_gltf(
 
     let gltf_elapsed = gltf_start.elapsed();
     let resources_start = time::Instant::now();
-    //let colliders = load_colliders_from_gltf(collider_ids, &gltf_data, settings);
+    let Ok(colliders) = load_colliders_from_gltf(collider_ids, &gltf_data) else {
+        panic!("fucked colliders");
+    };
+    info!("built colliders: {:?}", colliders);
     let (scene, instance) = rend3_gltf::load_gltf(renderer, &gltf_data, settings, |uri| async {
         if let Some(base64) = rend3_gltf::try_load_base64(&uri) {
             Ok(base64)
@@ -142,35 +173,39 @@ pub(crate) async fn load_gltf(
         gltf_elapsed,
         resources_start.elapsed()
     );
-    Some((scene, instance))
+    Some((scene, instance, colliders))
 }
-/*
+
 pub(crate) fn load_colliders_from_gltf(
-    collider_ids: Vec<String>,
-    gltf_data: &Vec<u8>,
-    settings: &GltfLoadSettings,
-) -> Result<Vec<(String, TriMesh)>, _> {
+    collider_ids: HashMap<String, String>,
+    gltf_data: &[u8],
+    //    settings: &GltfLoadSettings,
+) -> anyhow::Result<HashMap<String, Vec<Aabb>>> {
     let file = gltf::Gltf::from_slice_without_validation(gltf_data)?;
-    for n in file.document.nodes() {
-        if n.name()
-            .is_some_and(|n| collider_ids.contains(&n.to_owned()))
+    let mut out = HashMap::<String, Vec<Aabb>>::new();
+    for m in file.meshes() {
+        if m.name()
+            .is_some_and(|n| collider_ids.keys().any(|c| c == &n.to_owned()))
         {
-            let mut c = n.children();
-
-            while (!c.is_empty()) {
-                for cc in c {
-                    if cc.mesh().is_some() {
-                        for p in cc.mesh().unwrap().primitives() {
-                            p.
-                        }
+            let thename = m.name().unwrap();
+            info!("trying to build collider for {}", &thename);
+            for p in m.primitives() {
+                let new_bvaabb =
+                    Aabb::new(p.bounding_box().min.into(), p.bounding_box().max.into());
+                match out.get_mut(thename) {
+                    Some(oldv) => {
+                        oldv.push(new_bvaabb);
                     }
-                }
+                    None => {
+                        out.insert(thename.to_owned(), vec![new_bvaabb]);
+                    }
+                };
             }
-
         }
     }
+    Ok(out)
 }
-*/
+
 pub(crate) fn button_pressed<Hash: BuildHasher>(map: &HashMap<u32, bool, Hash>, key: u32) -> bool {
     map.get(&key).map_or(false, |b| *b)
 }

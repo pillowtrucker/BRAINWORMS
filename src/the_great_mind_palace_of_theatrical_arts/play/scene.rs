@@ -2,6 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use egui::Context;
 use parking_lot::Mutex;
+use parry3d::bounding_volume::Aabb;
 use rend3::Renderer;
 use tokio::runtime::Runtime;
 use uuid::Uuid;
@@ -48,7 +49,11 @@ pub enum AstinkScene {
         (
             String,
             Uuid,
-            (rend3_gltf::LoadedGltfScene, rend3_gltf::GltfSceneInstance),
+            (
+                rend3_gltf::LoadedGltfScene,
+                rend3_gltf::GltfSceneInstance,
+                HashMap<String, Vec<Aabb>>,
+            ),
         ),
     ),
     Loading,
