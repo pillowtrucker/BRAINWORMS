@@ -2,15 +2,14 @@ use std::{collections::HashMap, sync::Arc};
 
 use egui::Context;
 use parking_lot::Mutex;
-use parry3d::bounding_volume::Aabb;
 use rend3::Renderer;
 use tokio::runtime::Runtime;
 use uuid::Uuid;
 use winit::event_loop::EventLoop;
 
-use crate::{theater::basement::cla::GameProgrammeSettings, Colliders, MyEvent};
+use crate::{theater::basement::cla::GameProgrammeSettings, MyEvent};
 
-use self::{actors::ActressDefinition, chorus::Choral};
+use self::{actors::ActressDefinition, chorus::Choral, stage3d::Colliders};
 
 use super::{backstage::plumbing::DefaultRoutines, Definitions, Implementations, Playable};
 

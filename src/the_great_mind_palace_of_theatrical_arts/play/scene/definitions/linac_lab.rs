@@ -170,7 +170,25 @@ impl LinacLabScene {
                 .await
             });
         }
-
+        let mut collider_ids = HashMap::new();
+        [
+            "Therac-25",
+            "PortaPotty",
+            "vt100",
+            "pdp11",
+            "Podloga",
+            "Przedzialek",
+            "Sciana1",
+            "Sciana2",
+            "Sciana3",
+            "Sciana4",
+        ]
+        .iter()
+        .for_each(|c| {
+            let k = (*c).to_owned();
+            let v = k.clone();
+            collider_ids.insert(k, v.to_owned());
+        });
         rts.spawn(async move {
             load_stage3d(
                 scene1_stage_name,
@@ -179,6 +197,7 @@ impl LinacLabScene {
                 renderer,
                 gltf_settings,
                 event_loop_proxy,
+                collider_ids,
             )
             .await;
         });

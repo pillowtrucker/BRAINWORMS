@@ -1,27 +1,18 @@
 #![feature(variant_count, exact_size_is_empty, array_chunks, iter_array_chunks)]
 mod the_great_mind_palace_of_theatrical_arts;
-use egui::{ahash::HashMap, Color32, TextStyle, Visuals};
+use egui::{Color32, TextStyle, Visuals};
 
 use glam::{vec3, vec4, DVec2, Mat3A, Mat4, Vec3};
 use log::info;
 use nalgebra::Point3;
 use parking_lot::Mutex;
-use parry3d::{
-    bounding_volume::Aabb,
-    query::{Ray, RayCast},
-};
-use rend3::types::{
-    Camera, CameraProjection, DirectionalLight, Handedness, ObjectHandle, ObjectMeshKind,
-    ResourceHandle, VertexAttributeId, VERTEX_ATTRIBUTE_POSITION,
-};
+use parry3d::query::{Ray, RayCast};
+use rend3::types::{Camera, CameraProjection, DirectionalLight};
 
 use uuid::Uuid;
 
-struct Colliders {
-    pub col_map: HashMap<String, Vec<parry3d::shape::TriMesh>>,
-}
 use std::{path::Path, sync::Arc, time};
-use wgpu::{ComputePassDescriptor, TextureFormat};
+use wgpu::TextureFormat;
 
 use the_great_mind_palace_of_theatrical_arts as theater;
 use theater::{
@@ -49,7 +40,10 @@ use winit::{
 };
 
 use crate::theater::play::{
-    scene::{actors::draw_actor, stage3d::make_camera},
+    scene::{
+        actors::draw_actor,
+        stage3d::{compute_projection_matrix, make_camera},
+    },
     Implementations,
 };
 
@@ -475,136 +469,8 @@ impl GameProgramme {
                                                 "{} intersects mouse ray at {}",
                                                 c_name, intersection
                                             );
-
-                                            let line = draw_line(vec![
-                                                [cam_x, cam_y, cam_z],
-                                                [intersection.x, intersection.y, intersection.z],
-                                            ]);
-                                            let line_mesh_handle = renderer.add_mesh(line).unwrap();
-
-                                            let line_mesh_material_handle = renderer.add_material(
-                                                rend3_routine::pbr::PbrMaterial::default(),
-                                            );
-                                            let col_mesh_material_handle =
-                                                line_mesh_material_handle.clone();
-                                            let line_mesh_object = rend3::types::Object {
-                                                mesh_kind: rend3::types::ObjectMeshKind::Static(
-                                                    line_mesh_handle,
-                                                ),
-                                                material: line_mesh_material_handle,
-                                                transform:
-                                                    glam::Mat4::from_scale_rotation_translation(
-                                                        glam::Vec3::new(1.0, 1.0, 1.0),
-                                                        glam::Quat::from_euler(
-                                                            glam::EulerRot::XYZ,
-                                                            0.0,
-                                                            0.0,
-                                                            0.0,
-                                                        ),
-                                                        glam::Vec3::new(0.0, 0.0, 0.0),
-                                                    ),
-                                            };
-                                            let col_mesh = rend3::types::MeshBuilder::new(
-                                                c.vertices()
-                                                    .iter()
-                                                    .map(|v| Vec3::new(v.x, v.y, v.z))
-                                                    .collect(),
-                                                Self::HANDEDNESS,
-                                            )
-                                            .with_indices(c.flat_indices().into())
-                                            .build()
-                                            .unwrap();
-                                            let col_mesh_handle =
-                                                renderer.add_mesh(col_mesh).unwrap();
-                                            let col_mesh_object = rend3::types::Object {
-                                                mesh_kind: rend3::types::ObjectMeshKind::Static(
-                                                    col_mesh_handle,
-                                                ),
-                                                material: col_mesh_material_handle,
-                                                transform:
-                                                    glam::Mat4::from_scale_rotation_translation(
-                                                        glam::Vec3::new(1.0, 1.0, 1.0),
-                                                        glam::Quat::from_euler(
-                                                            glam::EulerRot::XYZ,
-                                                            0.0,
-                                                            0.0,
-                                                            0.0,
-                                                        ),
-                                                        glam::Vec3::new(0.0, 0.0, 0.0),
-                                                    ),
-                                            };
-                                            Box::leak(Box::new(
-                                                renderer.add_object(col_mesh_object),
-                                            ));
-                                            Box::leak(Box::new(
-                                                renderer.add_object(line_mesh_object),
-                                            ));
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    /* this wouldnt work
-                            let scdata = &stage3d.2;
-
-                            for humpf in &scdata.1.topological_order {
-                                let n = scdata.1.nodes.get(*humpf).unwrap();
-                                if let Some(l) = n.label {
-                                    for p in n.inner.object.unwrap().inner.primitives {
-                                        for obj in renderer
-                                            .data_core
-                                            .lock()
-                                            .object_manager
-                                            .enumerated_objects()
-                                            .unwrap()
-                                        {
-                                            if let ObjectMeshKind::Static(m) = obj.1.mesh_kind {
-                                                let mm = m.get_raw();
-
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            //
-
-                            for ok in &scdata.0.meshes {
-                                if let Some(l) = &ok.label {
-                                    //if l == "vt100" {
-                                    //                                    println!("{:?}", ok);
-                                    for wat in &ok.inner.primitives {
-                                        let parosphere;
-                                        {
-                                            let mesh_mgr_internal =
-                                                &renderer.mesh_manager.lock_internal_data();
-                                            let hng = &mesh_mgr_internal[*wat.handle];
-
-                                            let pos = hng
-                                                .get_attribute(&VERTEX_ATTRIBUTE_POSITION)
-                                                .unwrap();
-                                            for wtf in pos {
-
-
-                                            }
-                                            parosphere =
-                                                parry3d::bounding_volume::BoundingSphere::new(
-                                                    hng.bounding_sphere.center.into(),
-                                                    hng.bounding_sphere.radius,
-                                                );
-                                        }
-                                        const MAX_TOI: f32 = 1000000.0;
-                                        if parosphere.intersects_local_ray(&rayman, MAX_TOI) {
-                                            let toi = parosphere
-                                                .cast_local_ray(&rayman, MAX_TOI, true)
-                                                .unwrap();
-                                            let intersection = rayman.point_at(toi);
-
-                                            if Point3::from([cam_x, cam_y, cam_z]) != intersection {
-                                                println!(
-                                                    "{} intersects mouse ray at {}",
-                                                    l, intersection
-                                                );
+                                            #[cfg(extra_debugging)]
+                                            {
                                                 let line = draw_line(vec![
                                                     [cam_x, cam_y, cam_z],
                                                     [
@@ -620,6 +486,8 @@ impl GameProgramme {
                                                     .add_material(
                                                         rend3_routine::pbr::PbrMaterial::default(),
                                                     );
+                                                let col_mesh_material_handle =
+                                                    line_mesh_material_handle.clone();
                                                 let line_mesh_object = rend3::types::Object {
                                                     mesh_kind: rend3::types::ObjectMeshKind::Static(
                                                         line_mesh_handle,
@@ -637,20 +505,48 @@ impl GameProgramme {
                                                             glam::Vec3::new(0.0, 0.0, 0.0),
                                                         ),
                                                 };
+                                                let col_mesh = rend3::types::MeshBuilder::new(
+                                                    c.vertices()
+                                                        .iter()
+                                                        .map(|v| glam::Vec3::new(v.x, v.y, v.z))
+                                                        .collect(),
+                                                    Self::HANDEDNESS,
+                                                )
+                                                .with_indices(c.flat_indices().into())
+                                                .build()
+                                                .unwrap();
+                                                let col_mesh_handle =
+                                                    renderer.add_mesh(col_mesh).unwrap();
+                                                let col_mesh_object = rend3::types::Object {
+                                                    mesh_kind: rend3::types::ObjectMeshKind::Static(
+                                                        col_mesh_handle,
+                                                    ),
+                                                    material: col_mesh_material_handle,
+                                                    transform:
+                                                        glam::Mat4::from_scale_rotation_translation(
+                                                            glam::Vec3::new(1.0, 1.0, 1.0),
+                                                            glam::Quat::from_euler(
+                                                                glam::EulerRot::XYZ,
+                                                                0.0,
+                                                                0.0,
+                                                                0.0,
+                                                            ),
+                                                            glam::Vec3::new(0.0, 0.0, 0.0),
+                                                        ),
+                                                };
+                                                Box::leak(Box::new(
+                                                    renderer.add_object(col_mesh_object),
+                                                ));
                                                 Box::leak(Box::new(
                                                     renderer.add_object(line_mesh_object),
                                                 ));
                                             }
                                         }
                                     }
-                                    //                                    }
                                 }
                             }
-
                         }
-
                     }
-                    */
                 }
 
                 if button_pressed(&self.settings.scancode_status, Scancodes::ESCAPE) {
@@ -705,7 +601,7 @@ impl GameProgramme {
                     } => {
                         let scancode = PhysicalKeyExtScancode::to_scancode(physical_key).unwrap();
 
-                        log::info!("WE scancode {:x}", scancode);
+                        log::debug!("WE scancode {:x}", scancode);
                         self.settings.scancode_status.insert(
                             scancode,
                             match state {
@@ -788,13 +684,6 @@ impl GameProgramme {
                     .as_mut()
                     .unwrap()
                 {
-                    /*
-                    for hng in scdata.0.meshes {
-                        for prims in hng.inner.primitives {
-                            // this won't work
-                        }
-                    }
-                    */
                     sc_imp.stage3d = AstinkScene::Loaded((name, sc_id, scdata));
                 }
             }
@@ -957,67 +846,4 @@ fn main() {
 
     let the_game_programme = GameProgramme::new();
     start(the_game_programme, window_builder);
-}
-pub(crate) fn compute_projection_matrix(
-    data: Camera,
-    handedness: Handedness,
-    aspect_ratio: f32,
-) -> Mat4 {
-    match data.projection {
-        CameraProjection::Orthographic { size } => {
-            let half = size * 0.5;
-            if handedness == Handedness::Left {
-                Mat4::orthographic_lh(-half.x, half.x, -half.y, half.y, half.z, -half.z)
-            } else {
-                Mat4::orthographic_rh(-half.x, half.x, -half.y, half.y, half.z, -half.z)
-            }
-        }
-        CameraProjection::Perspective { vfov, near } => {
-            if handedness == Handedness::Left {
-                Mat4::perspective_infinite_reverse_lh(vfov.to_radians(), aspect_ratio, near)
-            } else {
-                Mat4::perspective_infinite_reverse_rh(vfov.to_radians(), aspect_ratio, near)
-            }
-        }
-        CameraProjection::Raw(proj) => proj,
-    }
-}
-
-pub fn draw_line(points: Vec<[f32; 3]>) -> rend3::types::Mesh {
-    const WIDTH: f32 = 0.5;
-    let mut vertices: Vec<glam::Vec3> = Vec::new();
-    let mut indices: Vec<u32> = Vec::new();
-
-    let w = WIDTH / 2.0;
-
-    let x1 = points[0][0];
-    let x2 = points[1][0];
-    let y1 = points[0][1];
-    let y2 = points[1][1];
-    let z1 = points[0][2];
-    let z2 = points[1][2];
-    //    let color: [f32; 3] = [1.0, 1.0, 1.0];
-
-    //let dx = x2 - x1;
-    //let dy = y2 - y1;
-    //let l = dx.hypot(dy);
-    //let u = dx * WIDTH * 0.5 / l;
-    //let v = dy * WIDTH * 0.5 / l;
-
-    vertices.push(glam::Vec3::from([x1 + w, y1 - w, z1]));
-    vertices.push(glam::Vec3::from([x1 - w, y1 + w, z1]));
-    vertices.push(glam::Vec3::from([x2 - w, y2 + w, z2]));
-    vertices.push(glam::Vec3::from([x2 + w, y2 - w, z2]));
-
-    indices.push(2);
-    indices.push(1);
-    indices.push(0);
-    indices.push(2);
-    indices.push(0);
-    indices.push(3);
-
-    rend3::types::MeshBuilder::new(vertices, rend3::types::Handedness::Right)
-        .with_indices(indices)
-        .build()
-        .unwrap()
 }

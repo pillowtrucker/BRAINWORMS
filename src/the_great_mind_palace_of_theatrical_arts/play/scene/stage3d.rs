@@ -2,26 +2,23 @@
 // for now I'm going to test and experiment in main() and then dump the results here
 
 use std::{
-    borrow::BorrowMut,
     collections::{BTreeMap, HashMap, VecDeque},
     future::Future,
     hash::BuildHasher,
     path::Path,
     sync::Arc,
 };
-
-use egui::TextBuffer;
-use glam::{DMat4, UVec2};
+pub struct Colliders {
+    pub col_map: HashMap<String, Vec<parry3d::shape::TriMesh>>,
+}
+use glam::UVec2;
 
 use log::info;
-use nalgebra::{Isometry3, IsometryMatrix3, Matrix, Point3, Translation3};
+use nalgebra::{Isometry3, Matrix, Point3, Translation3};
 use parking_lot::Mutex;
-use parry3d::{
-    bounding_volume::{Aabb, BoundingVolume},
-    shape::TriMesh,
-};
+
 use rend3::{
-    types::{Texture, TextureFormat},
+    types::{CameraProjection, Handedness, Texture, TextureFormat},
     util::typedefs::SsoString,
     Renderer,
 };
@@ -34,7 +31,7 @@ use std::time;
 
 use crate::{
     theater::play::backstage::plumbing::asset_loader::{AssetError, AssetLoader, AssetPath},
-    Colliders, MyEvent, MyWinitEvent,
+    MyEvent, MyWinitEvent,
 };
 
 use super::AstinkScene;
@@ -67,28 +64,11 @@ pub(crate) async fn load_stage3d(
     renderer: Arc<Renderer>,
     gltf_settings: GltfLoadSettings,
     event_loop_proxy: EventLoopProxy<MyEvent>,
+    collider_ids: HashMap<String, String>,
 ) {
     let loader = AssetLoader::default();
     let path = format!("{}/{}.glb", directory, name);
-    let mut collider_ids = HashMap::new();
-    [
-        "Therac-25",
-        "PortaPotty",
-        "vt100",
-        "pdp11",
-        "Podloga",
-        "Przedzialek",
-        "Sciana1",
-        "Sciana2",
-        "Sciana3",
-        "Sciana4",
-    ]
-    .iter()
-    .for_each(|c| {
-        let k = (*c).to_owned();
-        let v = k.clone();
-        collider_ids.insert(k, v.to_owned());
-    });
+
     let ret = load_gltf(
         &renderer,
         &loader,
@@ -340,4 +320,60 @@ pub fn make_camera(
         },
         cam_attributes,
     }
+}
+pub(crate) fn compute_projection_matrix(
+    data: rend3::types::Camera,
+    handedness: Handedness,
+    aspect_ratio: f32,
+) -> glam::Mat4 {
+    match data.projection {
+        CameraProjection::Orthographic { size } => {
+            let half = size * 0.5;
+            if handedness == Handedness::Left {
+                glam::Mat4::orthographic_lh(-half.x, half.x, -half.y, half.y, half.z, -half.z)
+            } else {
+                glam::Mat4::orthographic_rh(-half.x, half.x, -half.y, half.y, half.z, -half.z)
+            }
+        }
+        CameraProjection::Perspective { vfov, near } => {
+            if handedness == Handedness::Left {
+                glam::Mat4::perspective_infinite_reverse_lh(vfov.to_radians(), aspect_ratio, near)
+            } else {
+                glam::Mat4::perspective_infinite_reverse_rh(vfov.to_radians(), aspect_ratio, near)
+            }
+        }
+        CameraProjection::Raw(proj) => proj,
+    }
+}
+
+pub fn draw_line(points: Vec<[f32; 3]>) -> rend3::types::Mesh {
+    const WIDTH: f32 = 0.5;
+    let mut vertices: Vec<glam::Vec3> = Vec::new();
+    let mut indices: Vec<u32> = Vec::new();
+
+    let w = WIDTH / 2.0;
+
+    let x1 = points[0][0];
+    let x2 = points[1][0];
+    let y1 = points[0][1];
+    let y2 = points[1][1];
+    let z1 = points[0][2];
+    let z2 = points[1][2];
+
+    vertices.push(glam::Vec3::from([x1 + w, y1 - w, z1]));
+    vertices.push(glam::Vec3::from([x1 - w, y1 + w, z1]));
+    vertices.push(glam::Vec3::from([x2 - w, y2 + w, z2]));
+    vertices.push(glam::Vec3::from([x2 + w, y2 - w, z2]));
+
+    indices.push(2);
+    indices.push(1);
+    indices.push(0);
+    indices.push(2);
+    indices.push(0);
+    indices.push(3);
+
+    rend3::types::MeshBuilder::new(vertices, rend3::types::Handedness::Right)
+        .with_indices(indices)
+        .build()
+        .unwrap()
 }
