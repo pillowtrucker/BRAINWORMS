@@ -14,7 +14,7 @@ use egui::TextBuffer;
 use glam::{DMat4, UVec2};
 
 use log::info;
-use nalgebra::{Isometry3, IsometryMatrix3, Point3};
+use nalgebra::{Isometry3, IsometryMatrix3, Matrix, Point3, Translation3};
 use parking_lot::Mutex;
 use parry3d::{
     bounding_volume::{Aabb, BoundingVolume},
@@ -253,10 +253,21 @@ where
                             indices.into_u32().array_chunks().collect(),
                         );
                         //                        let transform = IsometryMatrix3::new();
-                        if let Ok(transform) = Isometry3::try_from(transform.as_dmat4()) {
-                            info!("Actually successfully transformed {}", thename);
-                            new_trimesh.transform_vertices(&transform.cast());
+                        let (s, r, t) = transform.to_scale_rotation_translation();
+                        let fff = Isometry3::from_parts(Translation3::new(t.x, t.y, t.z), r.into());
+                        /*
+                        match Isometry3::try_from(transform.as_dmat4()) {
+                            Ok(transform) => {
+                                info!("Actually successfully transformed {}", thename);
+                                new_trimesh.transform_vertices(&transform.cast());
+                            }
+                            Err(e) => {
+                                info!("no transform for {} because {:?}", thename, e);
+                            }
                         }
+                        */
+                        new_trimesh = new_trimesh.scaled(&Matrix::from(s));
+                        new_trimesh.transform_vertices(&fff);
 
                         match out.col_map.get_mut(thename) {
                             Some(oldv) => {
