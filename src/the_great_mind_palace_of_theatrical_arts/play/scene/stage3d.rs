@@ -1,15 +1,31 @@
 // how to set the stage for a 3d scene
 // for now I'm going to test and experiment in main() and then dump the results here
-use std::{collections::HashMap, hash::BuildHasher, path::Path, sync::Arc};
 
-use glam::UVec2;
+use std::{
+    borrow::BorrowMut,
+    collections::{BTreeMap, HashMap, VecDeque},
+    future::Future,
+    hash::BuildHasher,
+    path::Path,
+    sync::Arc,
+};
 
+use egui::TextBuffer;
+use glam::{DMat4, UVec2};
+
+use log::info;
+use nalgebra::{Isometry3, IsometryMatrix3, Matrix, Point3, Translation3};
 use parking_lot::Mutex;
+use parry3d::{
+    bounding_volume::{Aabb, BoundingVolume},
+    shape::TriMesh,
+};
 use rend3::{
     types::{Texture, TextureFormat},
+    util::typedefs::SsoString,
     Renderer,
 };
-use rend3_gltf::{GltfLoadSettings, GltfSceneInstance};
+use rend3_gltf::{GltfLoadError, GltfLoadSettings, GltfSceneInstance};
 use rend3_routine::skybox::SkyboxRoutine;
 use uuid::Uuid;
 use winit::event_loop::EventLoopProxy;
@@ -18,7 +34,7 @@ use std::time;
 
 use crate::{
     theater::play::backstage::plumbing::asset_loader::{AssetError, AssetLoader, AssetPath},
-    MyEvent, MyWinitEvent,
+    Colliders, MyEvent, MyWinitEvent,
 };
 
 use super::AstinkScene;
@@ -54,15 +70,33 @@ pub(crate) async fn load_stage3d(
 ) {
     let loader = AssetLoader::default();
     let path = format!("{}/{}.glb", directory, name);
-    let ret = Box::new(
-        load_gltf(
-            &renderer,
-            &loader,
-            &gltf_settings,
-            AssetPath::Internal(&path),
-        )
-        .await,
-    );
+    let mut collider_ids = HashMap::new();
+    [
+        "Therac-25",
+        "PortaPotty",
+        "vt100",
+        "pdp11",
+        "Podloga",
+        "Przedzialek",
+        "Sciana1",
+        "Sciana2",
+        "Sciana3",
+        "Sciana4",
+    ]
+    .iter()
+    .for_each(|c| {
+        let k = (*c).to_owned();
+        let v = k.clone();
+        collider_ids.insert(k, v.to_owned());
+    });
+    let ret = load_gltf(
+        &renderer,
+        &loader,
+        &gltf_settings,
+        AssetPath::Internal(&path),
+        collider_ids,
+    )
+    .await;
     let _ = event_loop_proxy.send_event(MyWinitEvent::Stage3D(AstinkScene::Loaded((
         name,
         sc_id,
@@ -100,7 +134,8 @@ pub(crate) async fn load_gltf(
     loader: &AssetLoader,
     settings: &rend3_gltf::GltfLoadSettings,
     location: AssetPath<'_>,
-) -> Option<(rend3_gltf::LoadedGltfScene, GltfSceneInstance)> {
+    collider_ids: HashMap<String, String>,
+) -> Option<(rend3_gltf::LoadedGltfScene, GltfSceneInstance, Colliders)> {
     // profiling::scope!("loading gltf");
     let gltf_start = time::Instant::now();
     let path = loader.get_asset_path(location);
@@ -120,8 +155,7 @@ pub(crate) async fn load_gltf(
     };
 
     let gltf_elapsed = gltf_start.elapsed();
-    let resources_start = time::Instant::now();
-    let (scene, instance) = rend3_gltf::load_gltf(renderer, &gltf_data, settings, |uri| async {
+    let io_func = |uri: SsoString| async {
         if let Some(base64) = rend3_gltf::try_load_base64(&uri) {
             Ok(base64)
         } else {
@@ -130,16 +164,158 @@ pub(crate) async fn load_gltf(
             let full_uri = parent_str.clone() + "/" + uri.as_str();
             loader.get_asset(AssetPath::External(&full_uri)).await
         }
-    })
-    .await
-    .unwrap();
+    };
+    let resources_start = time::Instant::now();
+    let Ok(colliders) = load_colliders_from_gltf(collider_ids, &gltf_data, io_func, settings).await
+    else {
+        panic!("fucked colliders");
+    };
+    info!("built colliders: {:?};", colliders.col_map.keys());
+    let (scene, instance) = rend3_gltf::load_gltf(renderer, &gltf_data, settings, io_func)
+        .await
+        .unwrap();
 
     log::info!(
         "Loaded gltf in {:.3?}, resources loaded in {:.3?}",
         gltf_elapsed,
         resources_start.elapsed()
     );
-    Some((scene, instance))
+    Some((scene, instance, colliders))
+}
+
+pub(crate) async fn load_colliders_from_gltf<F, Fut, E>(
+    collider_ids: HashMap<String, String>,
+    gltf_data: &[u8],
+    io_func: F,
+    settings: &GltfLoadSettings,
+) -> Result<Colliders, GltfLoadError<E>>
+where
+    F: FnMut(SsoString) -> Fut,
+    Fut: Future<Output = Result<Vec<u8>, E>>,
+    E: std::error::Error + 'static,
+{
+    let mut file = gltf::Gltf::from_slice_without_validation(gltf_data)?;
+    let mut out = Colliders {
+        col_map: HashMap::default(),
+    };
+    let blob = file.blob.take();
+    let buffers = rend3_gltf::load_buffers(file.buffers(), blob, io_func).await?;
+    let nodes: Vec<gltf::Node<'_>> = file.nodes().collect();
+    let (topological_order, parents) = node_indices_topological_sort(&nodes);
+    let num_nodes = nodes.len();
+
+    debug_assert_eq!(topological_order.len(), num_nodes);
+
+    let node_transforms = vec![glam::Mat4::IDENTITY; num_nodes];
+    let parent_transform = glam::Mat4::from_scale(glam::Vec3::new(
+        settings.scale,
+        settings.scale,
+        settings.scale,
+    ));
+    for node_idx in topological_order.iter() {
+        let node = &nodes[*node_idx];
+
+        let local_transform = glam::Mat4::from_cols_array_2d(&node.transform().matrix());
+
+        let parent_transform = parents
+            .get(&node.index())
+            .map(|p| node_transforms[*p])
+            .unwrap_or(parent_transform);
+        let transform = parent_transform * local_transform;
+        //node_transforms[*node_idx] = transform;
+        if let Some(m) = node.mesh() {
+            //    for m in file.meshes() {
+            if m.name()
+                .is_some_and(|n| collider_ids.keys().any(|c| c == &n.to_owned()))
+            {
+                let thename = m.name().unwrap();
+                info!("trying to build collider for {}", &thename);
+                for p in m.primitives() {
+                    if p.mode() != gltf::mesh::Mode::Triangles {
+                        return Err(GltfLoadError::UnsupportedPrimitiveMode(
+                            m.index(),
+                            p.index(),
+                            p.mode(),
+                        ));
+                    }
+                    let reader = p.reader(|b| Some(&buffers[b.index()][..b.length()]));
+
+                    let vertex_positions: Vec<_> = reader
+                        .read_positions()
+                        .ok_or_else(|| GltfLoadError::MissingPositions(m.index()))?
+                        .map(Point3::from)
+                        .collect();
+                    //                    info!("vertices {:?}", vertex_positions);
+                    if let Some(indices) = reader.read_indices() {
+                        //                        info!("indices: {:?}", indices);
+                        let mut new_trimesh = parry3d::shape::TriMesh::new(
+                            vertex_positions,
+                            indices.into_u32().array_chunks().collect(),
+                        );
+                        //                        let transform = IsometryMatrix3::new();
+                        let (s, r, t) = transform.to_scale_rotation_translation();
+                        let fff = Isometry3::from_parts(Translation3::new(t.x, t.y, t.z), r.into());
+                        /*
+                        match Isometry3::try_from(transform.as_dmat4()) {
+                            Ok(transform) => {
+                                info!("Actually successfully transformed {}", thename);
+                                new_trimesh.transform_vertices(&transform.cast());
+                            }
+                            Err(e) => {
+                                info!("no transform for {} because {:?}", thename, e);
+                            }
+                        }
+                        */
+                        new_trimesh = new_trimesh.scaled(&Matrix::from(s));
+                        new_trimesh.transform_vertices(&fff);
+
+                        match out.col_map.get_mut(thename) {
+                            Some(oldv) => {
+                                oldv.push(new_trimesh);
+                            }
+                            None => {
+                                out.col_map.insert(thename.to_owned(), vec![new_trimesh]);
+                            }
+                        };
+                    }
+                }
+            }
+        }
+    }
+    Ok(out)
+}
+fn node_indices_topological_sort(nodes: &[gltf::Node]) -> (Vec<usize>, BTreeMap<usize, usize>) {
+    // NOTE: The algorithm uses BTreeMaps to guarantee consistent ordering.
+
+    // Maps parent to list of children
+    let mut children = BTreeMap::<usize, Vec<usize>>::new();
+    for node in nodes {
+        children.insert(node.index(), node.children().map(|n| n.index()).collect());
+    }
+
+    // Maps child to parent
+    let parents: BTreeMap<usize, usize> = children
+        .iter()
+        .flat_map(|(parent, children)| children.iter().map(|ch| (*ch, *parent)))
+        .collect();
+
+    // Initialize the BFS queue with nodes that don't have any parent (i.e. roots)
+    let mut queue: VecDeque<usize> = children
+        .keys()
+        .filter(|n| parents.get(n).is_none())
+        .cloned()
+        .collect();
+
+    let mut topological_sort = Vec::<usize>::new();
+
+    while let Some(n) = queue.pop_front() {
+        topological_sort.push(n);
+        for ch in &children[&n] {
+            queue.push_back(*ch);
+        }
+    }
+
+    (topological_sort, parents)
 }
 
 pub(crate) fn button_pressed<Hash: BuildHasher>(map: &HashMap<u32, bool, Hash>, key: u32) -> bool {

@@ -2,14 +2,15 @@ use std::{collections::HashMap, sync::Arc};
 
 use egui::Context;
 use parking_lot::Mutex;
+use parry3d::bounding_volume::Aabb;
 use rend3::Renderer;
 use tokio::runtime::Runtime;
 use uuid::Uuid;
 use winit::event_loop::EventLoop;
 
-use crate::{theater::basement::cla::GameProgrammeSettings, MyEvent};
+use crate::{theater::basement::cla::GameProgrammeSettings, Colliders, MyEvent};
 
-use self::chorus::Choral;
+use self::{actors::ActressDefinition, chorus::Choral};
 
 use super::{backstage::plumbing::DefaultRoutines, Definitions, Implementations, Playable};
 
@@ -29,7 +30,7 @@ pub struct Camera {
 #[derive(Default)]
 pub struct SceneDefinition {
     pub stage: (String, String),
-    pub actors: Vec<(String, String)>,
+    pub actors: Vec<ActressDefinition>,
     pub props: Vec<(String, String)>,
     pub start_cam: String,
     pub cameras: HashMap<String, CamInfo>,
@@ -48,7 +49,11 @@ pub enum AstinkScene {
         (
             String,
             Uuid,
-            (rend3_gltf::LoadedGltfScene, rend3_gltf::GltfSceneInstance),
+            (
+                rend3_gltf::LoadedGltfScene,
+                rend3_gltf::GltfSceneInstance,
+                Colliders,
+            ),
         ),
     ),
     Loading,

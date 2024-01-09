@@ -15,7 +15,13 @@ use crate::{
     },
     MyEvent, MyWinitEvent,
 };
-
+#[derive(Clone, Debug)]
+pub struct ActressDefinition {
+    pub name: String,
+    pub directory: String,
+    pub transform: glam::Mat4,
+    pub size: f32,
+}
 pub struct Actress {
     pub sprite_object_handle: rend3::types::ObjectHandle,
     pub texture_wgpu: wgpu::Texture,
@@ -37,6 +43,7 @@ pub(crate) fn draw_actor(a: Arc<Mutex<AstinkSprite>>, renderer: Arc<Renderer>, t
     // animate puppet
     {
         let puppet = &mut actress.inox_model.puppet;
+
         puppet.begin_set_params();
 
         puppet.set_param("Head:: Yaw-Pitch", vec2(t.cos(), t.sin()));
@@ -80,11 +87,13 @@ pub(crate) async fn create_actor(
     directory: String,
     renderer: Arc<Renderer>,
     event_loop_proxy: EventLoopProxy<MyEvent>,
+    transform: glam::Mat4,
+    size: f32,
     sc_id: Uuid,
 ) {
     let path = format!("{}/{}.inp", &directory, name);
     let format = TextureFormat::Bgra8Unorm;
-    let texture_size_uvec2 = uvec2(4096, 4096); // we no longer care about the surface size for the sprite texture
+    let texture_size_uvec2 = uvec2(8192, 8192); // we no longer care about the surface size for the sprite texture
 
     let texture_size = wgpu::Extent3d {
         width: texture_size_uvec2.x,
@@ -103,7 +112,7 @@ pub(crate) async fn create_actor(
         texture_size_uvec2,
     );
 
-    inox_renderer.camera.scale = Vec2::splat(0.15);
+    inox_renderer.camera.scale = Vec2::splat(1.0);
 
     let inox_texture_descriptor = wgpu::TextureDescriptor {
         size: texture_size,
@@ -136,7 +145,7 @@ pub(crate) async fn create_actor(
     let inox_texture_rend3_handle = renderer.add_texture_2d(inox_texture_rend3).unwrap();
 
     // Create mesh and calculate smooth normals based on vertices
-    let sprite_mesh = create_quad(30.0);
+    let sprite_mesh = create_quad(size);
     // Add mesh to renderer's world.
     //
     // All handles are refcounted, so we only need to hang onto the handle until we
@@ -153,11 +162,7 @@ pub(crate) async fn create_actor(
     let sprite_object = rend3::types::Object {
         mesh_kind: rend3::types::ObjectMeshKind::Static(sprite_mesh_handle),
         material: sprite_material_handle.clone(),
-        transform: glam::Mat4::from_scale_rotation_translation(
-            glam::Vec3::new(1.0, 1.0, 1.0),
-            glam::Quat::from_euler(glam::EulerRot::XYZ, 0.0, 0.0, 0.0),
-            glam::Vec3::new(0.0, 0.0, 0.0),
-        ),
+        transform,
     };
 
     // Creating an object will hold onto both the mesh and the material

@@ -363,6 +363,7 @@ dependencies = [
  "enum_dispatch",
  "env_logger",
  "glam",
+ "gltf",
  "gluon",
  "image",
  "indoc",

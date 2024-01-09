@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, f32::consts::PI, sync::Arc};
 
 use crate::{
     theater::{
@@ -9,7 +9,7 @@ use crate::{
                 pyrotechnics::kinetic_narrative::{Gay, KineticEffect, KineticLabel, ShakeLetters},
             },
             scene::{
-                actors::{create_actor, AstinkSprite},
+                actors::{create_actor, ActressDefinition, AstinkSprite},
                 stage3d::{load_stage3d, make_camera},
                 AstinkScene, CamInfo, SceneDefinition, SceneImplementation,
             },
@@ -30,6 +30,8 @@ const VT100_CAM_INFO: [f32; 5] = [-5.068789, 1.3310424, -3.6215494, -0.31070346,
 const THERAC_CAM_INFO: [f32; 5] = [-2.580962, 2.8690546, 2.878742, -0.27470315, 5.620602];
 const TOITOI_CAM_INFO: [f32; 5] = [-6.814362, 2.740766, 0.7109763, -0.17870337, 0.0073876693];
 const OVERVIEW_CAM_INFO: [f32; 5] = [-6.217338, 3.8491437, 5.883971, -0.40870047, 5.76257];
+const PDP11_WITH_MIDORI_CAM_INFO: [f32; 5] =
+    [-3.7894087, 3.8481617, 0.3033728, -0.29471007, 6.2545333];
 
 //#[add_common_playable_fields] // this is not worth the stupid RA errors
 #[derive(Default, Scenic, Choral)]
@@ -45,15 +47,27 @@ pub struct LinacLabScene {
 
 impl LinacLabScene {
     fn define(&mut self) {
+        let next_to_pdp11 = glam::Mat4::from_scale_rotation_translation(
+            glam::Vec3::new(1.0, 1.0, 1.0),
+            glam::Quat::from_euler(glam::EulerRot::XYZ, 0., PI, 0.0),
+            glam::Vec3::new(-2.0586073, 1.5, -4.085335),
+        );
         self.uuid = uuid!("517e70e9-9f6d-48fe-a685-e24482d6d409");
+        let midori = ActressDefinition {
+            name: "Midori".to_owned(),
+            directory: "assets/inochi2d-models".to_owned(),
+            transform: next_to_pdp11,
+            size: 5.0,
+        };
         self.definition = Definitions::SceneDefinition(SceneDefinition {
             stage: ("LinacLab".to_owned(), "assets/gltf_scenes".to_owned()),
-            actors: vec![("Midori".to_owned(), "assets/inochi2d-models".to_owned())],
+            actors: vec![midori],
             props: vec![("fried_egg".to_owned(), "lfs_scam/props".to_owned())],
             start_cam: "overview".to_owned(),
             cameras: vec![
                 ("overview".to_owned(), OVERVIEW_CAM_INFO),
                 ("pdp11".to_owned(), PDP11_CAM_INFO),
+                ("pdp11+midori".to_owned(), PDP11_WITH_MIDORI_CAM_INFO),
                 ("vt100".to_owned(), VT100_CAM_INFO),
                 ("therac".to_owned(), THERAC_CAM_INFO),
                 ("toitoi".to_owned(), TOITOI_CAM_INFO),
@@ -121,7 +135,7 @@ impl LinacLabScene {
         let scene1_stage3d = AstinkScene::Loading;
 
         let mut scene1_actor_impls = HashMap::new();
-        for (name, _) in definition.actors.clone() {
+        for ActressDefinition { name, .. } in definition.actors.clone() {
             scene1_actor_impls.insert(name.clone(), AstinkSprite::Loading);
         }
         let scene1_implementation = SceneImplementation {
@@ -133,12 +147,27 @@ impl LinacLabScene {
 
         self.implementation = Some(Implementations::SceneImplementation(scene1_implementation));
         let scene1_actors = definition.actors.clone();
-        for (name, directory) in scene1_actors {
+        for ActressDefinition {
+            name,
+            directory,
+            transform,
+            size,
+        } in scene1_actors
+        {
             let renderer = Arc::clone(&renderer);
             let event_loop_proxy = event_loop.create_proxy();
             let name = name.to_owned();
             rts.spawn(async move {
-                create_actor(name, directory, renderer, event_loop_proxy, scene1_uuid).await
+                create_actor(
+                    name,
+                    directory,
+                    renderer,
+                    event_loop_proxy,
+                    transform,
+                    size,
+                    scene1_uuid,
+                )
+                .await
             });
         }
 
