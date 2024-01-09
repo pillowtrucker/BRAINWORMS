@@ -60,6 +60,7 @@ impl Default for Definitions {
         Definitions::SceneDefinition(SceneDefinition::default())
     }
 }
+#[allow(clippy::large_enum_variant)]
 pub enum Implementations {
     SceneImplementation(SceneImplementation),
     BogusImplementation,
