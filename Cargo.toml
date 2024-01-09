@@ -60,6 +60,7 @@ rust-embed = "8.2.0" # Enable shader hot reload for native compilation.
 enum_dispatch = "0.3.12"
 parry3d = "0.13"
 nalgebra = {version = "0.32", features = ["convert-glam024"]}
+gltf = { version = "1.0", default-features = false, features = ["KHR_lights_punctual", "KHR_texture_transform", "KHR_materials_unlit", "extras", "names", "utils"] }
 proc_macros = {path = "./proc-macros"}
 [[bin]]
 name = "brainworms"
