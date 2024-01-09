@@ -447,7 +447,6 @@ impl GameProgramme {
                     println!("ray_world: {ray_wor}");
                     let rayman = Ray::new(Point3::new(cam_x, cam_y, cam_z), ray_wor.into());
 
-                    /* this wouldnt work
                     if let Implementations::SceneImplementation(sc_imp) = data
                         .play
                         .playables
@@ -458,7 +457,54 @@ impl GameProgramme {
                         .as_mut()
                         .unwrap()
                     {
+                        const MAX_TOI: f32 = 100000.0;
                         if let AstinkScene::Loaded(stage3d) = &sc_imp.stage3d {
+                            for (c_name, colliders) in stage3d.2 .2.iter() {
+                                for c in colliders {
+                                    if let Some(toi) = c.cast_local_ray(&rayman, MAX_TOI, true) {
+                                        let intersection = rayman.point_at(toi);
+
+                                        if Point3::from([cam_x, cam_y, cam_z]) != intersection {
+                                            println!(
+                                                "{} intersects mouse ray at {}",
+                                                c_name, intersection
+                                            );
+                                            let line = draw_line(vec![
+                                                [cam_x, cam_y, cam_z],
+                                                [intersection.x, intersection.y, intersection.z],
+                                            ]);
+                                            let line_mesh_handle = renderer.add_mesh(line).unwrap();
+
+                                            let line_mesh_material_handle = renderer.add_material(
+                                                rend3_routine::pbr::PbrMaterial::default(),
+                                            );
+                                            let line_mesh_object = rend3::types::Object {
+                                                mesh_kind: rend3::types::ObjectMeshKind::Static(
+                                                    line_mesh_handle,
+                                                ),
+                                                material: line_mesh_material_handle,
+                                                transform:
+                                                    glam::Mat4::from_scale_rotation_translation(
+                                                        glam::Vec3::new(1.0, 1.0, 1.0),
+                                                        glam::Quat::from_euler(
+                                                            glam::EulerRot::XYZ,
+                                                            0.0,
+                                                            0.0,
+                                                            0.0,
+                                                        ),
+                                                        glam::Vec3::new(0.0, 0.0, 0.0),
+                                                    ),
+                                            };
+                                            Box::leak(Box::new(
+                                                renderer.add_object(line_mesh_object),
+                                            ));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    /* this wouldnt work
                             let scdata = &stage3d.2;
 
                             for humpf in &scdata.1.topological_order {
