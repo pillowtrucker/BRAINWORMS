@@ -4,7 +4,6 @@
 use std::{
     collections::{BTreeMap, HashMap, VecDeque},
     future::Future,
-    hash::BuildHasher,
     path::Path,
     sync::Arc,
 };
@@ -290,9 +289,6 @@ fn node_indices_topological_sort(nodes: &[gltf::Node]) -> (Vec<usize>, BTreeMap<
     (topological_sort, parents)
 }
 
-pub(crate) fn button_pressed<Hash: BuildHasher>(map: &HashMap<u32, bool, Hash>, key: u32) -> bool {
-    map.get(&key).map_or(false, |b| *b)
-}
 pub fn make_camera(
     (name, cam_attributes @ [x, y, z, pitch, yaw]): (String, [f32; 5]),
 ) -> super::Camera {

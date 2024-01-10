@@ -4,16 +4,12 @@ use glam::{DVec2, Mat3A, Vec3, Vec3A};
 use pico_args::Arguments;
 use rend3::{
     types::{DirectionalLightHandle, Handedness, SampleCount},
-    util::typedefs::FastHashMap,
     RendererProfile,
 };
 use rend3_routine::pbr::NormalTextureYDirection;
 use wgpu::Backend;
 use wgpu_profiler::GpuTimerScopeResult;
-use winit::{
-    event::{ElementState, MouseButton},
-    keyboard::{Key, KeyCode, PhysicalKey},
-};
+use winit::{event::MouseButton, keyboard::KeyCode};
 
 use super::{
     grab::Grabber,

@@ -2,11 +2,9 @@
 mod the_great_mind_palace_of_theatrical_arts;
 use egui::{Color32, TextStyle, Visuals};
 
-use glam::{vec3, vec4, Mat3A, Vec3};
+use glam::Vec3;
 use log::info;
-use nalgebra::Point3;
 use parking_lot::Mutex;
-use parry3d::query::{Ray, RayCast};
 use rend3::types::DirectionalLight;
 
 use uuid::Uuid;
@@ -18,14 +16,13 @@ use the_great_mind_palace_of_theatrical_arts as theater;
 use theater::{
     basement::{
         cla::GameProgrammeSettings, frame_rate::FrameRate, grab::Grabber, logging::register_logger,
-        platform_scancodes::Scancodes,
     },
     play::{
         backstage::plumbing::{start, DefaultRoutines, StoredSurfaceInfo},
         definition::define_play,
         scene::{
             actors::AstinkSprite,
-            stage3d::{button_pressed, load_skybox, lock, update_camera_mouse_params},
+            stage3d::{load_skybox, lock, update_camera_mouse_params},
             AstinkScene,
         },
         Definitions, Play, Playable,
@@ -33,10 +30,9 @@ use theater::{
 };
 use winit::{
     dpi::PhysicalPosition,
-    event::{DeviceEvent, ElementState, KeyEvent, MouseButton, WindowEvent},
+    event::{DeviceEvent, KeyEvent, WindowEvent},
     event_loop::{ControlFlow, EventLoopWindowTarget},
-    keyboard::{KeyCode, PhysicalKey},
-    platform::scancode::PhysicalKeyExtScancode,
+    keyboard::PhysicalKey,
     window::{Fullscreen, WindowBuilder},
 };
 
@@ -45,14 +41,9 @@ use crate::theater::{
         frame_rate::update_frame_stats,
         input_handling::{handle_input, AcceptedInputs},
     },
-    play::{
-        scene::{
-            actors::draw_actor,
-            stage3d::{
-                compute_projection_matrix, do_update_camera, make_camera, update_camera_rotation,
-            },
-        },
-        Implementations,
+    play::scene::{
+        actors::draw_actor,
+        stage3d::{do_update_camera, update_camera_rotation},
     },
 };
 

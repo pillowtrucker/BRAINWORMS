@@ -164,11 +164,8 @@ pub fn handle_input(
             grabber.request_grab(window);
         }
     }
-    for (k, v) in settings.input_status.iter() {
-        if !v.is_pressed() {
-            settings.input_status.remove(k).unwrap();
-        }
-    }
+
+    settings.input_status.retain(|_, v| v.is_pressed());
 }
 #[derive(Debug, Hash, Eq, PartialEq)]
 pub enum LogicalInputBinding {
