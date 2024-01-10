@@ -1,15 +1,24 @@
-use glam::{DVec2, Vec3, Vec3A};
+use std::collections::HashMap;
+
+use glam::{DVec2, Mat3A, Vec3, Vec3A};
 use pico_args::Arguments;
 use rend3::{
-    types::{DirectionalLightHandle, SampleCount},
+    types::{DirectionalLightHandle, Handedness, SampleCount},
     util::typedefs::FastHashMap,
     RendererProfile,
 };
 use rend3_routine::pbr::NormalTextureYDirection;
 use wgpu::Backend;
 use wgpu_profiler::GpuTimerScopeResult;
+use winit::{
+    event::{ElementState, MouseButton},
+    keyboard::{Key, KeyCode, PhysicalKey},
+};
 
-use super::grab::Grabber;
+use super::{
+    grab::Grabber,
+    input_handling::{AcceptedInputs, KeyBindings, KeyStates, LogicalInputBinding as LIB},
+};
 
 const HELP: &str = "\
 scene-viewer
@@ -152,13 +161,16 @@ pub struct GameProgrammeSettings {
     pub present_mode: rend3::types::PresentMode,
     pub samples: SampleCount,
     pub fullscreen: bool,
-    pub scancode_status: FastHashMap<u32, bool>,
+    pub input_status: KeyStates,
     pub camera_pitch: f32,
     pub camera_yaw: f32,
     pub camera_location: Vec3A,
     pub previous_profiling_stats: Option<Vec<GpuTimerScopeResult>>,
     pub last_mouse_delta: Option<DVec2>,
     pub grabber: Option<Grabber>,
+    pub rotation: Mat3A,
+    pub keybindings: KeyBindings,
+    pub handedness: Handedness,
 }
 impl Default for GameProgrammeSettings {
     fn default() -> Self {
@@ -271,7 +283,23 @@ impl GameProgrammeSettings {
         }
 
         gltf_settings.directional_light_resolution = shadow_resolution;
-
+        let mut keybindings = KeyBindings::from(
+            [
+                (LIB::Sprint, KeyCode::ShiftLeft),
+                (LIB::Forwards, KeyCode::KeyW),
+                (LIB::Backwards, KeyCode::KeyS),
+                (LIB::StrafeLeft, KeyCode::KeyA),
+                (LIB::StrafeRight, KeyCode::KeyD),
+                (LIB::LiftUp, KeyCode::KeyQ),
+                (LIB::Interact, KeyCode::Period),
+                (LIB::Back, KeyCode::Escape),
+                (LIB::DebugProfiling, KeyCode::KeyP),
+            ]
+            .map(|(lb, kc)| (lb, AcceptedInputs::KB(kc))),
+        );
+        for (lb, mb) in [(LIB::GrabWindow, MouseButton::Left)] {
+            keybindings.insert(lb, AcceptedInputs::M(mb));
+        }
         Self {
             absolute_mouse,
             desired_backend,
@@ -287,7 +315,7 @@ impl GameProgrammeSettings {
             present_mode,
             samples,
             fullscreen,
-            scancode_status: FastHashMap::default(),
+            input_status: HashMap::new(),
             camera_pitch: camera_info[3],
             camera_yaw: camera_info[4],
             camera_location: Vec3A::new(camera_info[0], camera_info[1], camera_info[2]),
@@ -296,6 +324,14 @@ impl GameProgrammeSettings {
             last_mouse_delta: None,
 
             grabber: None,
+            rotation: glam::Mat3A::from_euler(
+                glam::EulerRot::XYZ,
+                -camera_info[3],
+                -camera_info[4],
+                0.0,
+            ),
+            keybindings,
+            handedness: Handedness::Right,
         }
     }
 }

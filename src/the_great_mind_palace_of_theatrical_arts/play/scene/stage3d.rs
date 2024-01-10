@@ -228,9 +228,8 @@ where
                         .ok_or_else(|| GltfLoadError::MissingPositions(m.index()))?
                         .map(Point3::from)
                         .collect();
-                    //                    info!("vertices {:?}", vertex_positions);
+
                     if let Some(indices) = reader.read_indices() {
-                        //                        info!("indices: {:?}", indices);
                         let mut new_trimesh = parry3d::shape::TriMesh::new(
                             vertex_positions,
                             indices.into_u32().array_chunks().collect(),
@@ -238,17 +237,7 @@ where
                         //                        let transform = IsometryMatrix3::new();
                         let (s, r, t) = transform.to_scale_rotation_translation();
                         let fff = Isometry3::from_parts(Translation3::new(t.x, t.y, t.z), r.into());
-                        /*
-                        match Isometry3::try_from(transform.as_dmat4()) {
-                            Ok(transform) => {
-                                info!("Actually successfully transformed {}", thename);
-                                new_trimesh.transform_vertices(&transform.cast());
-                            }
-                            Err(e) => {
-                                info!("no transform for {} because {:?}", thename, e);
-                            }
-                        }
-                        */
+
                         new_trimesh = new_trimesh.scaled(&Matrix::from(s));
                         new_trimesh.transform_vertices(&fff);
 
@@ -399,7 +388,11 @@ pub fn do_update_camera(settings: &GameProgrammeSettings, renderer: &&Arc<rend3:
         view,
     });
 }
-pub fn update_camera_params(settings: &mut GameProgrammeSettings, delta_x: f64, delta_y: f64) {
+pub fn update_camera_mouse_params(
+    settings: &mut GameProgrammeSettings,
+    delta_x: f64,
+    delta_y: f64,
+) {
     if !settings.grabber.as_ref().unwrap().grabbed() {
         return;
     }
@@ -430,4 +423,14 @@ pub fn update_camera_params(settings: &mut GameProgrammeSettings, delta_x: f64, 
         -std::f32::consts::FRAC_PI_2 + 0.0001,
         std::f32::consts::FRAC_PI_2 - 0.0001,
     )
+}
+
+pub fn update_camera_rotation(settings: &mut GameProgrammeSettings) {
+    settings.rotation = glam::Mat3A::from_euler(
+        glam::EulerRot::XYZ,
+        -settings.camera_pitch,
+        -settings.camera_yaw,
+        0.0,
+    )
+    .transpose();
 }

@@ -2,7 +2,7 @@
 mod the_great_mind_palace_of_theatrical_arts;
 use egui::{Color32, TextStyle, Visuals};
 
-use glam::{vec3, vec4, DVec2, Mat3A, Vec3};
+use glam::{vec3, vec4, Mat3A, Vec3};
 use log::info;
 use nalgebra::Point3;
 use parking_lot::Mutex;
@@ -25,7 +25,7 @@ use theater::{
         definition::define_play,
         scene::{
             actors::AstinkSprite,
-            stage3d::{button_pressed, load_skybox, lock, update_camera_params},
+            stage3d::{button_pressed, load_skybox, lock, update_camera_mouse_params},
             AstinkScene,
         },
         Definitions, Play, Playable,
@@ -35,16 +35,22 @@ use winit::{
     dpi::PhysicalPosition,
     event::{DeviceEvent, ElementState, KeyEvent, MouseButton, WindowEvent},
     event_loop::{ControlFlow, EventLoopWindowTarget},
+    keyboard::{KeyCode, PhysicalKey},
     platform::scancode::PhysicalKeyExtScancode,
     window::{Fullscreen, WindowBuilder},
 };
 
 use crate::theater::{
-    basement::frame_rate::update_frame_stats,
+    basement::{
+        frame_rate::update_frame_stats,
+        input_handling::{handle_input, AcceptedInputs},
+    },
     play::{
         scene::{
             actors::draw_actor,
-            stage3d::{compute_projection_matrix, do_update_camera, make_camera},
+            stage3d::{
+                compute_projection_matrix, do_update_camera, make_camera, update_camera_rotation,
+            },
         },
         Implementations,
     },
@@ -80,8 +86,6 @@ pub enum MyWinitEvent<TS, TA: 'static> {
 }
 
 impl GameProgramme {
-    const HANDEDNESS: rend3::types::Handedness = rend3::types::Handedness::Right;
-
     pub async fn async_start(mut self, window_builder: WindowBuilder) {
         let iad = self.create_iad().await.unwrap();
 
@@ -104,7 +108,7 @@ impl GameProgramme {
         };
         let renderer = rend3::Renderer::new(
             iad.clone(),
-            Self::HANDEDNESS,
+            self.settings.handedness,
             Some(window_size.width as f32 / window_size.height as f32),
         )
         .unwrap();
@@ -359,141 +363,8 @@ impl GameProgramme {
             Event::AboutToWait => {
                 profiling::scope!("MainEventsCleared");
 
-                let rotation = Mat3A::from_euler(
-                    glam::EulerRot::XYZ,
-                    -self.settings.camera_pitch,
-                    -self.settings.camera_yaw,
-                    0.0,
-                )
-                .transpose();
-                let forward = -rotation.z_axis;
-                let up = rotation.y_axis;
-                let side = -rotation.x_axis;
-                let velocity = if button_pressed(&self.settings.scancode_status, Scancodes::SHIFT) {
-                    self.settings.run_speed
-                } else {
-                    self.settings.walk_speed
-                };
-                if button_pressed(&self.settings.scancode_status, Scancodes::W) {
-                    self.settings.camera_location +=
-                        forward * velocity * data.last_update.elapsed().as_secs_f32();
-                }
-                if button_pressed(&self.settings.scancode_status, Scancodes::S) {
-                    self.settings.camera_location -=
-                        forward * velocity * data.last_update.elapsed().as_secs_f32();
-                }
-                if button_pressed(&self.settings.scancode_status, Scancodes::A) {
-                    self.settings.camera_location +=
-                        side * velocity * data.last_update.elapsed().as_secs_f32();
-                }
-                if button_pressed(&self.settings.scancode_status, Scancodes::D) {
-                    self.settings.camera_location -=
-                        side * velocity * data.last_update.elapsed().as_secs_f32();
-                }
-                if button_pressed(&self.settings.scancode_status, Scancodes::Q) {
-                    self.settings.camera_location +=
-                        up * velocity * data.last_update.elapsed().as_secs_f32();
-                }
-                if button_pressed(&self.settings.scancode_status, Scancodes::PERIOD) {
-                    let cam_x = self.settings.camera_location.x;
-                    let cam_y = self.settings.camera_location.y;
-                    let cam_z = self.settings.camera_location.z;
-                    let cam_pitch = self.settings.camera_pitch;
-                    let cam_yaw = self.settings.camera_yaw;
-                    println!("{cam_x},{cam_y},{cam_z},{cam_pitch},{cam_yaw}",);
-                    println!(
-                        "mouse at {},{}",
-                        data.mouse_physical_poz.x, data.mouse_physical_poz.y
-                    );
-                    let win_w = window.inner_size().width as f64;
-                    let win_h = window.inner_size().height as f64;
-                    let mouse_x = data.mouse_physical_poz.x;
-                    let mouse_y = data.mouse_physical_poz.y;
-                    let x = (2.0 * mouse_x) / win_w - 1.0;
-
-                    let y = 1.0 - (2.0 * mouse_y) / win_h;
-                    let z = 1.0;
-                    let ray_nds = vec3(x as f32, y as f32, z as f32);
-                    println!("ray_nds: {ray_nds}");
-                    let ray_clip = vec4(ray_nds.x, ray_nds.y, -1.0, 1.0);
-                    let cur_camera =
-                        make_camera(("".to_owned(), [cam_x, cam_y, cam_z, cam_pitch, cam_yaw]));
-                    let ray_eye = compute_projection_matrix(
-                        cur_camera.renderer_camera,
-                        Self::HANDEDNESS,
-                        (win_w / win_h) as f32,
-                    )
-                    .inverse()
-                        * ray_clip;
-                    let ray_eye = vec4(ray_eye.x, ray_eye.y, -1.0, 0.0);
-                    println!("ray_eye: {ray_eye}");
-                    let ray_wor4 = cur_camera.renderer_camera.view.inverse() * ray_eye;
-                    let ray_wor = vec3(ray_wor4.x, ray_wor4.y, ray_wor4.z);
-                    let ray_wor = ray_wor.normalize();
-                    println!("ray_world: {ray_wor}");
-                    let rayman = Ray::new(Point3::new(cam_x, cam_y, cam_z), ray_wor.into());
-
-                    if let Implementations::SceneImplementation(sc_imp) = data
-                        .play
-                        .playables
-                        .get_mut(data.current_playable.as_ref().unwrap())
-                        .as_mut()
-                        .unwrap()
-                        .playable_implementation()
-                        .as_mut()
-                        .unwrap()
-                    {
-                        const MAX_TOI: f32 = 100000.0;
-                        if let AstinkScene::Loaded(stage3d) = &sc_imp.stage3d {
-                            for (c_name, colliders) in stage3d.2 .2.col_map.iter() {
-                                for c in colliders {
-                                    if let Some(toi) = c.cast_local_ray(&rayman, MAX_TOI, true) {
-                                        let intersection = rayman.point_at(toi);
-                                        let cam_point = Point3::from([cam_x, cam_y, cam_z]);
-                                        if cam_point != intersection {
-                                            println!(
-                                                "{} intersects mouse ray at {}",
-                                                c_name, intersection
-                                            );
-                                            #[cfg(extra_debugging)]
-                                            {
-                                                theater::basement::debug_profiling_etc::draw_debug_mouse_picking_doodad(
-                                                    theater::basement::debug_profiling_etc::DebugPickingDoodad::TheRay,
-                                                    &cam_point,
-                                                    &intersection,
-                                                    &renderer,
-                                                    Self::HANDEDNESS,
-                                                    c,
-                                                );
-                                                theater::basement::debug_profiling_etc::draw_debug_mouse_picking_doodad(
-                                                    theater::basement::debug_profiling_etc::DebugPickingDoodad::TheColliderShape,
-                                                    &cam_point,
-                                                    &intersection,
-                                                    &renderer,
-                                                    Self::HANDEDNESS,
-                                                    c,
-                                                );
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                if button_pressed(&self.settings.scancode_status, Scancodes::ESCAPE) {
-                    self.settings
-                        .grabber
-                        .as_mut()
-                        .unwrap()
-                        .request_ungrab(window);
-                }
-
-                if button_pressed(&self.settings.scancode_status, Scancodes::P) {
-                    #[cfg(extra_debugging)]
-                    theater::basement::debug_profiling_etc::write_profiling_json(&self.settings);
-                }
+                update_camera_rotation(&mut self.settings);
+                handle_input(&mut self.settings, data, window);
                 window.request_redraw();
             }
             Event::WindowEvent { event, .. } => {
@@ -517,33 +388,21 @@ impl GameProgramme {
                     WindowEvent::KeyboardInput {
                         event:
                             KeyEvent {
-                                physical_key,
+                                physical_key: PhysicalKey::Code(key_code),
                                 state,
                                 ..
                             },
                         ..
                     } => {
-                        let scancode = PhysicalKeyExtScancode::to_scancode(physical_key).unwrap();
-
-                        log::debug!("WE scancode {:x}", scancode);
-                        self.settings.scancode_status.insert(
-                            scancode,
-                            match state {
-                                ElementState::Pressed => true,
-                                ElementState::Released => false,
-                            },
-                        );
+                        log::debug!("pressed {:?}", key_code);
+                        self.settings
+                            .input_status
+                            .insert(AcceptedInputs::KB(key_code), state);
                     }
-                    WindowEvent::MouseInput {
-                        button: MouseButton::Left,
-                        state: ElementState::Pressed,
-                        ..
-                    } => {
-                        let grabber = self.settings.grabber.as_mut().unwrap();
-
-                        if !grabber.grabbed() {
-                            grabber.request_grab(window);
-                        }
+                    WindowEvent::MouseInput { button, state, .. } => {
+                        self.settings
+                            .input_status
+                            .insert(AcceptedInputs::M(button), state);
                     }
                     WindowEvent::CursorMoved {
                         device_id: _,
@@ -563,7 +422,7 @@ impl GameProgramme {
                     },
                 ..
             } => {
-                update_camera_params(&mut self.settings, delta_x, delta_y);
+                update_camera_mouse_params(&mut self.settings, delta_x, delta_y);
             }
             Event::UserEvent(MyWinitEvent::Stage3D(AstinkScene::Loaded((name, sc_id, scdata)))) => {
                 info!(
