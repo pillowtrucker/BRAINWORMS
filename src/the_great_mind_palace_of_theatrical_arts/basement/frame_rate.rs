@@ -1,3 +1,5 @@
+use std::time;
+
 /// Sliding window to give a smooth framerate.
 /// Sum the last `window_size` `frame_duration` to estimate the framerate.
 /// Implemented with a circular buffer.
@@ -47,4 +49,11 @@ impl Default for FrameRate {
     fn default() -> Self {
         Self::new(20)
     }
+}
+
+pub fn update_frame_stats(data: &mut crate::GameProgrammeData) {
+    let last_frame_duration = data.last_update.elapsed().as_secs_f32();
+    data.elapsed += last_frame_duration;
+    data.frame_rate.update(last_frame_duration);
+    data.last_update = time::Instant::now();
 }

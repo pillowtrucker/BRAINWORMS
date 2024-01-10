@@ -2,16 +2,16 @@
 mod the_great_mind_palace_of_theatrical_arts;
 use egui::{Color32, TextStyle, Visuals};
 
-use glam::{vec3, vec4, DVec2, Mat3A, Mat4, Vec3};
+use glam::{vec3, vec4, DVec2, Mat3A, Vec3};
 use log::info;
 use nalgebra::Point3;
 use parking_lot::Mutex;
 use parry3d::query::{Ray, RayCast};
-use rend3::types::{Camera, CameraProjection, DirectionalLight};
+use rend3::types::DirectionalLight;
 
 use uuid::Uuid;
 
-use std::{path::Path, sync::Arc, time};
+use std::{sync::Arc, time};
 use wgpu::TextureFormat;
 
 use the_great_mind_palace_of_theatrical_arts as theater;
@@ -25,7 +25,7 @@ use theater::{
         definition::define_play,
         scene::{
             actors::AstinkSprite,
-            stage3d::{button_pressed, load_skybox, lock},
+            stage3d::{button_pressed, load_skybox, lock, update_camera_params},
             AstinkScene,
         },
         Definitions, Play, Playable,
@@ -39,12 +39,15 @@ use winit::{
     window::{Fullscreen, WindowBuilder},
 };
 
-use crate::theater::play::{
-    scene::{
-        actors::draw_actor,
-        stage3d::{compute_projection_matrix, make_camera},
+use crate::theater::{
+    basement::frame_rate::update_frame_stats,
+    play::{
+        scene::{
+            actors::draw_actor,
+            stage3d::{compute_projection_matrix, do_update_camera, make_camera},
+        },
+        Implementations,
     },
-    Implementations,
 };
 
 pub struct GameProgrammeData {
@@ -240,28 +243,11 @@ impl GameProgramme {
                 window_id: _,
                 event: WindowEvent::RedrawRequested,
             } => {
-                let last_frame_duration = data.last_update.elapsed().as_secs_f32();
-                data.elapsed += last_frame_duration;
-                data.frame_rate.update(last_frame_duration);
-                data.last_update = time::Instant::now();
+                update_frame_stats(data);
+                do_update_camera(&self.settings, &renderer);
 
-                let view = Mat4::from_euler(
-                    glam::EulerRot::XYZ,
-                    -self.settings.camera_pitch,
-                    -self.settings.camera_yaw,
-                    0.0,
-                );
-                let view = view * Mat4::from_translation((-self.settings.camera_location).into());
                 // Get a frame
                 let frame = surface.unwrap().get_current_texture().unwrap();
-
-                renderer.set_camera_data(Camera {
-                    projection: CameraProjection::Perspective {
-                        vfov: 60.0,
-                        near: 0.1,
-                    },
-                    view,
-                });
 
                 data.egui_ctx
                     .begin_frame(data.platform.take_egui_input(window));
@@ -463,83 +449,30 @@ impl GameProgramme {
                                 for c in colliders {
                                     if let Some(toi) = c.cast_local_ray(&rayman, MAX_TOI, true) {
                                         let intersection = rayman.point_at(toi);
-
-                                        if Point3::from([cam_x, cam_y, cam_z]) != intersection {
+                                        let cam_point = Point3::from([cam_x, cam_y, cam_z]);
+                                        if cam_point != intersection {
                                             println!(
                                                 "{} intersects mouse ray at {}",
                                                 c_name, intersection
                                             );
                                             #[cfg(extra_debugging)]
                                             {
-                                                let line = draw_line(vec![
-                                                    [cam_x, cam_y, cam_z],
-                                                    [
-                                                        intersection.x,
-                                                        intersection.y,
-                                                        intersection.z,
-                                                    ],
-                                                ]);
-                                                let line_mesh_handle =
-                                                    renderer.add_mesh(line).unwrap();
-
-                                                let line_mesh_material_handle = renderer
-                                                    .add_material(
-                                                        rend3_routine::pbr::PbrMaterial::default(),
-                                                    );
-                                                let col_mesh_material_handle =
-                                                    line_mesh_material_handle.clone();
-                                                let line_mesh_object = rend3::types::Object {
-                                                    mesh_kind: rend3::types::ObjectMeshKind::Static(
-                                                        line_mesh_handle,
-                                                    ),
-                                                    material: line_mesh_material_handle,
-                                                    transform:
-                                                        glam::Mat4::from_scale_rotation_translation(
-                                                            glam::Vec3::new(1.0, 1.0, 1.0),
-                                                            glam::Quat::from_euler(
-                                                                glam::EulerRot::XYZ,
-                                                                0.0,
-                                                                0.0,
-                                                                0.0,
-                                                            ),
-                                                            glam::Vec3::new(0.0, 0.0, 0.0),
-                                                        ),
-                                                };
-                                                let col_mesh = rend3::types::MeshBuilder::new(
-                                                    c.vertices()
-                                                        .iter()
-                                                        .map(|v| glam::Vec3::new(v.x, v.y, v.z))
-                                                        .collect(),
+                                                theater::basement::debug_profiling_etc::draw_debug_mouse_picking_doodad(
+                                                    theater::basement::debug_profiling_etc::DebugPickingDoodad::TheRay,
+                                                    &cam_point,
+                                                    &intersection,
+                                                    &renderer,
                                                     Self::HANDEDNESS,
-                                                )
-                                                .with_indices(c.flat_indices().into())
-                                                .build()
-                                                .unwrap();
-                                                let col_mesh_handle =
-                                                    renderer.add_mesh(col_mesh).unwrap();
-                                                let col_mesh_object = rend3::types::Object {
-                                                    mesh_kind: rend3::types::ObjectMeshKind::Static(
-                                                        col_mesh_handle,
-                                                    ),
-                                                    material: col_mesh_material_handle,
-                                                    transform:
-                                                        glam::Mat4::from_scale_rotation_translation(
-                                                            glam::Vec3::new(1.0, 1.0, 1.0),
-                                                            glam::Quat::from_euler(
-                                                                glam::EulerRot::XYZ,
-                                                                0.0,
-                                                                0.0,
-                                                                0.0,
-                                                            ),
-                                                            glam::Vec3::new(0.0, 0.0, 0.0),
-                                                        ),
-                                                };
-                                                Box::leak(Box::new(
-                                                    renderer.add_object(col_mesh_object),
-                                                ));
-                                                Box::leak(Box::new(
-                                                    renderer.add_object(line_mesh_object),
-                                                ));
+                                                    c,
+                                                );
+                                                theater::basement::debug_profiling_etc::draw_debug_mouse_picking_doodad(
+                                                    theater::basement::debug_profiling_etc::DebugPickingDoodad::TheColliderShape,
+                                                    &cam_point,
+                                                    &intersection,
+                                                    &renderer,
+                                                    Self::HANDEDNESS,
+                                                    c,
+                                                );
                                             }
                                         }
                                     }
@@ -558,17 +491,8 @@ impl GameProgramme {
                 }
 
                 if button_pressed(&self.settings.scancode_status, Scancodes::P) {
-                    // write out gpu side performance info into a trace readable by chrome://tracing
-                    if let Some(ref stats) = self.settings.previous_profiling_stats {
-                        println!("Outputing gpu timing chrome trace to profile.json");
-                        wgpu_profiler::chrometrace::write_chrometrace(
-                            Path::new("profile.json"),
-                            stats,
-                        )
-                        .unwrap();
-                    } else {
-                        println!("No gpu timing trace available, either timestamp queries are unsupported or not enough frames have elapsed yet!");
-                    }
+                    #[cfg(extra_debugging)]
+                    theater::basement::debug_profiling_etc::write_profiling_json(&self.settings);
                 }
                 window.request_redraw();
             }
@@ -639,37 +563,7 @@ impl GameProgramme {
                     },
                 ..
             } => {
-                if !self.settings.grabber.as_ref().unwrap().grabbed() {
-                    return;
-                }
-
-                const TAU: f32 = std::f32::consts::PI * 2.0;
-
-                let mouse_delta = if self.settings.absolute_mouse {
-                    let prev = self
-                        .settings
-                        .last_mouse_delta
-                        .replace(DVec2::new(delta_x, delta_y));
-                    if let Some(prev) = prev {
-                        (DVec2::new(delta_x, delta_y) - prev) / 4.0
-                    } else {
-                        return;
-                    }
-                } else {
-                    DVec2::new(delta_x, delta_y)
-                };
-
-                self.settings.camera_yaw -= (mouse_delta.x / 1000.0) as f32;
-                self.settings.camera_pitch -= (mouse_delta.y / 1000.0) as f32;
-                if self.settings.camera_yaw < 0.0 {
-                    self.settings.camera_yaw += TAU;
-                } else if self.settings.camera_yaw >= TAU {
-                    self.settings.camera_yaw -= TAU;
-                }
-                self.settings.camera_pitch = self.settings.camera_pitch.clamp(
-                    -std::f32::consts::FRAC_PI_2 + 0.0001,
-                    std::f32::consts::FRAC_PI_2 - 0.0001,
-                )
+                update_camera_params(&mut self.settings, delta_x, delta_y);
             }
             Event::UserEvent(MyWinitEvent::Stage3D(AstinkScene::Loaded((name, sc_id, scdata)))) => {
                 info!(

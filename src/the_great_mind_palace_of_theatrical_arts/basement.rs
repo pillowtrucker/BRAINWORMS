@@ -1,4 +1,6 @@
 pub mod cla;
+#[cfg(extra_debugging)]
+pub mod debug_profiling_etc;
 pub mod frame_rate;
 pub mod grab;
 pub mod logging;

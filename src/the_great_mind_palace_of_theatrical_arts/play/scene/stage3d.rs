@@ -30,7 +30,10 @@ use winit::event_loop::EventLoopProxy;
 use std::time;
 
 use crate::{
-    theater::play::backstage::plumbing::asset_loader::{AssetError, AssetLoader, AssetPath},
+    theater::{
+        basement::cla::GameProgrammeSettings,
+        play::backstage::plumbing::asset_loader::{AssetError, AssetLoader, AssetPath},
+    },
     MyEvent, MyWinitEvent,
 };
 
@@ -345,7 +348,7 @@ pub(crate) fn compute_projection_matrix(
         CameraProjection::Raw(proj) => proj,
     }
 }
-
+#[cfg(extra_debugging)]
 pub fn draw_line(points: Vec<[f32; 3]>) -> rend3::types::Mesh {
     const WIDTH: f32 = 0.5;
     let mut vertices: Vec<glam::Vec3> = Vec::new();
@@ -376,4 +379,55 @@ pub fn draw_line(points: Vec<[f32; 3]>) -> rend3::types::Mesh {
         .with_indices(indices)
         .build()
         .unwrap()
+}
+
+// I want to use ! for side effect dings but of course rust had a different idea so I will use the prefix do_ to distinguish do_update_camera as "update the actual camera view" from update_camera that just updates the parameters
+pub fn do_update_camera(settings: &GameProgrammeSettings, renderer: &&Arc<rend3::Renderer>) {
+    let view = glam::Mat4::from_euler(
+        glam::EulerRot::XYZ,
+        -settings.camera_pitch,
+        -settings.camera_yaw,
+        0.0,
+    );
+    let view = view * glam::Mat4::from_translation((-settings.camera_location).into());
+
+    renderer.set_camera_data(rend3::types::Camera {
+        projection: CameraProjection::Perspective {
+            vfov: 60.0,
+            near: 0.1,
+        },
+        view,
+    });
+}
+pub fn update_camera_params(settings: &mut GameProgrammeSettings, delta_x: f64, delta_y: f64) {
+    if !settings.grabber.as_ref().unwrap().grabbed() {
+        return;
+    }
+
+    const TAU: f32 = std::f32::consts::PI * 2.0;
+
+    let mouse_delta = if settings.absolute_mouse {
+        let prev = settings
+            .last_mouse_delta
+            .replace(glam::DVec2::new(delta_x, delta_y));
+        if let Some(prev) = prev {
+            (glam::DVec2::new(delta_x, delta_y) - prev) / 4.0
+        } else {
+            return;
+        }
+    } else {
+        glam::DVec2::new(delta_x, delta_y)
+    };
+
+    settings.camera_yaw -= (mouse_delta.x / 1000.0) as f32;
+    settings.camera_pitch -= (mouse_delta.y / 1000.0) as f32;
+    if settings.camera_yaw < 0.0 {
+        settings.camera_yaw += TAU;
+    } else if settings.camera_yaw >= TAU {
+        settings.camera_yaw -= TAU;
+    }
+    settings.camera_pitch = settings.camera_pitch.clamp(
+        -std::f32::consts::FRAC_PI_2 + 0.0001,
+        std::f32::consts::FRAC_PI_2 - 0.0001,
+    )
 }
