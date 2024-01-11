@@ -5,9 +5,12 @@ use parking_lot::Mutex;
 use rend3::Renderer;
 use tokio::runtime::Runtime;
 use uuid::Uuid;
-use winit::event_loop::EventLoop;
+use winit::{event_loop::EventLoop, window::Window};
 
-use crate::{theater::basement::cla::GameProgrammeSettings, MyEvent};
+use crate::{
+    theater::basement::{cla::GameProgrammeSettings, input_handling::InputContext},
+    GameProgrammeData, MyEvent,
+};
 
 use self::{actors::ActressDefinition, chorus::Choral, stage3d::Colliders};
 
@@ -17,7 +20,6 @@ pub mod actors;
 pub mod chorus;
 pub mod definitions;
 pub mod props;
-pub mod stage2d;
 pub mod stage3d;
 
 pub type CamInfo = [f32; 5];
@@ -34,14 +36,7 @@ pub struct SceneDefinition {
     pub start_cam: String,
     pub cameras: HashMap<String, CamInfo>,
 }
-/*
-pub struct Scene {
-    pub scene_uuid: Uuid,
-    pub scene_name: String,
-    pub definition: SceneDefinition,
-    pub implementation: Option<SceneImplementation>,
-}
-*/
+
 #[allow(clippy::large_enum_variant)]
 pub enum AstinkScene {
     Loaded(
@@ -65,8 +60,6 @@ pub struct SceneImplementation {
     //    script: String, // I'm really kinda stuck on this chicken and egg problem with script <-> actual game logic
 }
 pub trait Scenic {
-    //    fn scene_definition(&mut self) -> &mut SceneDefinition;
-    //    fn scene_implementation(&mut self) -> &mut Option<SceneImplementation>;
     fn scene_uuid(&self) -> Uuid;
     fn scene_name(&self) -> &str;
     fn define_scene(&mut self);
@@ -83,7 +76,7 @@ pub trait Scenic {
     fn raw_implementation(&mut self) -> &mut Option<Implementations>;
 }
 
-impl<T: Scenic + Choral> Playable for T {
+impl<T: Scenic + Choral + InputContext> Playable for T {
     fn playable_uuid(&self) -> Uuid {
         self.scene_uuid()
     }
@@ -120,5 +113,14 @@ impl<T: Scenic + Choral> Playable for T {
 
     fn playable_implementation(&mut self) -> &mut Option<Implementations> {
         self.raw_implementation()
+    }
+
+    fn handle_input_for_playable(
+        &mut self,
+        settings: &mut GameProgrammeSettings,
+        data: &mut GameProgrammeData,
+        window: &Window,
+    ) {
+        self.handle_input_for_context(settings, data, window)
     }
 }

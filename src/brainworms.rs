@@ -36,11 +36,9 @@ use winit::{
     window::{Fullscreen, WindowBuilder},
 };
 
+use crate::theater::basement::input_handling::InputContext;
 use crate::theater::{
-    basement::{
-        frame_rate::update_frame_stats,
-        input_handling::{handle_input, AcceptedInputs},
-    },
+    basement::{frame_rate::update_frame_stats, input_handling::AcceptedInputs},
     play::scene::{
         actors::draw_actor,
         stage3d::{do_update_camera, update_camera_rotation},
@@ -347,15 +345,19 @@ impl GameProgramme {
                 }
                 // Present the frame
                 frame.present();
+                #[cfg(extra_debugging)]
                 // mark the end of the frame for tracy/other profilers
                 profiling::finish_frame!();
                 control_flow(winit::event_loop::ControlFlow::Poll);
             }
             Event::AboutToWait => {
+                #[cfg(extra_debugging)]
                 profiling::scope!("MainEventsCleared");
+                let current_scene_id = data.current_playable.as_ref().unwrap();
+                let current_scene = data.play.playables.get_mut(&current_scene_id).unwrap();
 
-                update_camera_rotation(&mut self.settings);
-                handle_input(&mut self.settings, data, window);
+                //                update_camera_rotation(&mut self.settings);
+                current_scene.handle_input_for_playable(&mut self.settings, window);
                 window.request_redraw();
             }
             Event::WindowEvent { event, .. } => {

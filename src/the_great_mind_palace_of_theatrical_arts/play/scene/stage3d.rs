@@ -10,12 +10,13 @@ use std::{
 pub struct Colliders {
     pub col_map: HashMap<String, Vec<parry3d::shape::TriMesh>>,
 }
-use glam::UVec2;
+use glam::{vec3, vec4, UVec2};
 
 use log::info;
 use nalgebra::{Isometry3, Matrix, Point3, Translation3};
 use parking_lot::Mutex;
 
+use parry3d::query::Ray;
 use rend3::{
     types::{CameraProjection, Handedness, Texture, TextureFormat},
     util::typedefs::SsoString,
@@ -24,7 +25,7 @@ use rend3::{
 use rend3_gltf::{GltfLoadError, GltfLoadSettings, GltfSceneInstance};
 use rend3_routine::skybox::SkyboxRoutine;
 use uuid::Uuid;
-use winit::event_loop::EventLoopProxy;
+use winit::{event_loop::EventLoopProxy, window::Window};
 
 use std::time;
 
@@ -33,7 +34,7 @@ use crate::{
         basement::cla::GameProgrammeSettings,
         play::backstage::plumbing::asset_loader::{AssetError, AssetLoader, AssetPath},
     },
-    MyEvent, MyWinitEvent,
+    GameProgrammeData, MyEvent, MyWinitEvent,
 };
 
 use super::AstinkScene;
@@ -332,6 +333,48 @@ pub(crate) fn compute_projection_matrix(
         }
         CameraProjection::Raw(proj) => proj,
     }
+}
+pub fn make_ray(
+    settings: &GameProgrammeSettings,
+    data: &GameProgrammeData,
+    window: &Window,
+) -> Ray {
+    let cam_x = settings.camera_location.x;
+    let cam_y = settings.camera_location.y;
+    let cam_z = settings.camera_location.z;
+    let cam_pitch = settings.camera_pitch;
+    let cam_yaw = settings.camera_yaw;
+    info!("{cam_x},{cam_y},{cam_z},{cam_pitch},{cam_yaw}",);
+    info!(
+        "mouse at {},{}",
+        data.mouse_physical_poz.x, data.mouse_physical_poz.y
+    );
+    let win_w = window.inner_size().width as f64;
+    let win_h = window.inner_size().height as f64;
+    let mouse_x = data.mouse_physical_poz.x;
+    let mouse_y = data.mouse_physical_poz.y;
+    let x = (2.0 * mouse_x) / win_w - 1.0;
+
+    let y = 1.0 - (2.0 * mouse_y) / win_h;
+    let z = 1.0;
+    let ray_nds = vec3(x as f32, y as f32, z as f32);
+    info!("ray_nds: {ray_nds}");
+    let ray_clip = vec4(ray_nds.x, ray_nds.y, -1.0, 1.0);
+    let cur_camera = make_camera(("".to_owned(), [cam_x, cam_y, cam_z, cam_pitch, cam_yaw]));
+    let ray_eye = compute_projection_matrix(
+        cur_camera.renderer_camera,
+        settings.handedness,
+        (win_w / win_h) as f32,
+    )
+    .inverse()
+        * ray_clip;
+    let ray_eye = vec4(ray_eye.x, ray_eye.y, -1.0, 0.0);
+    info!("ray_eye: {ray_eye}");
+    let ray_wor4 = cur_camera.renderer_camera.view.inverse() * ray_eye;
+    let ray_wor = vec3(ray_wor4.x, ray_wor4.y, ray_wor4.z);
+    let ray_wor = ray_wor.normalize();
+    info!("ray_world: {ray_wor}");
+    Ray::new(nalgebra::Point3::new(cam_x, cam_y, cam_z), ray_wor.into())
 }
 #[cfg(extra_debugging)]
 pub fn draw_line(points: Vec<[f32; 3]>) -> rend3::types::Mesh {

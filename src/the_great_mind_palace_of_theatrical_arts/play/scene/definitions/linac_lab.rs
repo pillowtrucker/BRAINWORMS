@@ -2,7 +2,11 @@ use std::{collections::HashMap, f32::consts::PI, sync::Arc};
 
 use crate::{
     theater::{
-        basement::{cla::GameProgrammeSettings, text_files::read_lines},
+        basement::{
+            cla::GameProgrammeSettings,
+            input_handling::{input_down, input_up, LogicalInputBinding as LIB},
+            text_files::read_lines,
+        },
         play::{
             backstage::{
                 plumbing::DefaultRoutines,
@@ -10,21 +14,22 @@ use crate::{
             },
             scene::{
                 actors::{create_actor, ActressDefinition, AstinkSprite},
-                stage3d::{load_stage3d, make_camera},
+                stage3d::{load_stage3d, make_camera, make_ray, update_camera_rotation},
                 AstinkScene, CamInfo, SceneDefinition, SceneImplementation,
             },
-            Definitions, Implementations,
+            Definitions, Implementations, Playable,
         },
     },
-    MyEvent,
+    GameProgrammeData, MyEvent,
 };
 use egui::Context;
 use nanorand::{RandomGen, Rng};
-use proc_macros::{Choral, Scenic};
+use parry3d::query::RayCast;
+use proc_macros::{Choral, InputContext, Scenic};
 use rend3::Renderer;
 use tokio::runtime::Runtime;
 use uuid::{uuid, Uuid};
-use winit::event_loop::EventLoop;
+use winit::{event_loop::EventLoop, window::Window};
 const PDP11_CAM_INFO: [f32; 5] = [-3.729838, 4.512105, -0.103016704, -0.4487015, 0.025398161];
 const VT100_CAM_INFO: [f32; 5] = [-5.068789, 1.3310424, -3.6215494, -0.31070346, 6.262584];
 const THERAC_CAM_INFO: [f32; 5] = [-2.580962, 2.8690546, 2.878742, -0.27470315, 5.620602];
@@ -34,7 +39,7 @@ const PDP11_WITH_MIDORI_CAM_INFO: [f32; 5] =
     [-3.7894087, 3.8481617, 0.3033728, -0.29471007, 6.2545333];
 
 //#[add_common_playable_fields] // this is not worth the stupid RA errors
-#[derive(Default, Scenic, Choral)]
+#[derive(Default, Scenic, Choral, InputContext)]
 pub struct LinacLabScene {
     pub uuid: Uuid,
     pub name: String,
@@ -231,5 +236,110 @@ impl LinacLabScene {
                 ui.add(KineticLabel::new(line).kinesis(vec![&self.random_line_effects[i]]));
             }
         });
+    }
+    fn handle_input(&mut self, settings: &mut GameProgrammeSettings, window: &Window) {
+        update_camera_rotation(settings);
+        let forward = -settings.rotation.z_axis;
+        let up = settings.rotation.y_axis;
+        let side = -settings.rotation.x_axis;
+        let really_pressed = |binding| {
+            input_down(&settings.input_status, &settings.keybindings, binding).is_some_and(|k| k)
+        };
+        let really_released = |binding| {
+            input_up(&settings.input_status, &settings.keybindings, binding).is_some_and(|k| k)
+        };
+        let interacted_with = |binding| really_pressed(binding) || really_released(binding);
+        let velocity = if really_pressed(&LIB::Sprint) {
+            settings.run_speed
+        } else {
+            settings.walk_speed
+        };
+        if really_pressed(&LIB::Forwards) {
+            settings.camera_location +=
+                forward * velocity * data.last_update.elapsed().as_secs_f32();
+        }
+        if really_pressed(&LIB::Backwards) {
+            settings.camera_location -=
+                forward * velocity * data.last_update.elapsed().as_secs_f32();
+        }
+        if really_pressed(&LIB::StrafeLeft) {
+            settings.camera_location += side * velocity * data.last_update.elapsed().as_secs_f32();
+        }
+        if really_pressed(&LIB::StrafeRight) {
+            settings.camera_location -= side * velocity * data.last_update.elapsed().as_secs_f32();
+        }
+        if really_pressed(&LIB::LiftUp) {
+            settings.camera_location += up * velocity * data.last_update.elapsed().as_secs_f32();
+        }
+        if really_released(&LIB::Interact) {
+            let rayman = make_ray(settings, data, window);
+
+            if let Implementations::SceneImplementation(sc_imp) = data
+                .play
+                .playables
+                .get_mut(data.current_playable.as_ref().unwrap())
+                .as_mut()
+                .unwrap()
+                .playable_implementation()
+                .as_mut()
+                .unwrap()
+            {
+                const MAX_TOI: f32 = 100000.0;
+                if let AstinkScene::Loaded(stage3d) = &sc_imp.stage3d {
+                    for (c_name, colliders) in stage3d.2 .2.col_map.iter() {
+                        for c in colliders {
+                            if let Some(toi) = c.cast_local_ray(&rayman, MAX_TOI, true) {
+                                let intersection = rayman.point_at(toi);
+                                let cam_point = nalgebra::Point3::from([
+                                    settings.camera_location.x,
+                                    settings.camera_location.y,
+                                    settings.camera_location.z,
+                                ]);
+                                if cam_point != intersection {
+                                    println!("{} intersects mouse ray at {}", c_name, intersection);
+                                    #[cfg(extra_debugging)]
+                                    {
+                                        theater::basement::debug_profiling_etc::draw_debug_mouse_picking_doodad(
+                                                    theater::basement::debug_profiling_etc::DebugPickingDoodad::TheRay,
+                                                    &cam_point,
+                                                    &intersection,
+                                                    &renderer,
+                                                    Self::HANDEDNESS,
+                                                    c,
+                                                );
+                                        theater::basement::debug_profiling_etc::draw_debug_mouse_picking_doodad(
+                                                    theater::basement::debug_profiling_etc::DebugPickingDoodad::TheColliderShape,
+                                                    &cam_point,
+                                                    &intersection,
+                                                    &renderer,
+                                                    Self::HANDEDNESS,
+                                                    c,
+                                                );
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if really_released(&LIB::Back) {
+            settings.grabber.as_mut().unwrap().request_ungrab(window);
+        }
+
+        if really_released(&LIB::DebugProfiling) {
+            #[cfg(extra_debugging)]
+            theater::basement::debug_profiling_etc::write_profiling_json(&self.settings);
+        }
+        if interacted_with(&LIB::GrabWindow) {
+            let grabber = settings.grabber.as_mut().unwrap();
+
+            if !grabber.grabbed() {
+                grabber.request_grab(window);
+            }
+        }
+
+        settings.input_status.retain(|_, v| v.is_pressed());
     }
 }

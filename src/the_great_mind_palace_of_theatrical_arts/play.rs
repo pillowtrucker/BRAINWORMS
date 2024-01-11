@@ -6,8 +6,9 @@ use rend3::Renderer;
 use tokio::runtime::Runtime;
 use uuid::Uuid;
 use winit::event_loop::EventLoop;
+use winit::window::Window;
 
-use crate::MyEvent;
+use crate::{theater::basement::input_handling::InputContext, GameProgrammeData, MyEvent};
 
 use self::{
     backstage::plumbing::DefaultRoutines,
@@ -18,7 +19,6 @@ use super::basement::cla::GameProgrammeSettings;
 
 pub mod backstage;
 pub mod definition;
-pub mod orchestra;
 pub mod scene;
 
 pub struct Play {
@@ -49,6 +49,12 @@ pub trait Playable {
     );
     fn define_playable(&mut self);
     fn implement_chorus_for_playable(&self, egui_ctx: Context);
+    fn handle_input_for_playable(
+        &mut self,
+        settings: &mut GameProgrammeSettings,
+        data: &mut GameProgrammeData,
+        window: &Window,
+    );
 }
 pub enum Definitions {
     SceneDefinition(SceneDefinition),

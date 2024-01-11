@@ -97,6 +97,30 @@ pub fn derive_choral_partial(input: TokenStream) -> TokenStream {
     tokens.into()
 }
 
+#[proc_macro_derive(InputContext)]
+pub fn derive_input_context_partial(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    let ident = input.ident;
+    let tokens = quote! {
+        use crate::theater::basement::input_handling::InputContext;
+        impl InputContext for #ident {
+            fn handle_input_for_context(&mut self,
+                                        settings: &mut GameProgrammeSettings,
+                                        data: &mut GameProgrammeData,
+                                        window: &Window,) {
+
+                self.handle_input(
+                    settings,
+                    data,
+                    window);
+            }
+
+        }
+    };
+
+    tokens.into()
+}
+
 // this is not worth the stupid RA errors
 #[proc_macro_attribute]
 pub fn add_common_playable_fields(args: TokenStream, input: TokenStream) -> TokenStream {

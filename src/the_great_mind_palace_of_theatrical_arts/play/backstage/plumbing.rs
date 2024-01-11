@@ -20,7 +20,6 @@ use crate::{
 };
 
 pub mod asset_loader;
-pub(crate) mod interactive_object;
 
 pub struct DefaultRoutines {
     pub pbr: Mutex<rend3_routine::pbr::PbrRoutine>,
