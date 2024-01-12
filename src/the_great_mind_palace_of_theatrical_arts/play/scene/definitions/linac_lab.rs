@@ -257,9 +257,9 @@ impl LinacLabScene {
         let side = -rotation.x_axis;
         let buttons = &mut state.input_status.buttons;
         let really_pressed =
-            |binding| input_down(&buttons, &settings.keybindings, binding).is_some_and(|k| k);
+            |binding| input_down(buttons, &settings.keybindings, binding).is_some_and(|k| k);
         let really_released =
-            |binding| input_up(&buttons, &settings.keybindings, binding).is_some_and(|k| k);
+            |binding| input_up(buttons, &settings.keybindings, binding).is_some_and(|k| k);
         let interacted_with = |binding| really_pressed(binding) || really_released(binding);
         let velocity = if really_pressed(&LIB::Sprint) {
             settings.run_speed
@@ -283,6 +283,9 @@ impl LinacLabScene {
         if really_pressed(&LIB::LiftUp) {
             location += up * velocity * last_update.elapsed().as_secs_f32();
         }
+        cur_camera
+            .info
+            .set_location(location.x, location.y, location.z);
         if really_released(&LIB::Interact) {
             let rayman = make_ray(
                 cur_camera,
@@ -304,22 +307,23 @@ impl LinacLabScene {
                                     nalgebra::Point3::from([location.x, location.y, location.z]);
                                 if cam_point != intersection {
                                     println!("{} intersects mouse ray at {}", c_name, intersection);
-                                    #[cfg(extra_debugging)]
+                                    #[cfg(feature = "extra_debugging")]
                                     {
-                                        theater::basement::debug_profiling_etc::draw_debug_mouse_picking_doodad(
-                                                    theater::basement::debug_profiling_etc::DebugPickingDoodad::TheRay,
+                                        let renderer = state.renderer.clone().unwrap();
+                                        crate::theater::basement::debug_profiling_etc::draw_debug_mouse_picking_doodad(
+                                                    crate::theater::basement::debug_profiling_etc::DebugPickingDoodad::TheRay,
                                                     &cam_point,
                                                     &intersection,
                                                     &renderer,
-                                                    Self::HANDEDNESS,
+                                                    settings.handedness,
                                                     c,
                                                 );
-                                        theater::basement::debug_profiling_etc::draw_debug_mouse_picking_doodad(
-                                                    theater::basement::debug_profiling_etc::DebugPickingDoodad::TheColliderShape,
+                                        crate::theater::basement::debug_profiling_etc::draw_debug_mouse_picking_doodad(
+                                                    crate::theater::basement::debug_profiling_etc::DebugPickingDoodad::TheColliderShape,
                                                     &cam_point,
                                                     &intersection,
                                                     &renderer,
-                                                    Self::HANDEDNESS,
+                                                    settings.handedness,
                                                     c,
                                                 );
                                     }
@@ -336,8 +340,10 @@ impl LinacLabScene {
         }
 
         if really_released(&LIB::DebugProfiling) {
-            #[cfg(extra_debugging)]
-            theater::basement::debug_profiling_etc::write_profiling_json(&self.settings);
+            #[cfg(feature = "extra_debugging")]
+            crate::theater::basement::debug_profiling_etc::write_profiling_json(
+                &state.previous_profiling_stats.as_ref(),
+            );
         }
         if interacted_with(&LIB::GrabWindow) {
             let grabber = state.grabber.as_mut().unwrap();
@@ -346,9 +352,7 @@ impl LinacLabScene {
                 grabber.request_grab(window);
             }
         }
-        cur_camera
-            .info
-            .set_location(location.x, location.y, location.z);
+
         buttons.retain(|_, v| v.is_pressed());
     }
 }

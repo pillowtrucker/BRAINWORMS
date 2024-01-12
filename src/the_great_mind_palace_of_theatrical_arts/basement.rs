@@ -1,5 +1,5 @@
 pub mod cla;
-#[cfg(extra_debugging)]
+#[cfg(feature = "extra_debugging")]
 pub mod debug_profiling_etc;
 pub mod frame_rate;
 pub mod grab;

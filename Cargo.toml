@@ -91,3 +91,5 @@ ndk-glue = "0.7"
 members = [
 "proc-macros"
 ]
+[features]
+extra_debugging = []

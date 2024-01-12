@@ -376,7 +376,7 @@ pub fn make_ray(
     info!("ray_world: {ray_wor}");
     Ray::new(nalgebra::Point3::new(cam_x, cam_y, cam_z), ray_wor.into())
 }
-#[cfg(extra_debugging)]
+#[cfg(feature = "extra_debugging")]
 pub fn draw_line(points: Vec<[f32; 3]>) -> rend3::types::Mesh {
     const WIDTH: f32 = 0.5;
     let mut vertices: Vec<glam::Vec3> = Vec::new();
@@ -410,8 +410,8 @@ pub fn draw_line(points: Vec<[f32; 3]>) -> rend3::types::Mesh {
 }
 
 // I want to use ! for side effect dings but of course rust had a different idea so I will use the prefix do_ to distinguish do_update_camera as "update the actual camera view" from update_camera that just updates the parameters
-pub fn do_update_camera(state: &GameProgrammeState) {
-    if let Some(cur_camera) = &state.cur_camera {
+pub fn do_update_camera(state: &mut GameProgrammeState) {
+    if let Some(cur_camera) = &mut state.cur_camera {
         let view = glam::Mat4::from_euler(
             glam::EulerRot::XYZ,
             -cur_camera.info.pitch,
@@ -419,14 +419,16 @@ pub fn do_update_camera(state: &GameProgrammeState) {
             0.0,
         );
         let view = view * glam::Mat4::from_translation((-cur_camera.info.location()).into());
+        let renderer_camera = rend3::types::Camera {
+            projection: CameraProjection::Perspective {
+                vfov: 60.0,
+                near: 0.1,
+            },
+            view,
+        };
+        cur_camera.renderer_camera = renderer_camera;
         if let Some(renderer) = &state.renderer {
-            renderer.set_camera_data(rend3::types::Camera {
-                projection: CameraProjection::Perspective {
-                    vfov: 60.0,
-                    near: 0.1,
-                },
-                view,
-            });
+            renderer.set_camera_data(renderer_camera);
         }
     }
 }

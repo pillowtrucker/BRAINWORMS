@@ -6,9 +6,9 @@ use crate::theater::play::scene::stage3d::draw_line;
 
 use super::cla::GameProgrammeSettings;
 
-pub fn write_profiling_json(settings: &GameProgrammeSettings) {
+pub fn write_profiling_json(stats: &Option<&Vec<wgpu_profiler::GpuTimerScopeResult>>) {
     // write out gpu side performance info into a trace readable by chrome://tracing
-    if let Some(ref stats) = settings.previous_profiling_stats {
+    if let Some(ref stats) = stats {
         println!("Outputing gpu timing chrome trace to profile.json");
         wgpu_profiler::chrometrace::write_chrometrace(Path::new("profile.json"), stats).unwrap();
     } else {
@@ -24,7 +24,7 @@ pub fn draw_debug_mouse_picking_doodad(
     which: DebugPickingDoodad,
     cam_point: &nalgebra::Point3<f32>,
     intersection: &nalgebra::Point3<f32>,
-    renderer: &&Arc<rend3::Renderer>,
+    renderer: &Arc<rend3::Renderer>,
     handedness: Handedness,
     c: &parry3d::shape::TriMesh,
 ) {

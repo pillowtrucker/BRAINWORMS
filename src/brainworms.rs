@@ -3,10 +3,10 @@ mod the_great_mind_palace_of_theatrical_arts;
 use cfg_if::cfg_if;
 use egui::{Color32, TextStyle, Visuals};
 
-use glam::{DVec2, Mat3A, Vec3};
+use glam::{Mat3A, Vec3};
 use log::info;
 use parking_lot::Mutex;
-use rend3::{graph::RenderGraph, types::DirectionalLight};
+use rend3::types::DirectionalLight;
 
 use rend3_routine::base::BaseRenderGraph;
 use uuid::Uuid;
@@ -17,25 +17,20 @@ use wgpu::TextureFormat;
 use the_great_mind_palace_of_theatrical_arts as theater;
 use theater::{
     basement::{
-        cla::GameProgrammeSettings,
-        frame_rate::FrameRate,
-        grab::Grabber,
-        input_handling::{InputStatus, KeyStates},
-        logging::register_logger,
+        cla::GameProgrammeSettings, frame_rate::FrameRate, grab::Grabber,
+        input_handling::InputStatus, logging::register_logger,
     },
     play::{
         backstage::plumbing::{create_base_rendergraph, start, DefaultRoutines, StoredSurfaceInfo},
-        definition::define_play,
         scene::{
             actors::AstinkSprite,
             stage3d::{load_skybox, lock, update_camera_mouse_params},
-            AstinkScene, CamInfo, Camera,
+            AstinkScene, Camera,
         },
         Definitions, Play, Playable,
     },
 };
 use winit::{
-    dpi::PhysicalPosition,
     event::{DeviceEvent, KeyEvent, WindowEvent},
     event_loop::{ControlFlow, EventLoopWindowTarget},
     keyboard::PhysicalKey,
@@ -57,8 +52,8 @@ pub struct GameProgrammeData {
 }
 #[derive(Default)]
 pub struct GameProgrammeState {
-    #[cfg(extra_debugging)]
-    pub previous_profiling_stats: Option<Vec<GpuTimerScopeResult>>,
+    #[cfg(feature = "extra_debugging")]
+    pub previous_profiling_stats: Option<Vec<wgpu_profiler::GpuTimerScopeResult>>,
     pub egui_routine: Option<rend3_egui::EguiRenderRoutine>,
     pub egui_ctx: Option<egui::Context>,
     pub egui_platform: Option<egui_winit::State>,
@@ -342,8 +337,8 @@ impl GameProgramme {
 
                 // Dispatch a render using the built up rendergraph!
                 cfg_if! {
-                    if #[cfg(extra_debugging)] {
-                        self.settings.previous_profiling_stats = graph.execute(renderer, &mut eval_output);
+                    if #[cfg(feature = "extra_debugging")] {
+                        game_state.previous_profiling_stats = graph.execute(&renderer, &mut eval_output);
                     }
                     else {
                         graph.execute(&renderer, &mut eval_output);
@@ -373,16 +368,16 @@ impl GameProgramme {
                 }
                 // Present the frame
                 frame.present();
-                #[cfg(extra_debugging)]
+                #[cfg(feature = "extra_debugging")]
                 // mark the end of the frame for tracy/other profilers
                 profiling::finish_frame!();
                 control_flow(winit::event_loop::ControlFlow::Poll);
             }
             Event::AboutToWait => {
-                #[cfg(extra_debugging)]
+                #[cfg(feature = "extra_debugging")]
                 profiling::scope!("MainEventsCleared");
                 let current_scene_id = game_state.current_playable.as_ref().unwrap();
-                let current_scene = game_data.play.playables.get_mut(&current_scene_id).unwrap();
+                let current_scene = game_data.play.playables.get_mut(current_scene_id).unwrap();
 
                 current_scene.handle_input_for_playable(&self.settings, game_state, &window);
                 window.request_redraw();
@@ -514,11 +509,6 @@ impl GameProgramme {
                 }),
             );
         }
-        /*
-        recursively load the play->scene->actor/etc definitions
-        TODO: Read this from script/data file
-        */
-        let play = &self.data.play;
 
         let window_size = window.inner_size();
 
@@ -557,7 +547,7 @@ impl GameProgramme {
             Some(window.scale_factor() as f32),
             None,
         );
-        let timestamp_start = time::Instant::now();
+
         // Definitions for Play/Scene/etc go above
         let state = &mut self.state;
 
@@ -593,7 +583,7 @@ impl GameProgramme {
         let playable_routines_copy = Arc::clone(&routines);
         scene1.implement_playable(
             &self.settings,
-            &event_loop,
+            event_loop,
             playable_renderer_copy,
             playable_routines_copy,
             &self.rts,

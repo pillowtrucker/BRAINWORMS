@@ -227,18 +227,6 @@ impl GameProgrammeSettings {
         // Controls
         let walk_speed = args.value_from_str("--walk").unwrap_or(10.0_f32);
         let run_speed = args.value_from_str("--run").unwrap_or(50.0_f32);
-        let camera_default = [
-            3.0,
-            3.0,
-            3.0,
-            -std::f32::consts::FRAC_PI_8,
-            std::f32::consts::FRAC_PI_4,
-        ];
-        let camera_info = args
-            .value_from_str("--camera")
-            .map_or(camera_default, |s: String| {
-                extract_array(&s, camera_default).unwrap()
-            });
 
         let remaining = args.finish();
 
