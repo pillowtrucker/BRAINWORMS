@@ -157,14 +157,6 @@ pub struct GameProgrammeSettings {
     pub present_mode: rend3::types::PresentMode,
     pub samples: SampleCount,
     pub fullscreen: bool,
-    pub input_status: KeyStates,
-    pub camera_pitch: f32,
-    pub camera_yaw: f32,
-    pub camera_location: Vec3A,
-    pub previous_profiling_stats: Option<Vec<GpuTimerScopeResult>>,
-    pub last_mouse_delta: Option<DVec2>,
-    pub grabber: Option<Grabber>,
-    pub rotation: Mat3A,
     pub keybindings: KeyBindings,
     pub handedness: Handedness,
 }
@@ -311,21 +303,6 @@ impl GameProgrammeSettings {
             present_mode,
             samples,
             fullscreen,
-            input_status: HashMap::new(),
-            camera_pitch: camera_info[3],
-            camera_yaw: camera_info[4],
-            camera_location: Vec3A::new(camera_info[0], camera_info[1], camera_info[2]),
-            previous_profiling_stats: None,
-
-            last_mouse_delta: None,
-
-            grabber: None,
-            rotation: glam::Mat3A::from_euler(
-                glam::EulerRot::XYZ,
-                -camera_info[3],
-                -camera_info[4],
-                0.0,
-            ),
             keybindings,
             handedness: Handedness::Right,
         }

@@ -1,6 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use egui::Context;
+use glam::{Mat3A, Vec3, Vec3A};
 use parking_lot::Mutex;
 use rend3::Renderer;
 use tokio::runtime::Runtime;
@@ -9,7 +10,7 @@ use winit::{event_loop::EventLoop, window::Window};
 
 use crate::{
     theater::basement::{cla::GameProgrammeSettings, input_handling::InputContext},
-    GameProgrammeData, MyEvent,
+    GameProgrammeData, GameProgrammeState, MyEvent,
 };
 
 use self::{actors::ActressDefinition, chorus::Choral, stage3d::Colliders};
@@ -21,14 +22,43 @@ pub mod chorus;
 pub mod definitions;
 pub mod props;
 pub mod stage3d;
-
-pub type CamInfo = [f32; 5];
+#[derive(Debug, Default, Clone)]
+pub struct CamInfo {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+    pub pitch: f32,
+    pub yaw: f32,
+}
+impl CamInfo {
+    pub fn location(&self) -> Vec3A {
+        Vec3A::new(self.x, self.y, self.z)
+    }
+    pub fn from_arr(arr: &[f32; 5]) -> Self {
+        Self {
+            x: arr[0],
+            y: arr[1],
+            z: arr[2],
+            pitch: arr[3],
+            yaw: arr[4],
+        }
+    }
+    pub fn set_location(&mut self, x: f32, y: f32, z: f32) {
+        self.x = x;
+        self.y = y;
+        self.z = z;
+    }
+    pub fn as_arr(&self) -> [f32; 5] {
+        [self.x, self.y, self.z, self.pitch, self.yaw]
+    }
+}
 pub struct Camera {
     pub name: String,
     pub renderer_camera: rend3::types::Camera,
-    pub cam_attributes: [f32; 5],
+    pub info: CamInfo,
+    pub rotation: Mat3A,
 }
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct SceneDefinition {
     pub stage: (String, String),
     pub actors: Vec<ActressDefinition>,
@@ -38,6 +68,7 @@ pub struct SceneDefinition {
 }
 
 #[allow(clippy::large_enum_variant)]
+#[derive(Default)]
 pub enum AstinkScene {
     Loaded(
         (
@@ -50,8 +81,10 @@ pub enum AstinkScene {
             ),
         ),
     ),
+    #[default]
     Loading,
 }
+#[derive(Default)]
 pub struct SceneImplementation {
     pub stage3d: AstinkScene,
     pub actresses: HashMap<String, Arc<Mutex<actors::AstinkSprite>>>,
@@ -117,10 +150,10 @@ impl<T: Scenic + Choral + InputContext> Playable for T {
 
     fn handle_input_for_playable(
         &mut self,
-        settings: &mut GameProgrammeSettings,
-        data: &mut GameProgrammeData,
-        window: &Window,
+        settings: &GameProgrammeSettings,
+        state: &mut GameProgrammeState,
+        window: &Arc<Window>,
     ) {
-        self.handle_input_for_context(settings, data, window)
+        self.handle_input_for_context(settings, state, window)
     }
 }

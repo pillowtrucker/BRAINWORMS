@@ -105,13 +105,13 @@ pub fn derive_input_context_partial(input: TokenStream) -> TokenStream {
         use crate::theater::basement::input_handling::InputContext;
         impl InputContext for #ident {
             fn handle_input_for_context(&mut self,
-                                        settings: &mut GameProgrammeSettings,
-                                        data: &mut GameProgrammeData,
-                                        window: &Window,) {
+                                        settings: &GameProgrammeSettings,
+                                        state: &mut GameProgrammeState,
+                                        window: &Arc<Window>,) {
 
                 self.handle_input(
                     settings,
-                    data,
+                    state,
                     window);
             }
 

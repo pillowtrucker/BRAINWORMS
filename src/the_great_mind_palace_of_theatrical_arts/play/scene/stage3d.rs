@@ -10,7 +10,7 @@ use std::{
 pub struct Colliders {
     pub col_map: HashMap<String, Vec<parry3d::shape::TriMesh>>,
 }
-use glam::{vec3, vec4, UVec2};
+use glam::{vec3, vec4, Mat3A, UVec2};
 
 use log::info;
 use nalgebra::{Isometry3, Matrix, Point3, Translation3};
@@ -25,7 +25,7 @@ use rend3::{
 use rend3_gltf::{GltfLoadError, GltfLoadSettings, GltfSceneInstance};
 use rend3_routine::skybox::SkyboxRoutine;
 use uuid::Uuid;
-use winit::{event_loop::EventLoopProxy, window::Window};
+use winit::{dpi::PhysicalPosition, event_loop::EventLoopProxy, window::Window};
 
 use std::time;
 
@@ -34,10 +34,10 @@ use crate::{
         basement::cla::GameProgrammeSettings,
         play::backstage::plumbing::asset_loader::{AssetError, AssetLoader, AssetPath},
     },
-    GameProgrammeData, MyEvent, MyWinitEvent,
+    GameProgrammeData, GameProgrammeState, MyEvent, MyWinitEvent,
 };
 
-use super::AstinkScene;
+use super::{AstinkScene, CamInfo, Camera};
 
 pub fn lock<T>(lock: &parking_lot::Mutex<T>) -> parking_lot::MutexGuard<'_, T> {
     let guard = lock.lock();
@@ -307,7 +307,8 @@ pub fn make_camera(
             },
             view,
         },
-        cam_attributes,
+        info: CamInfo::from_arr(&cam_attributes),
+        rotation: Mat3A::IDENTITY,
     }
 }
 pub(crate) fn compute_projection_matrix(
@@ -335,24 +336,23 @@ pub(crate) fn compute_projection_matrix(
     }
 }
 pub fn make_ray(
-    settings: &GameProgrammeSettings,
-    data: &GameProgrammeData,
-    window: &Window,
+    cur_camera: &Camera,
+    mouse_physical_poz: &PhysicalPosition<f64>,
+    window: &Arc<Window>,
+    handedness: Handedness,
 ) -> Ray {
-    let cam_x = settings.camera_location.x;
-    let cam_y = settings.camera_location.y;
-    let cam_z = settings.camera_location.z;
-    let cam_pitch = settings.camera_pitch;
-    let cam_yaw = settings.camera_yaw;
+    let cam_x = cur_camera.info.x;
+    let cam_y = cur_camera.info.y;
+    let cam_z = cur_camera.info.z;
+    let cam_pitch = cur_camera.info.pitch;
+    let cam_yaw = cur_camera.info.yaw;
     info!("{cam_x},{cam_y},{cam_z},{cam_pitch},{cam_yaw}",);
-    info!(
-        "mouse at {},{}",
-        data.mouse_physical_poz.x, data.mouse_physical_poz.y
-    );
+    let mouse_x = mouse_physical_poz.x;
+    let mouse_y = mouse_physical_poz.y;
+    info!("mouse at {},{}", mouse_x, mouse_y);
     let win_w = window.inner_size().width as f64;
     let win_h = window.inner_size().height as f64;
-    let mouse_x = data.mouse_physical_poz.x;
-    let mouse_y = data.mouse_physical_poz.y;
+
     let x = (2.0 * mouse_x) / win_w - 1.0;
 
     let y = 1.0 - (2.0 * mouse_y) / win_h;
@@ -360,10 +360,10 @@ pub fn make_ray(
     let ray_nds = vec3(x as f32, y as f32, z as f32);
     info!("ray_nds: {ray_nds}");
     let ray_clip = vec4(ray_nds.x, ray_nds.y, -1.0, 1.0);
-    let cur_camera = make_camera(("".to_owned(), [cam_x, cam_y, cam_z, cam_pitch, cam_yaw]));
+    //        let cur_camera = make_camera(("".to_owned(), [cam_x, cam_y, cam_z, cam_pitch, cam_yaw]));
     let ray_eye = compute_projection_matrix(
         cur_camera.renderer_camera,
-        settings.handedness,
+        handedness,
         (win_w / win_h) as f32,
     )
     .inverse()
@@ -410,36 +410,41 @@ pub fn draw_line(points: Vec<[f32; 3]>) -> rend3::types::Mesh {
 }
 
 // I want to use ! for side effect dings but of course rust had a different idea so I will use the prefix do_ to distinguish do_update_camera as "update the actual camera view" from update_camera that just updates the parameters
-pub fn do_update_camera(settings: &GameProgrammeSettings, renderer: &&Arc<rend3::Renderer>) {
-    let view = glam::Mat4::from_euler(
-        glam::EulerRot::XYZ,
-        -settings.camera_pitch,
-        -settings.camera_yaw,
-        0.0,
-    );
-    let view = view * glam::Mat4::from_translation((-settings.camera_location).into());
-
-    renderer.set_camera_data(rend3::types::Camera {
-        projection: CameraProjection::Perspective {
-            vfov: 60.0,
-            near: 0.1,
-        },
-        view,
-    });
+pub fn do_update_camera(state: &GameProgrammeState) {
+    if let Some(cur_camera) = &state.cur_camera {
+        let view = glam::Mat4::from_euler(
+            glam::EulerRot::XYZ,
+            -cur_camera.info.pitch,
+            -cur_camera.info.yaw,
+            0.0,
+        );
+        let view = view * glam::Mat4::from_translation((-cur_camera.info.location()).into());
+        if let Some(renderer) = &state.renderer {
+            renderer.set_camera_data(rend3::types::Camera {
+                projection: CameraProjection::Perspective {
+                    vfov: 60.0,
+                    near: 0.1,
+                },
+                view,
+            });
+        }
+    }
 }
 pub fn update_camera_mouse_params(
-    settings: &mut GameProgrammeSettings,
+    absolute_mouse: bool,
+    state: &mut GameProgrammeState,
     delta_x: f64,
     delta_y: f64,
 ) {
-    if !settings.grabber.as_ref().unwrap().grabbed() {
+    if !state.grabber.as_ref().unwrap().grabbed() {
         return;
     }
 
     const TAU: f32 = std::f32::consts::PI * 2.0;
 
-    let mouse_delta = if settings.absolute_mouse {
-        let prev = settings
+    let mouse_delta = if absolute_mouse {
+        let prev = state
+            .input_status
             .last_mouse_delta
             .replace(glam::DVec2::new(delta_x, delta_y));
         if let Some(prev) = prev {
@@ -450,26 +455,29 @@ pub fn update_camera_mouse_params(
     } else {
         glam::DVec2::new(delta_x, delta_y)
     };
-
-    settings.camera_yaw -= (mouse_delta.x / 1000.0) as f32;
-    settings.camera_pitch -= (mouse_delta.y / 1000.0) as f32;
-    if settings.camera_yaw < 0.0 {
-        settings.camera_yaw += TAU;
-    } else if settings.camera_yaw >= TAU {
-        settings.camera_yaw -= TAU;
+    if let Some(cur_camera) = &mut state.cur_camera {
+        cur_camera.info.yaw -= (mouse_delta.x / 1000.0) as f32;
+        cur_camera.info.pitch -= (mouse_delta.y / 1000.0) as f32;
+        if cur_camera.info.yaw < 0.0 {
+            cur_camera.info.yaw += TAU;
+        } else if cur_camera.info.yaw >= TAU {
+            cur_camera.info.yaw -= TAU;
+        }
+        cur_camera.info.pitch = cur_camera.info.pitch.clamp(
+            -std::f32::consts::FRAC_PI_2 + 0.0001,
+            std::f32::consts::FRAC_PI_2 - 0.0001,
+        )
     }
-    settings.camera_pitch = settings.camera_pitch.clamp(
-        -std::f32::consts::FRAC_PI_2 + 0.0001,
-        std::f32::consts::FRAC_PI_2 - 0.0001,
-    )
 }
 
-pub fn update_camera_rotation(settings: &mut GameProgrammeSettings) {
-    settings.rotation = glam::Mat3A::from_euler(
-        glam::EulerRot::XYZ,
-        -settings.camera_pitch,
-        -settings.camera_yaw,
-        0.0,
-    )
-    .transpose();
+pub fn update_camera_rotation(state: &mut GameProgrammeState) {
+    if let Some(cur_camera) = &mut state.cur_camera {
+        cur_camera.rotation = glam::Mat3A::from_euler(
+            glam::EulerRot::XYZ,
+            -cur_camera.info.pitch,
+            -cur_camera.info.yaw,
+            0.0,
+        )
+        .transpose();
+    }
 }

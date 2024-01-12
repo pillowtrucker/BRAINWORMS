@@ -51,9 +51,9 @@ impl Default for FrameRate {
     }
 }
 
-pub fn update_frame_stats(data: &mut crate::GameProgrammeData) {
-    let last_frame_duration = data.last_update.elapsed().as_secs_f32();
-    data.elapsed += last_frame_duration;
-    data.frame_rate.update(last_frame_duration);
-    data.last_update = time::Instant::now();
+pub fn update_frame_stats(state: &mut crate::GameProgrammeState) {
+    let last_update = state.last_update.unwrap();
+    let last_frame_duration = last_update.elapsed().as_secs_f32();
+    state.frame_rate.update(last_frame_duration);
+    state.last_update = Some(time::Instant::now());
 }

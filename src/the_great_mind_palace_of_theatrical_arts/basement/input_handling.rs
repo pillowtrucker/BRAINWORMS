@@ -1,10 +1,11 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use enum_dispatch::enum_dispatch;
-use glam::{vec3, vec4};
+use glam::{vec3, vec4, DVec2};
 use log::info;
 use parry3d::query::{Ray, RayCast};
 use winit::{
+    dpi::PhysicalPosition,
     event::{ElementState, MouseButton},
     keyboard::KeyCode,
     window::Window,
@@ -20,7 +21,7 @@ use crate::{
         },
         Implementations, Playable, Playables,
     },
-    GameProgrammeData, GameProgrammeSettings,
+    GameProgrammeData, GameProgrammeSettings, GameProgrammeState,
 };
 
 pub type KeyStates = HashMap<AcceptedInputs, ElementState>;
@@ -104,8 +105,14 @@ pub enum InputContexts {
 pub trait InputContext {
     fn handle_input_for_context(
         &mut self,
-        settings: &mut GameProgrammeSettings,
-        data: &mut GameProgrammeData,
-        window: &Window,
+        settings: &GameProgrammeSettings,
+        state: &mut GameProgrammeState,
+        window: &Arc<Window>,
     );
+}
+#[derive(Debug, Default)]
+pub struct InputStatus {
+    pub buttons: KeyStates,
+    pub last_mouse_delta: Option<DVec2>,
+    pub mouse_physical_poz: PhysicalPosition<f64>,
 }

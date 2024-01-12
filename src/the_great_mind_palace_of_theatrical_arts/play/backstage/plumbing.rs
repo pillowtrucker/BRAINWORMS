@@ -14,9 +14,12 @@ use winit::{
 use crate::{
     theater::{
         basement::cla::GameProgrammeSettings,
-        play::scene::{actors::AstinkSprite, AstinkScene},
+        play::{
+            definition::define_play,
+            scene::{actors::AstinkSprite, AstinkScene},
+        },
     },
-    Event, GameProgramme, MyWinitEvent,
+    Event, GameProgramme, GameProgrammeData, GameProgrammeState, MyWinitEvent,
 };
 
 pub mod asset_loader;
@@ -49,10 +52,16 @@ impl GameProgramme {
     }
 
     pub(crate) fn new() -> Self {
+        let timestamp_start = std::time::Instant::now();
+        let data = GameProgrammeData {
+            timestamp_start,
+            play: define_play(),
+        };
         Self {
-            data: None,
+            data,
             settings: GameProgrammeSettings::new(),
             rts: tokio::runtime::Runtime::new().unwrap(),
+            state: GameProgrammeState::default(),
         }
     }
 
@@ -182,14 +191,14 @@ impl GameProgramme {
 
         Ok((event_loop, window))
     }
-    pub(crate) fn create_base_rendergraph(
-        &mut self,
-        renderer: &Arc<Renderer>,
-        spp: &ShaderPreProcessor,
-    ) -> BaseRenderGraph {
-        BaseRenderGraph::new(renderer, spp)
-    }
+
     pub(crate) fn present_mode(&self) -> rend3::types::PresentMode {
         self.settings.present_mode
     }
+}
+pub(crate) fn create_base_rendergraph(
+    renderer: &Arc<Renderer>,
+    spp: &ShaderPreProcessor,
+) -> BaseRenderGraph {
+    BaseRenderGraph::new(renderer, spp)
 }

@@ -20,7 +20,7 @@ use crate::{
             Definitions, Implementations, Playable,
         },
     },
-    GameProgrammeData, MyEvent,
+    GameProgrammeData, GameProgrammeState, MyEvent,
 };
 use egui::Context;
 use nanorand::{RandomGen, Rng};
@@ -79,7 +79,7 @@ impl LinacLabScene {
             ]
             .iter()
             .fold(HashMap::new(), |mut h, (k, v)| {
-                h.insert(k.to_owned(), v.to_owned());
+                h.insert(k.to_owned(), CamInfo::from_arr(v));
                 h
             }),
         });
@@ -126,8 +126,10 @@ impl LinacLabScene {
         let Definitions::SceneDefinition(definition) = &self.definition else {
             panic!("scene has non-scene definition")
         };
-        let scene1_starting_cam =
-            make_camera((definition.start_cam.clone(), self.starting_cam_info()));
+        let scene1_starting_cam = make_camera((
+            definition.start_cam.clone(),
+            self.starting_cam_info().as_arr(),
+        ));
         let mut scene1_cameras = HashMap::new();
         scene1_cameras.insert(scene1_starting_cam.name.clone(), scene1_starting_cam);
         let gltf_settings = settings.gltf_settings;
@@ -212,7 +214,11 @@ impl LinacLabScene {
         let Definitions::SceneDefinition(definition) = &self.definition else {
             panic!("scene has non-scene definition")
         };
-        *definition.cameras.get(&definition.start_cam).unwrap()
+        definition
+            .cameras
+            .get(&definition.start_cam)
+            .unwrap()
+            .clone()
     }
 
     fn implement_chorus(&self, egui_ctx: Context) {
@@ -237,52 +243,56 @@ impl LinacLabScene {
             }
         });
     }
-    fn handle_input(&mut self, settings: &mut GameProgrammeSettings, window: &Window) {
-        update_camera_rotation(settings);
-        let forward = -settings.rotation.z_axis;
-        let up = settings.rotation.y_axis;
-        let side = -settings.rotation.x_axis;
-        let really_pressed = |binding| {
-            input_down(&settings.input_status, &settings.keybindings, binding).is_some_and(|k| k)
-        };
-        let really_released = |binding| {
-            input_up(&settings.input_status, &settings.keybindings, binding).is_some_and(|k| k)
-        };
+    fn handle_input(
+        &mut self,
+        settings: &GameProgrammeSettings,
+        state: &mut GameProgrammeState,
+        window: &Arc<Window>,
+    ) {
+        update_camera_rotation(state);
+        let cur_camera = state.cur_camera.as_mut().unwrap();
+        let rotation = cur_camera.rotation;
+        let forward = -rotation.z_axis;
+        let up = rotation.y_axis;
+        let side = -rotation.x_axis;
+        let buttons = &mut state.input_status.buttons;
+        let really_pressed =
+            |binding| input_down(&buttons, &settings.keybindings, binding).is_some_and(|k| k);
+        let really_released =
+            |binding| input_up(&buttons, &settings.keybindings, binding).is_some_and(|k| k);
         let interacted_with = |binding| really_pressed(binding) || really_released(binding);
         let velocity = if really_pressed(&LIB::Sprint) {
             settings.run_speed
         } else {
             settings.walk_speed
         };
+        let mut location = cur_camera.info.location();
+        let last_update = state.last_update.unwrap();
         if really_pressed(&LIB::Forwards) {
-            settings.camera_location +=
-                forward * velocity * data.last_update.elapsed().as_secs_f32();
+            location += forward * velocity * last_update.elapsed().as_secs_f32();
         }
         if really_pressed(&LIB::Backwards) {
-            settings.camera_location -=
-                forward * velocity * data.last_update.elapsed().as_secs_f32();
+            location -= forward * velocity * last_update.elapsed().as_secs_f32();
         }
         if really_pressed(&LIB::StrafeLeft) {
-            settings.camera_location += side * velocity * data.last_update.elapsed().as_secs_f32();
+            location += side * velocity * last_update.elapsed().as_secs_f32();
         }
         if really_pressed(&LIB::StrafeRight) {
-            settings.camera_location -= side * velocity * data.last_update.elapsed().as_secs_f32();
+            location -= side * velocity * last_update.elapsed().as_secs_f32();
         }
         if really_pressed(&LIB::LiftUp) {
-            settings.camera_location += up * velocity * data.last_update.elapsed().as_secs_f32();
+            location += up * velocity * last_update.elapsed().as_secs_f32();
         }
         if really_released(&LIB::Interact) {
-            let rayman = make_ray(settings, data, window);
+            let rayman = make_ray(
+                cur_camera,
+                &state.input_status.mouse_physical_poz,
+                window,
+                settings.handedness,
+            );
 
-            if let Implementations::SceneImplementation(sc_imp) = data
-                .play
-                .playables
-                .get_mut(data.current_playable.as_ref().unwrap())
-                .as_mut()
-                .unwrap()
-                .playable_implementation()
-                .as_mut()
-                .unwrap()
+            if let Implementations::SceneImplementation(sc_imp) =
+                self.implementation.as_mut().unwrap()
             {
                 const MAX_TOI: f32 = 100000.0;
                 if let AstinkScene::Loaded(stage3d) = &sc_imp.stage3d {
@@ -290,11 +300,8 @@ impl LinacLabScene {
                         for c in colliders {
                             if let Some(toi) = c.cast_local_ray(&rayman, MAX_TOI, true) {
                                 let intersection = rayman.point_at(toi);
-                                let cam_point = nalgebra::Point3::from([
-                                    settings.camera_location.x,
-                                    settings.camera_location.y,
-                                    settings.camera_location.z,
-                                ]);
+                                let cam_point =
+                                    nalgebra::Point3::from([location.x, location.y, location.z]);
                                 if cam_point != intersection {
                                     println!("{} intersects mouse ray at {}", c_name, intersection);
                                     #[cfg(extra_debugging)]
@@ -325,7 +332,7 @@ impl LinacLabScene {
         }
 
         if really_released(&LIB::Back) {
-            settings.grabber.as_mut().unwrap().request_ungrab(window);
+            state.grabber.as_mut().unwrap().request_ungrab(window);
         }
 
         if really_released(&LIB::DebugProfiling) {
@@ -333,13 +340,15 @@ impl LinacLabScene {
             theater::basement::debug_profiling_etc::write_profiling_json(&self.settings);
         }
         if interacted_with(&LIB::GrabWindow) {
-            let grabber = settings.grabber.as_mut().unwrap();
+            let grabber = state.grabber.as_mut().unwrap();
 
             if !grabber.grabbed() {
                 grabber.request_grab(window);
             }
         }
-
-        settings.input_status.retain(|_, v| v.is_pressed());
+        cur_camera
+            .info
+            .set_location(location.x, location.y, location.z);
+        buttons.retain(|_, v| v.is_pressed());
     }
 }
