@@ -37,13 +37,9 @@ use winit::{
     window::{Fullscreen, Window, WindowBuilder},
 };
 
-use crate::theater::basement::input_handling::InputContext;
 use crate::theater::{
     basement::{frame_rate::update_frame_stats, input_handling::AcceptedInputs},
-    play::scene::{
-        actors::draw_actor,
-        stage3d::{do_update_camera, update_camera_rotation},
-    },
+    play::scene::{actors::draw_actor, stage3d::do_update_camera},
 };
 
 pub struct GameProgrammeData {
@@ -379,7 +375,12 @@ impl GameProgramme {
                 let current_scene_id = game_state.current_playable.as_ref().unwrap();
                 let current_scene = game_data.play.playables.get_mut(current_scene_id).unwrap();
 
-                current_scene.handle_input_for_playable(&self.settings, game_state, &window);
+                current_scene.handle_input_wrapped(
+                    &self.settings,
+                    game_state,
+                    &window,
+                    input_context,
+                );
                 window.request_redraw();
             }
             Event::WindowEvent { event, .. } => {

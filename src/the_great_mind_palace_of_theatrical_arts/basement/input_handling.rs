@@ -11,7 +11,6 @@ use winit::{
     window::Window,
 };
 
-use self::LogicalInputBinding as LIB;
 use crate::{
     theater::play::{
         scene::{
@@ -25,7 +24,7 @@ use crate::{
 };
 
 pub type KeyStates = HashMap<AcceptedInputs, ElementState>;
-pub type KeyBindings = HashMap<LIB, AcceptedInputs>;
+pub type DebugKeyBindings = HashMap<DebugCameraInputBinding, AcceptedInputs>;
 
 pub fn key_down(input_status: &KeyStates, the_input: &AcceptedInputs) -> Option<bool> {
     key_is_state(input_status, the_input, &ElementState::Pressed)
@@ -46,10 +45,10 @@ pub fn key_is_state(
         .get(the_input)
         .map(|k| k.is_pressed() && want_pressed || !k.is_pressed() && !want_pressed)
 }
-pub fn input_down(
+pub fn input_down<TO: AmBindings>(
     input_status: &KeyStates,
-    keybindings: &KeyBindings,
-    binding: &LIB,
+    keybindings: &HashMap<TO, AcceptedInputs>,
+    binding: &TO,
 ) -> Option<bool> {
     match keybindings.get(binding) {
         Some(the_key) => key_down(input_status, the_key),
@@ -59,10 +58,10 @@ pub fn input_down(
         }
     }
 }
-pub fn input_up(
+pub fn input_up<TO: AmBindings>(
     input_status: &KeyStates,
-    keybindings: &KeyBindings,
-    binding: &LIB,
+    keybindings: &HashMap<TO, AcceptedInputs>,
+    binding: &TO,
 ) -> Option<bool> {
     match keybindings.get(binding) {
         Some(the_key) => key_up(input_status, the_key),
@@ -72,9 +71,29 @@ pub fn input_up(
         }
     }
 }
-
+/* maybe I'll add this later but it's just too much pointless indirection
+pub enum PadlikeBinding {
+    L1,
+    L2,
+    L3,
+    R1,
+    R2,
+    R3,
+    DUp,
+    DDown,
+    DLeft,
+    DRight,
+    Square,
+    Triangle,
+    Circle,
+    Cross,
+    Start,
+    Select,
+    GlobalMenu,
+}
+*/
 #[derive(Debug, Hash, Eq, PartialEq)]
-pub enum LogicalInputBinding {
+pub enum DebugCameraInputBinding {
     Sprint,
     Forwards,
     Backwards,
@@ -86,6 +105,12 @@ pub enum LogicalInputBinding {
     DebugProfiling,
     GrabWindow,
 }
+pub trait AmBindings: std::fmt::Debug + std::hash::Hash + Eq + PartialEq {}
+impl AmBindings for DebugCameraInputBinding {}
+pub trait MapsBindings<T> {
+    fn map_to_logical(padlike_binding: AcceptedInputs) -> T;
+    fn map_from_logical(logical_binding: T) -> AcceptedInputs;
+}
 
 #[derive(Debug, Eq, PartialEq, Hash)]
 pub enum AcceptedInputs {
@@ -93,22 +118,53 @@ pub enum AcceptedInputs {
     M(MouseButton),
 }
 
-pub enum InputContexts {
-    DebugCamera,
-    SceneOverview,
-    PauseScreen,
-    MainMenu,
+pub enum InputContexts<T: AmBindings> {
+    Debug,
+    Scene(T),
+    //    Pause,
 }
 
 // Ideally I want this to only mess with its own data but for now let's just reproduce the existing behaviour
 //#[enum_dispatch(Playables)]
-pub trait InputContext {
-    fn handle_input_for_context(
+pub trait HandlesInputContexts<TO> {
+    fn handle_input_for_debug_context(
         &mut self,
         settings: &GameProgrammeSettings,
         state: &mut GameProgrammeState,
         window: &Arc<Window>,
     );
+    fn handle_input_for_own_context(
+        &mut self,
+        settings: &GameProgrammeSettings,
+        state: &mut GameProgrammeState,
+        window: &Arc<Window>,
+        own_logical_bindings: TO,
+    );
+}
+pub(crate) trait WrappedHandlesInput<T: AmBindings> {
+    fn handle_input_wrapped(
+        &mut self,
+        settings: &GameProgrammeSettings,
+        state: &mut GameProgrammeState,
+        window: &Arc<Window>,
+        context: InputContexts<T>,
+    );
+}
+impl<T: HandlesInputContexts<TO> + MapsBindings<TO>, TO: AmBindings> WrappedHandlesInput<TO> for T {
+    fn handle_input_wrapped(
+        &mut self,
+        settings: &GameProgrammeSettings,
+        state: &mut GameProgrammeState,
+        window: &Arc<Window>,
+        context: InputContexts<TO>,
+    ) {
+        match context {
+            InputContexts::Debug => self.handle_input_for_debug_context(settings, state, window),
+            InputContexts::Scene(own_local_bindings) => {
+                self.handle_input_for_own_context(settings, state, window, own_local_bindings)
+            }
+        }
+    }
 }
 #[derive(Debug, Default)]
 pub struct InputStatus {

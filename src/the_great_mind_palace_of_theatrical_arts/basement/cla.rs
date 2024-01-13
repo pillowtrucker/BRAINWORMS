@@ -13,7 +13,10 @@ use winit::{event::MouseButton, keyboard::KeyCode};
 
 use super::{
     grab::Grabber,
-    input_handling::{AcceptedInputs, KeyBindings, KeyStates, LogicalInputBinding as LIB},
+    input_handling::{
+        AcceptedInputs, DebugCameraInputBinding as DebugBindings, DebugKeyBindings, KeyBindings,
+        KeyStates,
+    },
 };
 
 const HELP: &str = "\
@@ -159,6 +162,8 @@ pub struct GameProgrammeSettings {
     pub fullscreen: bool,
     pub keybindings: KeyBindings,
     pub handedness: Handedness,
+    pub def_dbg_ctx_kb: DebugKeyBindings,
+    pub def_pause_ctx_kb: PauseKeyBindings,
 }
 impl Default for GameProgrammeSettings {
     fn default() -> Self {
@@ -259,22 +264,23 @@ impl GameProgrammeSettings {
         }
 
         gltf_settings.directional_light_resolution = shadow_resolution;
-        let mut keybindings = KeyBindings::from(
+
+        let mut def_dbg_ctx_kb = KeyBindings::from(
             [
-                (LIB::Sprint, KeyCode::ShiftLeft),
-                (LIB::Forwards, KeyCode::KeyW),
-                (LIB::Backwards, KeyCode::KeyS),
-                (LIB::StrafeLeft, KeyCode::KeyA),
-                (LIB::StrafeRight, KeyCode::KeyD),
-                (LIB::LiftUp, KeyCode::KeyQ),
-                (LIB::Interact, KeyCode::Period),
-                (LIB::Back, KeyCode::Escape),
-                (LIB::DebugProfiling, KeyCode::KeyP),
+                (DebugBindings::Sprint, KeyCode::ShiftLeft),
+                (DebugBindings::Forwards, KeyCode::KeyW),
+                (DebugBindings::Backwards, KeyCode::KeyS),
+                (DebugBindings::StrafeLeft, KeyCode::KeyA),
+                (DebugBindings::StrafeRight, KeyCode::KeyD),
+                (DebugBindings::LiftUp, KeyCode::KeyQ),
+                (DebugBindings::Interact, KeyCode::Period),
+                (DebugBindings::Back, KeyCode::Escape),
+                (DebugBindings::DebugProfiling, KeyCode::KeyP),
             ]
             .map(|(lb, kc)| (lb, AcceptedInputs::KB(kc))),
         );
         for (lb, mb) in [(LIB::GrabWindow, MouseButton::Left)] {
-            keybindings.insert(lb, AcceptedInputs::M(mb));
+            def_dbg_ctx_kb.insert(lb, AcceptedInputs::M(mb));
         }
         Self {
             absolute_mouse,
@@ -291,7 +297,7 @@ impl GameProgrammeSettings {
             present_mode,
             samples,
             fullscreen,
-            keybindings,
+            def_dbg_ctx_kb,
             handedness: Handedness::Right,
         }
     }

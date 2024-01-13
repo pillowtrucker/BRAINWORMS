@@ -4,7 +4,7 @@ use crate::{
     theater::{
         basement::{
             cla::GameProgrammeSettings,
-            input_handling::{input_down, input_up, LogicalInputBinding as LIB},
+            input_handling::{input_down, input_up},
             text_files::read_lines,
         },
         play::{
