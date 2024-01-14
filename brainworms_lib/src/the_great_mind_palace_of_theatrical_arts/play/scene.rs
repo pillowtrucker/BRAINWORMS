@@ -1,7 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use egui::Context;
-use glam::{Mat3A, Vec3, Vec3A};
+use glam::{Mat3A, Vec3A};
 use parking_lot::Mutex;
 use rend3::Renderer;
 use tokio::runtime::Runtime;
@@ -9,8 +9,11 @@ use uuid::Uuid;
 use winit::{event_loop::EventLoop, window::Window};
 
 use crate::{
-    theater::basement::{cla::GameProgrammeSettings, input_handling::InputContext},
-    GameProgrammeData, GameProgrammeState, MyEvent,
+    theater::basement::{
+        cla::GameProgrammeSettings,
+        input_handling::{HandlesInputContexts, InputContext},
+    },
+    GameProgrammeState, MyEvent,
 };
 
 use self::{actors::ActressDefinition, chorus::Choral, stage3d::Colliders};
@@ -109,7 +112,11 @@ pub trait Scenic {
     fn raw_implementation(&mut self) -> &mut Option<Implementations>;
 }
 
-impl<T: Scenic + Choral + InputContext> Playable for T {
+impl<
+        InputContextEnum: InputContext,
+        T: Scenic + Choral + HandlesInputContexts<InputContextEnum>,
+    > Playable<InputContextEnum> for T
+{
     fn playable_uuid(&self) -> Uuid {
         self.scene_uuid()
     }
@@ -151,7 +158,7 @@ impl<T: Scenic + Choral + InputContext> Playable for T {
     fn handle_input_for_playable(
         &mut self,
         settings: &GameProgrammeSettings,
-        state: &mut GameProgrammeState,
+        state: &mut GameProgrammeState<InputContextEnum>,
         window: &Arc<Window>,
     ) {
         self.handle_input_for_context(settings, state, window)

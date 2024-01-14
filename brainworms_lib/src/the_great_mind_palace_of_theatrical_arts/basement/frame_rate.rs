@@ -1,5 +1,7 @@
 use std::time;
 
+use super::input_handling::InputContext;
+
 /// Sliding window to give a smooth framerate.
 /// Sum the last `window_size` `frame_duration` to estimate the framerate.
 /// Implemented with a circular buffer.
@@ -51,7 +53,9 @@ impl Default for FrameRate {
     }
 }
 
-pub fn update_frame_stats(state: &mut crate::GameProgrammeState) {
+pub fn update_frame_stats<InputContextEnum: InputContext>(
+    state: &mut crate::GameProgrammeState<InputContextEnum>,
+) {
     let last_update = state.last_update.unwrap();
     let last_frame_duration = last_update.elapsed().as_secs_f32();
     state.frame_rate.update(last_frame_duration);

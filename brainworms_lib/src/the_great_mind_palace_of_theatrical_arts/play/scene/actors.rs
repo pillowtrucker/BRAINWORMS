@@ -82,7 +82,7 @@ pub(crate) fn draw_actor(a: Arc<Mutex<AstinkSprite>>, renderer: Arc<Renderer>, t
 
     renderer.queue.submit(std::iter::once(encoder.finish()));
 }
-pub(crate) async fn create_actor(
+pub async fn create_actor(
     name: String,
     directory: String,
     renderer: Arc<Renderer>,

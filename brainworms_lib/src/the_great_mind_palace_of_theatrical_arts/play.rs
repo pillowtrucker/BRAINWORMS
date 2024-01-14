@@ -1,4 +1,4 @@
-use std::{collections::HashMap, default, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 
 use egui::Context;
 use enum_dispatch::enum_dispatch;
@@ -8,13 +8,11 @@ use uuid::Uuid;
 use winit::event_loop::EventLoop;
 use winit::window::Window;
 
-use crate::{
-    theater::basement::input_handling::InputContext, GameProgrammeData, GameProgrammeState, MyEvent,
-};
+use crate::{theater::basement::input_handling::InputContext, GameProgrammeState, MyEvent};
 
 use self::{
     backstage::plumbing::DefaultRoutines,
-    scene::{definitions::linac_lab::LinacLabScene, CamInfo, SceneDefinition, SceneImplementation},
+    scene::{CamInfo, SceneDefinition, SceneImplementation},
 };
 
 use super::basement::cla::GameProgrammeSettings;
@@ -23,20 +21,15 @@ pub mod backstage;
 pub mod definition;
 pub mod scene;
 #[derive(Default)]
-pub struct Play {
+pub struct Play<PlayablesEnum> {
     pub first_playable: Uuid,
-    pub playables: HashMap<Uuid, Playables>,
+    pub playables: HashMap<Uuid, PlayablesEnum>,
     pub playable_names: HashMap<String, Uuid>,
 }
-#[enum_dispatch]
-pub enum Playables {
-    LinacLabScene,
-    //    Curtain,   // loading screens
-    //    TicketBox, // menus
-}
 
-#[enum_dispatch(Playables)]
-pub trait Playable {
+#[enum_dispatch]
+pub trait Playable<InputContextEnum: InputContext> {
+    //<TO: AmBindings> {
     fn playable_uuid(&self) -> Uuid;
     fn playable_name(&self) -> &str;
     fn playable_definition(&mut self) -> &mut Definitions;
@@ -52,10 +45,11 @@ pub trait Playable {
     );
     fn define_playable(&mut self);
     fn implement_chorus_for_playable(&self, egui_ctx: Context);
+    //    fn get_current_input_context(&self) -> &InputContext<TO>;
     fn handle_input_for_playable(
         &mut self,
         settings: &GameProgrammeSettings,
-        state: &mut GameProgrammeState,
+        state: &mut GameProgrammeState<InputContextEnum>,
         window: &Arc<Window>,
     );
 }

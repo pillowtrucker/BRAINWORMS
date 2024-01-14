@@ -27,7 +27,7 @@ pub fn derive_scenic_partial(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let ident = input.ident;
     let tokens = quote! {
-        use crate::theater::play::scene::Scenic;
+
         impl Scenic for #ident {
             /*
             fn scene_definition(&mut self) -> &mut SceneDefinition {
@@ -85,7 +85,6 @@ pub fn derive_choral_partial(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let ident = input.ident;
     let tokens = quote! {
-        use crate::theater::play::scene::chorus::Choral;
         impl Choral for #ident {
             fn implement_chorus_for_choral(&self, egui_ctx: Context) {
                 self.implement_chorus(egui_ctx);
@@ -96,18 +95,19 @@ pub fn derive_choral_partial(input: TokenStream) -> TokenStream {
 
     tokens.into()
 }
-
-#[proc_macro_derive(InputContext)]
+/*
+#[proc_macro_derive(HandlesInputContext)]
 pub fn derive_input_context_partial(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let ident = input.ident;
+
     let tokens = quote! {
-        use crate::theater::basement::input_handling::InputContext;
-        impl InputContext for #ident {
-            fn handle_input_for_context(&mut self,
-                                        settings: &GameProgrammeSettings,
-                                        state: &mut GameProgrammeState,
-                                        window: &Arc<Window>,) {
+        impl HandlesInputContexts for #ident {
+            fn handle_input_for_context (&mut self,
+                                                         settings: &GameProgrammeSettings,
+                                                         state: &mut GameProgrammeState,
+                                                         window: &Arc<Window>,
+            ) {
 
                 self.handle_input(
                     settings,
@@ -155,3 +155,4 @@ pub fn add_common_playable_fields(args: TokenStream, input: TokenStream) -> Toke
     }
     .into()
 }
+*/

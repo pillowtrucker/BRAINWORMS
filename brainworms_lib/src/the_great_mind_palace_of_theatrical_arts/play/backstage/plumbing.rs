@@ -13,10 +13,10 @@ use winit::{
 
 use crate::{
     theater::{
-        basement::cla::GameProgrammeSettings,
+        basement::{cla::GameProgrammeSettings, input_handling::InputContext},
         play::{
-            definition::define_play,
             scene::{actors::AstinkSprite, AstinkScene},
+            Play, Playable,
         },
     },
     Event, GameProgramme, GameProgrammeData, GameProgrammeState, MyWinitEvent,
@@ -36,13 +36,15 @@ pub(crate) struct StoredSurfaceInfo {
     pub(crate) present_mode: PresentMode,
 }
 
-pub fn start(gp: GameProgramme, window_builder: WindowBuilder) {
-    {
-        pollster::block_on(gp.async_start(window_builder));
+impl<PlayablesEnum: Playable<InputContextEnum> + 'static, InputContextEnum: InputContext>
+    GameProgramme<PlayablesEnum, InputContextEnum>
+{
+    pub fn start(self, window_builder: WindowBuilder) {
+        {
+            pollster::block_on(self.async_start(window_builder));
+        }
     }
-}
 
-impl GameProgramme {
     pub fn spawn<Fut>(&self, fut: Fut) -> tokio::task::JoinHandle<<Fut as Future>::Output>
     where
         Fut: Future + Send + 'static,
@@ -51,11 +53,11 @@ impl GameProgramme {
         self.rts.spawn(fut)
     }
 
-    pub(crate) fn new() -> Self {
+    pub fn new(play: Play<PlayablesEnum>) -> Self {
         let timestamp_start = std::time::Instant::now();
         let data = GameProgrammeData {
             timestamp_start,
-            play: define_play(),
+            play,
         };
         Self {
             data,

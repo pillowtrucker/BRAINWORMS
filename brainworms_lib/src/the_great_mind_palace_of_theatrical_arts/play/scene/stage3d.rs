@@ -31,10 +31,10 @@ use std::time;
 
 use crate::{
     theater::{
-        basement::cla::GameProgrammeSettings,
+        basement::input_handling::InputContext,
         play::backstage::plumbing::asset_loader::{AssetError, AssetLoader, AssetPath},
     },
-    GameProgrammeData, GameProgrammeState, MyEvent, MyWinitEvent,
+    GameProgrammeState, MyEvent, MyWinitEvent,
 };
 
 use super::{AstinkScene, CamInfo, Camera};
@@ -60,7 +60,7 @@ pub(crate) async fn load_skybox_image(loader: &AssetLoader, data: &mut Vec<u8>, 
     data.extend_from_slice(decoded.as_raw());
 }
 
-pub(crate) async fn load_stage3d(
+pub async fn load_stage3d(
     name: String,
     directory: String,
     sc_id: Uuid,
@@ -410,7 +410,9 @@ pub fn draw_line(points: Vec<[f32; 3]>) -> rend3::types::Mesh {
 }
 
 // I want to use ! for side effect dings but of course rust had a different idea so I will use the prefix do_ to distinguish do_update_camera as "update the actual camera view" from update_camera that just updates the parameters
-pub fn do_update_camera(state: &mut GameProgrammeState) {
+pub fn do_update_camera<InputContextEnum: InputContext>(
+    state: &mut GameProgrammeState<InputContextEnum>,
+) {
     if let Some(cur_camera) = &mut state.cur_camera {
         let view = glam::Mat4::from_euler(
             glam::EulerRot::XYZ,
@@ -432,9 +434,9 @@ pub fn do_update_camera(state: &mut GameProgrammeState) {
         }
     }
 }
-pub fn update_camera_mouse_params(
+pub fn update_camera_mouse_params<InputContextEnum: InputContext>(
     absolute_mouse: bool,
-    state: &mut GameProgrammeState,
+    state: &mut GameProgrammeState<InputContextEnum>,
     delta_x: f64,
     delta_y: f64,
 ) {
@@ -472,7 +474,9 @@ pub fn update_camera_mouse_params(
     }
 }
 
-pub fn update_camera_rotation(state: &mut GameProgrammeState) {
+pub fn update_camera_rotation<InputContextEnum: InputContext>(
+    state: &mut GameProgrammeState<InputContextEnum>,
+) {
     if let Some(cur_camera) = &mut state.cur_camera {
         cur_camera.rotation = glam::Mat3A::from_euler(
             glam::EulerRot::XYZ,

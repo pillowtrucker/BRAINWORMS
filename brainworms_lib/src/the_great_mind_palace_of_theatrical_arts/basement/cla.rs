@@ -1,23 +1,14 @@
-use std::collections::HashMap;
-
-use glam::{DVec2, Mat3A, Vec3, Vec3A};
-use pico_args::Arguments;
+use glam::Vec3;
+use pico_args::{self, Arguments};
 use rend3::{
     types::{DirectionalLightHandle, Handedness, SampleCount},
     RendererProfile,
 };
 use rend3_routine::pbr::NormalTextureYDirection;
 use wgpu::Backend;
-use wgpu_profiler::GpuTimerScopeResult;
 use winit::{event::MouseButton, keyboard::KeyCode};
 
-use super::{
-    grab::Grabber,
-    input_handling::{
-        AcceptedInputs, DebugCameraInputBinding as DebugBindings, DebugKeyBindings, KeyBindings,
-        KeyStates,
-    },
-};
+use super::input_handling::{AcceptedInput, DebugInputContext, KeyBindings};
 
 const HELP: &str = "\
 scene-viewer
@@ -91,7 +82,7 @@ pub(crate) fn extract_vsync(value: &str) -> Result<rend3::types::PresentMode, &'
         _ => return Err("invalid msaa count"),
     })
 }
-
+/*
 pub(crate) fn extract_array<const N: usize>(
     value: &str,
     default: [f32; N],
@@ -110,7 +101,7 @@ pub(crate) fn extract_array<const N: usize>(
     }
     Ok(res)
 }
-
+*/
 pub(crate) fn extract_vec3(value: &str) -> Result<Vec3, &'static str> {
     let mut res = [0.0_f32, 0.0, 0.0];
     let split: Vec<_> = value.split(',').enumerate().collect();
@@ -160,10 +151,10 @@ pub struct GameProgrammeSettings {
     pub present_mode: rend3::types::PresentMode,
     pub samples: SampleCount,
     pub fullscreen: bool,
-    pub keybindings: KeyBindings,
+    //    pub keybindings: KeyBindings,
     pub handedness: Handedness,
-    pub def_dbg_ctx_kb: DebugKeyBindings,
-    pub def_pause_ctx_kb: PauseKeyBindings,
+    pub def_dbg_ctx_kb: KeyBindings<DebugInputContext>,
+    //    pub def_pause_ctx_kb: KeyBindings<PauseInputContext>,
 }
 impl Default for GameProgrammeSettings {
     fn default() -> Self {
@@ -267,21 +258,22 @@ impl GameProgrammeSettings {
 
         let mut def_dbg_ctx_kb = KeyBindings::from(
             [
-                (DebugBindings::Sprint, KeyCode::ShiftLeft),
-                (DebugBindings::Forwards, KeyCode::KeyW),
-                (DebugBindings::Backwards, KeyCode::KeyS),
-                (DebugBindings::StrafeLeft, KeyCode::KeyA),
-                (DebugBindings::StrafeRight, KeyCode::KeyD),
-                (DebugBindings::LiftUp, KeyCode::KeyQ),
-                (DebugBindings::Interact, KeyCode::Period),
-                (DebugBindings::Back, KeyCode::Escape),
-                (DebugBindings::DebugProfiling, KeyCode::KeyP),
+                (DebugInputContext::Sprint, KeyCode::ShiftLeft),
+                (DebugInputContext::Forwards, KeyCode::KeyW),
+                (DebugInputContext::Backwards, KeyCode::KeyS),
+                (DebugInputContext::StrafeLeft, KeyCode::KeyA),
+                (DebugInputContext::StrafeRight, KeyCode::KeyD),
+                (DebugInputContext::LiftUp, KeyCode::KeyQ),
+                (DebugInputContext::Interact, KeyCode::Period),
+                (DebugInputContext::Back, KeyCode::Escape),
+                (DebugInputContext::DebugProfiling, KeyCode::KeyP),
             ]
-            .map(|(lb, kc)| (lb, AcceptedInputs::KB(kc))),
+            .map(|(lb, kc)| (lb, AcceptedInput::KB(kc))),
         );
-        for (lb, mb) in [(LIB::GrabWindow, MouseButton::Left)] {
-            def_dbg_ctx_kb.insert(lb, AcceptedInputs::M(mb));
+        for (lb, mb) in [(DebugInputContext::GrabWindow, MouseButton::Left)] {
+            def_dbg_ctx_kb.insert(lb, AcceptedInput::M(mb));
         }
+        //        let def_pause_ctx_kb = PauseKeyBindings::new();
         Self {
             absolute_mouse,
             desired_backend,
@@ -299,6 +291,7 @@ impl GameProgrammeSettings {
             fullscreen,
             def_dbg_ctx_kb,
             handedness: Handedness::Right,
+            //            def_pause_ctx_kb,
         }
     }
 }
