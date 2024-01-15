@@ -585,6 +585,7 @@ impl<
         state.current_playable = None;
         state.cur_camera = None;
         state.input_status = InputStatus::default();
+        //        state.cur_input_context = ;
 
         // Implementations for Play/Scene/etc go below
         let data = &mut self.data;

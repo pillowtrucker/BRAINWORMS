@@ -26,6 +26,7 @@ pub enum DebugInputContext {
     Back,
     DebugProfiling,
     GrabWindow,
+    Marker,
 }
 pub trait InputContext:
     std::default::Default + std::fmt::Debug + std::hash::Hash + Eq + PartialEq
@@ -81,7 +82,7 @@ pub trait HandlesInputContexts<InputContextEnum: InputContext> {
     }
     fn input_up(
         input_status: &KeyStates,
-        keybindings: &HashMap<InputContextEnum, AcceptedInput>,
+        keybindings: &KeyBindings<InputContextEnum>,
         binding: &InputContextEnum,
     ) -> Option<bool> {
         match keybindings.get(binding) {

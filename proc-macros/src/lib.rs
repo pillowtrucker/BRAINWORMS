@@ -1,7 +1,7 @@
 use proc_macro::TokenStream;
 
 use quote::quote;
-use syn::{parse::Parser, parse_macro_input, DeriveInput, ItemStruct};
+use syn::{parse_macro_input, DeriveInput};
 
 /// Example of [function-like procedural macro][1].
 ///
@@ -95,6 +95,76 @@ pub fn derive_choral_partial(input: TokenStream) -> TokenStream {
 
     tokens.into()
 }
+/*
+// enum_dispatch doesn't work across crates..
+#[proc_macro_derive(EnumPlayable)]
+pub fn derive_playable_for_enum(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    let enum_ident = input.ident;
+    //    let mut tokens: TokenStream;
+    match input.data {
+        syn::Data::Struct(_) => panic!("enums only"),
+        syn::Data::Enum(enum_data) => {
+            for variant_ident in enum_data.variants.iter() {
+                let tokens = quote! {
+                    impl Playable for #variant_ident {
+                        fn playable_uuid(&self) -> Uuid {
+                            self.playable_uuid()
+                        }
+
+                        fn playable_name(&self) -> &str {
+                            self.playable_name()
+                        }
+
+                        fn starting_cam_info(&self) -> CamInfo {
+                            self.scene_starting_cam_info()
+                        }
+
+                        fn implement_playable(
+                            &mut self,
+                            settings: &GameProgrammeSettings,
+                            event_loop: &EventLoop<MyEvent>,
+                            renderer: Arc<Renderer>,
+                            routines: Arc<DefaultRoutines>,
+                            rts: &Runtime,
+                        ) {
+                            self.implement_scene(settings, event_loop, renderer, routines, rts)
+                        }
+
+                        fn define_playable(&mut self) {
+                            self.define_scene()
+                        }
+                        fn implement_chorus_for_playable(&self, egui_ctx: Context) {
+                            self.implement_chorus_for_choral(egui_ctx);
+                        }
+
+                        fn playable_definition(&mut self) -> &mut Definitions {
+                            self.raw_definition()
+                        }
+
+                        fn playable_implementation(&mut self) -> &mut Option<Implementations> {
+                            self.raw_implementation()
+                        }
+
+                        fn handle_input_for_playable(
+                            &mut self,
+                            settings: &GameProgrammeSettings,
+                            state: &mut GameProgrammeState<InputContextEnum>,
+                            window: &Arc<Window>,
+                        ) {
+                            self.handle_input_for_context(settings, state, window)
+                        }
+                    }
+
+                };
+            }
+        }
+        syn::Data::Union(_) => panic!("enums only"),
+    }
+
+    tokens.into()
+}
+*/
 /*
 #[proc_macro_derive(HandlesInputContext)]
 pub fn derive_input_context_partial(input: TokenStream) -> TokenStream {

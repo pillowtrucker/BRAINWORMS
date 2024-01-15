@@ -32,7 +32,8 @@ pub struct AssetLoader {
 impl Default for AssetLoader {
     fn default() -> Self {
         Self::new_local(
-            concat!(env!("CARGO_MANIFEST_DIR"), "/"),
+            //            concat!(env!("CARGO_MANIFEST_DIR"), "/"),
+            "",
             "",
             "http://localhost:8000/",
         )

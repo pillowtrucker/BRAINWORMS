@@ -12,10 +12,10 @@ use crate::{theater::basement::input_handling::InputContext, GameProgrammeState,
 
 use self::{
     backstage::plumbing::DefaultRoutines,
-    scene::{CamInfo, SceneDefinition, SceneImplementation},
+    scene::{chorus::Choral, CamInfo, SceneDefinition, SceneImplementation, Scenic},
 };
 
-use super::basement::cla::GameProgrammeSettings;
+use super::basement::{cla::GameProgrammeSettings, input_handling::HandlesInputContexts};
 
 pub mod backstage;
 pub mod definition;
@@ -29,7 +29,6 @@ pub struct Play<PlayablesEnum> {
 
 #[enum_dispatch]
 pub trait Playable<InputContextEnum: InputContext> {
-    //<TO: AmBindings> {
     fn playable_uuid(&self) -> Uuid;
     fn playable_name(&self) -> &str;
     fn playable_definition(&mut self) -> &mut Definitions;
@@ -70,4 +69,56 @@ pub enum Implementations {
     SceneImplementation(SceneImplementation),
     #[default]
     BogusImplementation,
+}
+impl<
+        InputContextEnum: InputContext,
+        T: Scenic + Choral + HandlesInputContexts<InputContextEnum>,
+    > Playable<InputContextEnum> for T
+{
+    fn playable_uuid(&self) -> Uuid {
+        self.scene_uuid()
+    }
+
+    fn playable_name(&self) -> &str {
+        self.scene_name()
+    }
+
+    fn starting_cam_info(&self) -> CamInfo {
+        self.scene_starting_cam_info()
+    }
+
+    fn implement_playable(
+        &mut self,
+        settings: &GameProgrammeSettings,
+        event_loop: &EventLoop<MyEvent>,
+        renderer: Arc<Renderer>,
+        routines: Arc<DefaultRoutines>,
+        rts: &Runtime,
+    ) {
+        self.implement_scene(settings, event_loop, renderer, routines, rts)
+    }
+
+    fn define_playable(&mut self) {
+        self.define_scene()
+    }
+    fn implement_chorus_for_playable(&self, egui_ctx: Context) {
+        self.implement_chorus_for_choral(egui_ctx);
+    }
+
+    fn playable_definition(&mut self) -> &mut Definitions {
+        self.raw_definition()
+    }
+
+    fn playable_implementation(&mut self) -> &mut Option<Implementations> {
+        self.raw_implementation()
+    }
+
+    fn handle_input_for_playable(
+        &mut self,
+        settings: &GameProgrammeSettings,
+        state: &mut GameProgrammeState<InputContextEnum>,
+        window: &Arc<Window>,
+    ) {
+        self.handle_input_for_context(settings, state, window)
+    }
 }

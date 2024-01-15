@@ -6,9 +6,6 @@ use rend3::{
 };
 use rend3_routine::pbr::NormalTextureYDirection;
 use wgpu::Backend;
-use winit::{event::MouseButton, keyboard::KeyCode};
-
-use super::input_handling::{AcceptedInput, DebugInputContext, KeyBindings};
 
 const HELP: &str = "\
 scene-viewer
@@ -153,7 +150,7 @@ pub struct GameProgrammeSettings {
     pub fullscreen: bool,
     //    pub keybindings: KeyBindings,
     pub handedness: Handedness,
-    pub def_dbg_ctx_kb: KeyBindings<DebugInputContext>,
+    //    pub keybindings: KeyBindings<InputContextEnum>,
     //    pub def_pause_ctx_kb: KeyBindings<PauseInputContext>,
 }
 impl Default for GameProgrammeSettings {
@@ -256,23 +253,6 @@ impl GameProgrammeSettings {
 
         gltf_settings.directional_light_resolution = shadow_resolution;
 
-        let mut def_dbg_ctx_kb = KeyBindings::from(
-            [
-                (DebugInputContext::Sprint, KeyCode::ShiftLeft),
-                (DebugInputContext::Forwards, KeyCode::KeyW),
-                (DebugInputContext::Backwards, KeyCode::KeyS),
-                (DebugInputContext::StrafeLeft, KeyCode::KeyA),
-                (DebugInputContext::StrafeRight, KeyCode::KeyD),
-                (DebugInputContext::LiftUp, KeyCode::KeyQ),
-                (DebugInputContext::Interact, KeyCode::Period),
-                (DebugInputContext::Back, KeyCode::Escape),
-                (DebugInputContext::DebugProfiling, KeyCode::KeyP),
-            ]
-            .map(|(lb, kc)| (lb, AcceptedInput::KB(kc))),
-        );
-        for (lb, mb) in [(DebugInputContext::GrabWindow, MouseButton::Left)] {
-            def_dbg_ctx_kb.insert(lb, AcceptedInput::M(mb));
-        }
         //        let def_pause_ctx_kb = PauseKeyBindings::new();
         Self {
             absolute_mouse,
@@ -289,7 +269,6 @@ impl GameProgrammeSettings {
             present_mode,
             samples,
             fullscreen,
-            def_dbg_ctx_kb,
             handedness: Handedness::Right,
             //            def_pause_ctx_kb,
         }

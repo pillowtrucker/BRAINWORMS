@@ -2,7 +2,7 @@ use bl::enum_dispatch::enum_dispatch;
 use bl::nanorand::RandomGen;
 
 use bl::the_great_mind_palace_of_theatrical_arts::basement::input_handling::{
-    DebugInputContext, HandlesInputContexts, InputContext,
+    AcceptedInput, DebugInputContext, HandlesInputContexts, InputContext, KeyBindings,
 };
 use bl::the_great_mind_palace_of_theatrical_arts::basement::logging::register_logger;
 use bl::the_great_mind_palace_of_theatrical_arts::play::scene::actors::create_actor;
@@ -11,7 +11,6 @@ use bl::the_great_mind_palace_of_theatrical_arts::play::Play;
 use bl::{egui, glam, nalgebra, nanorand, parry3d, rend3, tokio, uuid, GameProgramme, MyEvent};
 use brainworms_lib as bl;
 
-use bl::theater::basement::input_handling::DebugInputContext as DIC;
 use brainworms_lib::{
     theater::{
         basement::{cla::GameProgrammeSettings, text_files::read_lines},
@@ -38,8 +37,13 @@ use rend3::Renderer;
 use std::{collections::HashMap, f32::consts::PI, sync::Arc};
 use tokio::runtime::Runtime;
 use uuid::{uuid, Uuid};
+use winit::event::MouseButton;
+use winit::keyboard::KeyCode;
 use winit::window::{Fullscreen, WindowBuilder};
 use winit::{event_loop::EventLoop, window::Window};
+use DebugInputContext as DIC;
+use MyInputContexts as MIC;
+//use MyInputContexts::DebugInputContext as DIC;
 
 #[cfg_attr(
     target_os = "android",
@@ -53,25 +57,101 @@ fn main() {
         .with_decorations(false);
     register_logger();
     let play = define_play();
-    let the_game_programme = GameProgramme::new(play);
+    let mut the_game_programme = GameProgramme::new(play);
+    the_game_programme.state.cur_input_context =
+        MyInputContexts::DebugInputContext(DebugInputContext::Marker);
     the_game_programme.start(window_builder);
 }
-#[enum_dispatch(Playable)]
+#[enum_dispatch(Playable)] // this doesnt work across crates but it does generate at least the from and into stuff
 pub enum MyPlayables {
-    LinacLabScene,
+    LinacLabScene(LinacLabScene),
     //    Curtain,   // loading screens
     //    TicketBox, // menus
 }
 #[derive(Default, Hash, Eq, PartialEq, Debug)]
 pub enum MyInputContexts {
+    DebugInputContext(DebugInputContext),
+    LinacLabIC(LinacLabIC),
     #[default]
-    DebugInputContext,
-    LinacLabIC, //    Pause,
+    Pause,
 }
 impl InputContext for MyInputContexts {}
+#[derive(Default, Hash, Eq, PartialEq, Debug)]
 pub enum LinacLabIC {
     FocusObject,
     DiddleScrotum,
+    #[default]
+    Marker,
+}
+impl Playable<MyInputContexts> for MyPlayables {
+    fn playable_uuid(&self) -> Uuid {
+        match self {
+            MyPlayables::LinacLabScene(inner) => inner.playable_uuid(),
+        }
+    }
+
+    fn playable_name(&self) -> &str {
+        match self {
+            MyPlayables::LinacLabScene(inner) => inner.playable_name(),
+        }
+    }
+
+    fn starting_cam_info(&self) -> CamInfo {
+        match self {
+            MyPlayables::LinacLabScene(inner) => inner.starting_cam_info(),
+        }
+    }
+
+    fn implement_playable(
+        &mut self,
+        settings: &GameProgrammeSettings,
+        event_loop: &EventLoop<MyEvent>,
+        renderer: Arc<Renderer>,
+        routines: Arc<DefaultRoutines>,
+        rts: &Runtime,
+    ) {
+        match self {
+            MyPlayables::LinacLabScene(inner) => {
+                inner.implement_playable(settings, event_loop, renderer, routines, rts)
+            }
+        }
+    }
+
+    fn define_playable(&mut self) {
+        match self {
+            MyPlayables::LinacLabScene(inner) => inner.define_playable(),
+        }
+    }
+    fn implement_chorus_for_playable(&self, egui_ctx: Context) {
+        match self {
+            MyPlayables::LinacLabScene(inner) => inner.implement_chorus_for_playable(egui_ctx),
+        }
+    }
+
+    fn playable_definition(&mut self) -> &mut Definitions {
+        match self {
+            MyPlayables::LinacLabScene(inner) => inner.playable_definition(),
+        }
+    }
+
+    fn playable_implementation(&mut self) -> &mut Option<Implementations> {
+        match self {
+            MyPlayables::LinacLabScene(inner) => inner.playable_implementation(),
+        }
+    }
+
+    fn handle_input_for_playable(
+        &mut self,
+        settings: &GameProgrammeSettings,
+        state: &mut GameProgrammeState<MyInputContexts>,
+        window: &Arc<Window>,
+    ) {
+        match self {
+            MyPlayables::LinacLabScene(inner) => {
+                inner.handle_input_for_playable(settings, state, window)
+            }
+        }
+    }
 }
 const PDP11_CAM_INFO: [f32; 5] = [-3.729838, 4.512105, -0.103016704, -0.4487015, 0.025398161];
 const VT100_CAM_INFO: [f32; 5] = [-5.068789, 1.3310424, -3.6215494, -0.31070346, 6.262584];
@@ -91,10 +171,30 @@ pub struct LinacLabScene {
     pub test_text: String,
     pub test_lines: String,
     pub random_line_effects: Vec<KineticEffect>,
+    pub keybindings: KeyBindings<MyInputContexts>,
 }
 
 impl LinacLabScene {
     fn define(&mut self) {
+        let mut keybindings = KeyBindings::from(
+            [
+                (DIC::Sprint, KeyCode::ShiftLeft),
+                (DIC::Forwards, KeyCode::KeyW),
+                (DIC::Backwards, KeyCode::KeyS),
+                (DebugInputContext::StrafeLeft, KeyCode::KeyA),
+                (DebugInputContext::StrafeRight, KeyCode::KeyD),
+                (DebugInputContext::LiftUp, KeyCode::KeyQ),
+                (DebugInputContext::Interact, KeyCode::Period),
+                (DebugInputContext::Back, KeyCode::Escape),
+                (DebugInputContext::DebugProfiling, KeyCode::KeyP),
+            ]
+            .map(|(lb, kc)| (MIC::DebugInputContext(lb), AcceptedInput::KB(kc))),
+        );
+        #[allow(clippy::single_element_loop)]
+        for (lb, mb) in [(DebugInputContext::GrabWindow, MouseButton::Left)] {
+            keybindings.insert(MIC::DebugInputContext(lb), AcceptedInput::M(mb));
+        }
+        self.keybindings = keybindings;
         let next_to_pdp11 = glam::Mat4::from_scale_rotation_translation(
             glam::Vec3::new(1.0, 1.0, 1.0),
             glam::Quat::from_euler(glam::EulerRot::XYZ, 0., PI, 0.0),
@@ -301,62 +401,70 @@ impl HandlesInputContexts<MyInputContexts> for LinacLabScene {
         let up = rotation.y_axis;
         let side = -rotation.x_axis;
         let buttons = &mut state.input_status.buttons;
-        let really_pressed = |binding| {
-            Self::input_down(buttons, &settings.def_dbg_ctx_kb, binding).is_some_and(|k| k)
-        };
-        let really_released =
-            |binding| input_up(buttons, &settings.def_dbg_ctx_kb, binding).is_some_and(|k| k);
-        let interacted_with = |binding| really_pressed(binding) || really_released(binding);
-        let velocity = if really_pressed(DIC::Sprint) {
-            settings.run_speed
-        } else {
-            settings.walk_speed
-        };
-        let mut location = cur_camera.info.location();
-        let last_update = state.last_update.unwrap();
-        if really_pressed(DIC::Forwards) {
-            location += forward * velocity * last_update.elapsed().as_secs_f32();
-        }
-        if really_pressed(DIC::Backwards) {
-            location -= forward * velocity * last_update.elapsed().as_secs_f32();
-        }
-        if really_pressed(DIC::StrafeLeft) {
-            location += side * velocity * last_update.elapsed().as_secs_f32();
-        }
-        if really_pressed(DIC::StrafeRight) {
-            location -= side * velocity * last_update.elapsed().as_secs_f32();
-        }
-        if really_pressed(DIC::LiftUp) {
-            location += up * velocity * last_update.elapsed().as_secs_f32();
-        }
-        cur_camera
-            .info
-            .set_location(location.x, location.y, location.z);
-        if really_released(DIC::Interact) {
-            let rayman = make_ray(
-                cur_camera,
-                &state.input_status.mouse_physical_poz,
-                window,
-                settings.handedness,
-            );
+        let cur_context = &state.cur_input_context;
+        match cur_context {
+            &MyInputContexts::DebugInputContext(_) => {
+                let really_pressed = |binding| {
+                    Self::input_down(buttons, &self.keybindings, binding).is_some_and(|k| k)
+                };
+                let really_released = |binding| {
+                    Self::input_up(buttons, &self.keybindings, binding).is_some_and(|k| k)
+                };
+                let interacted_with = |binding| really_pressed(binding) || really_released(binding);
+                let velocity = if really_pressed(&MIC::DebugInputContext(DIC::Sprint)) {
+                    settings.run_speed
+                } else {
+                    settings.walk_speed
+                };
+                let mut location = cur_camera.info.location();
+                let last_update = state.last_update.unwrap();
+                if really_pressed(&MIC::DebugInputContext(DIC::Forwards)) {
+                    location += forward * velocity * last_update.elapsed().as_secs_f32();
+                }
+                if really_pressed(&MIC::DebugInputContext(DIC::Backwards)) {
+                    location -= forward * velocity * last_update.elapsed().as_secs_f32();
+                }
+                if really_pressed(&MIC::DebugInputContext(DIC::StrafeLeft)) {
+                    location += side * velocity * last_update.elapsed().as_secs_f32();
+                }
+                if really_pressed(&MIC::DebugInputContext(DIC::StrafeRight)) {
+                    location -= side * velocity * last_update.elapsed().as_secs_f32();
+                }
+                if really_pressed(&MIC::DebugInputContext(DIC::LiftUp)) {
+                    location += up * velocity * last_update.elapsed().as_secs_f32();
+                }
+                cur_camera
+                    .info
+                    .set_location(location.x, location.y, location.z);
+                if really_released(&MIC::DebugInputContext(DIC::Interact)) {
+                    let rayman = make_ray(
+                        cur_camera,
+                        &state.input_status.mouse_physical_poz,
+                        window,
+                        settings.handedness,
+                    );
 
-            if let Implementations::SceneImplementation(sc_imp) =
-                self.implementation.as_mut().unwrap()
-            {
-                const MAX_TOI: f32 = 100000.0;
-                if let AstinkScene::Loaded(stage3d) = &sc_imp.stage3d {
-                    for (c_name, colliders) in stage3d.2 .2.col_map.iter() {
-                        for c in colliders {
-                            if let Some(toi) = c.cast_local_ray(&rayman, MAX_TOI, true) {
-                                let intersection = rayman.point_at(toi);
-                                let cam_point =
-                                    nalgebra::Point3::from([location.x, location.y, location.z]);
-                                if cam_point != intersection {
-                                    println!("{} intersects mouse ray at {}", c_name, intersection);
-                                    #[cfg(feature = "extra_debugging")]
-                                    {
-                                        let renderer = state.renderer.clone().unwrap();
-                                        crate::theater::basement::debug_profiling_etc::draw_debug_mouse_picking_doodad(
+                    if let Implementations::SceneImplementation(sc_imp) =
+                        self.implementation.as_mut().unwrap()
+                    {
+                        const MAX_TOI: f32 = 100000.0;
+                        if let AstinkScene::Loaded(stage3d) = &sc_imp.stage3d {
+                            for (c_name, colliders) in stage3d.2 .2.col_map.iter() {
+                                for c in colliders {
+                                    if let Some(toi) = c.cast_local_ray(&rayman, MAX_TOI, true) {
+                                        let intersection = rayman.point_at(toi);
+                                        let cam_point = nalgebra::Point3::from([
+                                            location.x, location.y, location.z,
+                                        ]);
+                                        if cam_point != intersection {
+                                            println!(
+                                                "{} intersects mouse ray at {}",
+                                                c_name, intersection
+                                            );
+                                            #[cfg(feature = "extra_debugging")]
+                                            {
+                                                let renderer = state.renderer.clone().unwrap();
+                                                crate::theater::basement::debug_profiling_etc::draw_debug_mouse_picking_doodad(
                                                     crate::theater::basement::debug_profiling_etc::DebugPickingDoodad::TheRay,
                                                     &cam_point,
                                                     &intersection,
@@ -364,7 +472,7 @@ impl HandlesInputContexts<MyInputContexts> for LinacLabScene {
                                                     settings.handedness,
                                                     c,
                                                 );
-                                        crate::theater::basement::debug_profiling_etc::draw_debug_mouse_picking_doodad(
+                                                crate::theater::basement::debug_profiling_etc::draw_debug_mouse_picking_doodad(
                                                     crate::theater::basement::debug_profiling_etc::DebugPickingDoodad::TheColliderShape,
                                                     &cam_point,
                                                     &intersection,
@@ -372,31 +480,35 @@ impl HandlesInputContexts<MyInputContexts> for LinacLabScene {
                                                     settings.handedness,
                                                     c,
                                                 );
+                                            }
+                                        }
                                     }
                                 }
                             }
                         }
                     }
                 }
+
+                if really_released(&MIC::DebugInputContext(DIC::Back)) {
+                    state.grabber.as_mut().unwrap().request_ungrab(window);
+                }
+
+                if really_released(&MIC::DebugInputContext(DIC::DebugProfiling)) {
+                    #[cfg(feature = "extra_debugging")]
+                    crate::theater::basement::debug_profiling_etc::write_profiling_json(
+                        &state.previous_profiling_stats.as_ref(),
+                    );
+                }
+                if interacted_with(&MIC::DebugInputContext(DIC::GrabWindow)) {
+                    let grabber = state.grabber.as_mut().unwrap();
+
+                    if !grabber.grabbed() {
+                        grabber.request_grab(window);
+                    }
+                }
             }
-        }
-
-        if really_released(DIC::Back) {
-            state.grabber.as_mut().unwrap().request_ungrab(window);
-        }
-
-        if really_released(DIC::DebugProfiling) {
-            #[cfg(feature = "extra_debugging")]
-            crate::theater::basement::debug_profiling_etc::write_profiling_json(
-                &state.previous_profiling_stats.as_ref(),
-            );
-        }
-        if interacted_with(DIC::GrabWindow) {
-            let grabber = state.grabber.as_mut().unwrap();
-
-            if !grabber.grabbed() {
-                grabber.request_grab(window);
-            }
+            MyInputContexts::LinacLabIC(_) => {}
+            MyInputContexts::Pause => {}
         }
 
         buttons.retain(|_, v| v.is_pressed());
