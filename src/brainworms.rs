@@ -1,580 +1,49 @@
-#![feature(variant_count, exact_size_is_empty, array_chunks, iter_array_chunks)]
-mod the_great_mind_palace_of_theatrical_arts;
-use egui::{Color32, TextStyle, Visuals};
+use bl::enum_dispatch::enum_dispatch;
+use bl::nanorand::RandomGen;
 
-use glam::Vec3;
-use log::info;
-use parking_lot::Mutex;
-use rend3::types::DirectionalLight;
+use bl::the_great_mind_palace_of_theatrical_arts::basement::input_handling::{
+    AcceptedInput, DebugInputContext, HandlesInputContexts, InputContext, KeyBindings,
+};
+use bl::the_great_mind_palace_of_theatrical_arts::basement::logging::register_logger;
+use bl::the_great_mind_palace_of_theatrical_arts::play::scene::actors::create_actor;
+use bl::the_great_mind_palace_of_theatrical_arts::play::scene::stage3d::load_stage3d;
+use bl::the_great_mind_palace_of_theatrical_arts::play::Play;
+use bl::{egui, glam, nalgebra, nanorand, parry3d, rend3, tokio, uuid, GameProgramme, MyEvent};
+use brainworms_lib as bl;
 
-use uuid::Uuid;
-
-use std::{sync::Arc, time};
-use wgpu::TextureFormat;
-
-use the_great_mind_palace_of_theatrical_arts as theater;
-use theater::{
-    basement::{
-        cla::GameProgrammeSettings, frame_rate::FrameRate, grab::Grabber, logging::register_logger,
-    },
-    play::{
-        backstage::plumbing::{start, DefaultRoutines, StoredSurfaceInfo},
-        definition::define_play,
-        scene::{
-            actors::AstinkSprite,
-            stage3d::{load_skybox, lock, update_camera_mouse_params},
-            AstinkScene,
+use brainworms_lib::{
+    theater::{
+        basement::{cla::GameProgrammeSettings, text_files::read_lines},
+        play::{
+            backstage::{
+                plumbing::DefaultRoutines,
+                pyrotechnics::kinetic_narrative::{Gay, KineticEffect, KineticLabel, ShakeLetters},
+            },
+            scene::{
+                actors::{ActressDefinition, AstinkSprite},
+                chorus::Choral,
+                stage3d::{make_camera, make_ray, update_camera_rotation},
+                AstinkScene, CamInfo, SceneDefinition, SceneImplementation, Scenic,
+            },
+            Definitions, Implementations, Playable,
         },
-        Definitions, Play, Playable,
     },
+    GameProgrammeState,
 };
-use winit::{
-    dpi::PhysicalPosition,
-    event::{DeviceEvent, KeyEvent, WindowEvent},
-    event_loop::{ControlFlow, EventLoopWindowTarget},
-    keyboard::PhysicalKey,
-    window::{Fullscreen, WindowBuilder},
-};
-
-use crate::theater::{
-    basement::{
-        frame_rate::update_frame_stats,
-        input_handling::{handle_input, AcceptedInputs},
-    },
-    play::scene::{
-        actors::draw_actor,
-        stage3d::{do_update_camera, update_camera_rotation},
-    },
-};
-
-pub struct GameProgrammeData {
-    pub egui_routine: rend3_egui::EguiRenderRoutine,
-    pub egui_ctx: egui::Context,
-    pub platform: egui_winit::State,
-    pub _start_time: time::Instant,
-    pub last_update: time::Instant,
-    pub frame_rate: FrameRate,
-    pub elapsed: f32,
-    pub timestamp_start: time::Instant,
-    pub play: Play,
-    pub current_playable: Option<Uuid>,
-    pub mouse_physical_poz: PhysicalPosition<f64>,
-}
-
-pub struct GameProgramme {
-    pub data: Option<GameProgrammeData>,
-    pub settings: GameProgrammeSettings,
-    pub rts: tokio::runtime::Runtime,
-}
-type MyEvent = MyWinitEvent<AstinkScene, AstinkSprite>;
-pub type Event = winit::event::Event<MyEvent>;
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum MyWinitEvent<TS, TA: 'static> {
-    /// Custom user event types
-    Stage3D(TS),
-    Actress(TA),
-}
-
-impl GameProgramme {
-    pub async fn async_start(mut self, window_builder: WindowBuilder) {
-        let iad = self.create_iad().await.unwrap();
-
-        let (event_loop, window) = self
-            .create_window(window_builder.with_visible(false))
-            .unwrap();
-
-        let window_size = window.inner_size();
-        // The one line of unsafe needed. We just need to guarentee that the window
-        // outlives the use of the surface.
-        //
-        // Android has to defer the surface until `Resumed` is fired. This doesn't fire
-        // on other platforms though :|
-        let mut surface = if cfg!(target_os = "android") {
-            None
-        } else {
-            Some(Arc::new(
-                unsafe { iad.instance.create_surface(&window) }.unwrap(),
-            ))
-        };
-        let renderer = rend3::Renderer::new(
-            iad.clone(),
-            self.settings.handedness,
-            Some(window_size.width as f32 / window_size.height as f32),
-        )
-        .unwrap();
-
-        // Get the preferred format for the surface.
-        //
-        // Assume android supports Rgba8Srgb, as it has 100% device coverage
-        let format = surface.as_ref().map_or(TextureFormat::Bgra8Unorm, |s| {
-            let format = wgpu::TextureFormat::Bgra8Unorm;
-
-            /*
-            Configure the surface to be ready for rendering.
-            */
-            rend3::configure_surface(
-                s,
-                &iad.device,
-                format,
-                glam::UVec2::new(window_size.width, window_size.height),
-                rend3::types::PresentMode::Immediate,
-            );
-            format
-        });
-
-        let mut spp = rend3::ShaderPreProcessor::new();
-        rend3_routine::builtin_shaders(&mut spp);
-
-        let base_rendergraph = self.create_base_rendergraph(&renderer, &spp);
-        let mut data_core = renderer.data_core.lock();
-        let routines = Arc::new(DefaultRoutines {
-            pbr: Mutex::new(rend3_routine::pbr::PbrRoutine::new(
-                &renderer,
-                &mut data_core,
-                &spp,
-                &base_rendergraph.interfaces,
-                &base_rendergraph.gpu_culler.culling_buffer_map_handle,
-            )),
-            skybox: Mutex::new(rend3_routine::skybox::SkyboxRoutine::new(
-                &renderer,
-                &spp,
-                &base_rendergraph.interfaces,
-            )),
-            tonemapping: Mutex::new(rend3_routine::tonemapping::TonemappingRoutine::new(
-                &renderer,
-                &spp,
-                &base_rendergraph.interfaces,
-                format,
-            )),
-        });
-        drop(data_core); // initiate noocoolar explosion
-                         // SETUP CALLED HERE
-        self.setup(&event_loop, &window, &renderer, &routines, format);
-
-        // We're ready, so lets make things visible
-        window.set_visible(true);
-        let mut suspended = cfg!(target_os = "android");
-        let mut last_user_control_mode = ControlFlow::Poll;
-        let mut stored_surface_info = StoredSurfaceInfo {
-            size: glam::UVec2::new(window_size.width, window_size.height),
-            scale_factor: self.scale_factor(),
-            sample_count: self.sample_count(),
-            present_mode: self.present_mode(),
-        };
-
-        // IMPORTANT this is where the loop actually starts you dumbass
-        Self::winit_run(event_loop, move |event, event_loop_window_target| {
-            let mut control_flow = event_loop_window_target.control_flow();
-            if let Some(suspend) = Self::handle_surface(
-                &mut self,
-                &window,
-                &event,
-                &iad.instance,
-                &mut surface,
-                &renderer,
-                format,
-                &mut stored_surface_info,
-            ) {
-                suspended = suspend;
-            }
-
-            // We move to Wait when we get suspended so we don't spin at 50k FPS.
-            match event {
-                Event::Suspended => {
-                    control_flow = ControlFlow::Wait;
-                }
-                Event::Resumed => {
-                    control_flow = last_user_control_mode;
-                }
-                _ => {}
-            }
-
-            // We need to block all updates
-            if let Event::WindowEvent {
-                window_id: _,
-                event: winit::event::WindowEvent::RedrawRequested,
-            } = event
-            {
-                if suspended {
-                    return;
-                }
-            }
-
-            self.handle_event(
-                &window,
-                &renderer,
-                &routines,
-                &base_rendergraph,
-                surface.as_ref(),
-                stored_surface_info.size,
-                event,
-                |c: ControlFlow| {
-                    control_flow = c;
-                    last_user_control_mode = c;
-                },
-                event_loop_window_target,
-            )
-        })
-        .unwrap();
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    fn handle_event(
-        &mut self,
-        window: &winit::window::Window,
-        renderer: &Arc<rend3::Renderer>,
-        routines: &Arc<DefaultRoutines>,
-        base_rendergraph: &rend3_routine::base::BaseRenderGraph,
-        surface: Option<&Arc<rend3::types::Surface>>,
-        resolution: glam::UVec2,
-        event: Event,
-        control_flow: impl FnOnce(winit::event_loop::ControlFlow),
-        event_loop_window_target: &EventLoopWindowTarget<MyEvent>,
-    ) {
-        let data = self.data.as_mut().unwrap();
-        match event {
-            Event::WindowEvent {
-                window_id: _,
-                event: WindowEvent::RedrawRequested,
-            } => {
-                update_frame_stats(data);
-                do_update_camera(&self.settings, &renderer);
-
-                // Get a frame
-                let frame = surface.unwrap().get_current_texture().unwrap();
-
-                data.egui_ctx
-                    .begin_frame(data.platform.take_egui_input(window));
-
-                // Insert egui commands here
-                let current_scene_id = data.current_playable.unwrap();
-                let current_scene = data.play.playables.get_mut(&current_scene_id).unwrap();
-
-                current_scene.implement_chorus_for_playable(data.egui_ctx.clone());
-                egui::Window::new("FPS").show(&data.egui_ctx, |ui| {
-                    ui.label(std::format!("framerate: {:.0}fps", data.frame_rate.get()))
-                });
-                // End the UI frame. Now let's draw the UI with our Backend, we could also
-                // handle the output here
-                let egui::FullOutput {
-                    shapes,
-                    textures_delta,
-                    ..
-                } = data.egui_ctx.end_frame();
-                let paint_jobs = data
-                    .egui_ctx
-                    .tessellate(shapes, window.scale_factor() as f32);
-
-                let input = rend3_egui::Input {
-                    clipped_meshes: &paint_jobs,
-                    textures_delta,
-                    context: data.egui_ctx.clone(),
-                };
-
-                // Swap the instruction buffers so that our frame's changes can be processed.
-                renderer.swap_instruction_buffers();
-                // Evaluate our frame's world-change instructions
-                let mut eval_output = renderer.evaluate_instructions();
-
-                // Lock the routines
-                let pbr_routine = lock(&routines.pbr);
-                let mut skybox_routine = lock(&routines.skybox);
-                let tonemapping_routine = lock(&routines.tonemapping);
-                skybox_routine.evaluate(renderer);
-                /*
-                Build a rendergraph
-                */
-                let mut graph = rend3::graph::RenderGraph::new();
-
-                // Import the surface texture into the render graph.
-                let frame_handle = graph.add_imported_render_target(
-                    &frame,
-                    0..1,
-                    0..1,
-                    rend3::graph::ViewportRect::from_size(resolution),
-                );
-
-                base_rendergraph.add_to_graph(
-                    &mut graph,
-                    rend3_routine::base::BaseRenderGraphInputs {
-                        eval_output: &eval_output,
-                        routines: rend3_routine::base::BaseRenderGraphRoutines {
-                            pbr: &pbr_routine,
-                            skybox: Some(&skybox_routine),
-                            tonemapping: &tonemapping_routine,
-                        },
-                        target: rend3_routine::base::OutputRenderTarget {
-                            handle: frame_handle,
-                            resolution,
-                            samples: self.settings.samples,
-                        },
-                    },
-                    rend3_routine::base::BaseRenderGraphSettings {
-                        ambient_color: Vec3::splat(self.settings.ambient_light_level).extend(1.0),
-                        clear_color: glam::Vec4::new(0.0, 0.0, 0.0, 1.0),
-                    },
-                );
-
-                // Add egui on top of all the other passes
-                data.egui_routine
-                    .add_to_graph(&mut graph, input, frame_handle);
-
-                // Dispatch a render using the built up rendergraph!
-                self.settings.previous_profiling_stats = graph.execute(renderer, &mut eval_output);
-
-                if let theater::play::Implementations::SceneImplementation(
-                    ref mut cs_implementation,
-                ) = data
-                    .play
-                    .playables
-                    .get_mut(&current_scene_id)
-                    .unwrap()
-                    .playable_implementation()
-                    .as_mut()
-                    .unwrap()
-                {
-                    let t = data.timestamp_start.elapsed().as_secs_f32();
-                    let actresses = cs_implementation.actresses.values();
-                    for a in actresses {
-                        let renderer = Arc::clone(renderer);
-                        let a = Arc::clone(a);
-                        // this kind of makes self.spawn at best useless and probably counter-productive
-                        self.rts.spawn(async move {
-                            draw_actor(a, renderer, t);
-                        });
-                    }
-                }
-                // Present the frame
-                frame.present();
-                // mark the end of the frame for tracy/other profilers
-                profiling::finish_frame!();
-                control_flow(winit::event_loop::ControlFlow::Poll);
-            }
-            Event::AboutToWait => {
-                profiling::scope!("MainEventsCleared");
-
-                update_camera_rotation(&mut self.settings);
-                handle_input(&mut self.settings, data, window);
-                window.request_redraw();
-            }
-            Event::WindowEvent { event, .. } => {
-                // Pass the window events to the egui integration.
-                if data.platform.on_window_event(window, &event).consumed {
-                    return;
-                }
-
-                match event {
-                    WindowEvent::CloseRequested => {
-                        event_loop_window_target.exit();
-                    }
-                    winit::event::WindowEvent::Resized(size) => {
-                        data.egui_routine.resize(
-                            size.width,
-                            size.height,
-                            window.scale_factor() as f32,
-                        );
-                    }
-
-                    WindowEvent::KeyboardInput {
-                        event:
-                            KeyEvent {
-                                physical_key: PhysicalKey::Code(key_code),
-                                state,
-                                ..
-                            },
-                        ..
-                    } => {
-                        log::debug!("pressed {:?}", key_code);
-                        self.settings
-                            .input_status
-                            .insert(AcceptedInputs::KB(key_code), state);
-                    }
-                    WindowEvent::MouseInput { button, state, .. } => {
-                        self.settings
-                            .input_status
-                            .insert(AcceptedInputs::M(button), state);
-                    }
-                    WindowEvent::CursorMoved {
-                        device_id: _,
-                        position,
-                    } => {
-                        data.mouse_physical_poz = position;
-                    }
-
-                    _ => {}
-                }
-            }
-            Event::DeviceEvent {
-                event:
-                    DeviceEvent::MouseMotion {
-                        delta: (delta_x, delta_y),
-                        ..
-                    },
-                ..
-            } => {
-                update_camera_mouse_params(&mut self.settings, delta_x, delta_y);
-            }
-            Event::UserEvent(MyWinitEvent::Stage3D(AstinkScene::Loaded((name, sc_id, scdata)))) => {
-                info!(
-                    "Actually caught the user event and assigned the stage3d data to current scene"
-                );
-                if let theater::play::Implementations::SceneImplementation(sc_imp) = data
-                    .play
-                    .playables
-                    .get_mut(&sc_id)
-                    .unwrap()
-                    .playable_implementation()
-                    .as_mut()
-                    .unwrap()
-                {
-                    sc_imp.stage3d = AstinkScene::Loaded((name, sc_id, scdata));
-                }
-            }
-            Event::UserEvent(MyWinitEvent::Actress(AstinkSprite::Loaded((
-                name,
-                sc_id,
-                acdata,
-            )))) => {
-                info!("Actually caught the user event and assigned sprite data to {name}");
-
-                if let theater::play::Implementations::SceneImplementation(sc_imp) = data
-                    .play
-                    .playables
-                    .get_mut(&sc_id)
-                    .unwrap()
-                    .playable_implementation()
-                    .as_mut()
-                    .unwrap()
-                {
-                    sc_imp.actresses.insert(
-                        name.clone(),
-                        Arc::new(Mutex::new(AstinkSprite::Loaded((name, sc_id, acdata)))),
-                    );
-                }
-            }
-            _ => {}
-        }
-    }
-
-    fn setup(
-        &mut self,
-        event_loop: &winit::event_loop::EventLoop<MyEvent>,
-        window: &winit::window::Window,
-        renderer: &Arc<rend3::Renderer>,
-        routines: &Arc<DefaultRoutines>,
-        surface_format: rend3::types::TextureFormat,
-    ) {
-        self.settings.grabber = Some(Grabber::new(window));
-        if let Some(direction) = self.settings.directional_light_direction {
-            self.settings.directional_light = Some(
-                renderer.clone().add_directional_light(DirectionalLight {
-                    color: Vec3::splat(1.), //Vec3::new(1., 0.9, 0.8),
-                    intensity: self.settings.directional_light_intensity,
-                    direction,
-                    distance: self
-                        .settings
-                        .gltf_settings
-                        .directional_light_shadow_distance,
-                    resolution: self.settings.gltf_settings.directional_light_resolution,
-                }),
-            );
-        }
-        /*
-        recursively load the play->scene->actor/etc definitions
-        TODO: Read this from script/data file
-        */
-        let play = define_play();
-
-        let window_size = window.inner_size();
-
-        // Create the egui render routine
-        let egui_routine = rend3_egui::EguiRenderRoutine::new(
-            renderer,
-            surface_format,
-            rend3::types::SampleCount::One,
-            window_size.width,
-            window_size.height,
-            window.scale_factor() as f32,
-        );
-
-        // Create the egui context
-        let egui_ctx = egui::Context::default();
-        egui_ctx.set_visuals(Visuals {
-            panel_fill: Color32::TRANSPARENT,
-            window_fill: Color32::TRANSPARENT,
-            extreme_bg_color: Color32::TRANSPARENT,
-            code_bg_color: Color32::TRANSPARENT,
-            faint_bg_color: Color32::TRANSPARENT,
-            ..Default::default()
-        });
-        // increase font size
-        egui_ctx.style_mut(|style| {
-            if let Some(hum) = style.text_styles.get_mut(&TextStyle::Body) {
-                hum.size = 24.;
-            }
-        });
-
-        // Create the winit/egui integration.
-        let platform = egui_winit::State::new(
-            egui_ctx.clone(),
-            egui::ViewportId::default(),
-            &window,
-            Some(window.scale_factor() as f32),
-            None,
-        );
-        let timestamp_start = time::Instant::now();
-        // Definitions for Play/Scene/etc go above
-        self.data = Some(GameProgrammeData {
-            _start_time: time::Instant::now(),
-            last_update: time::Instant::now(),
-            frame_rate: FrameRate::new(100),
-            elapsed: 0.0,
-            egui_routine,
-            egui_ctx,
-            platform,
-            timestamp_start,
-            play,
-            current_playable: None,
-            mouse_physical_poz: PhysicalPosition::default(),
-        });
-        // Implementations for Play/Scene/etc go below
-        let data = self.data.as_mut().unwrap();
-        let play = &mut data.play;
-        data.current_playable = Some(play.first_playable);
-        let scene1 = play.playables.get_mut(&play.first_playable).unwrap();
-
-        // Set camera location data
-        if let Definitions::SceneDefinition(definition) = scene1.playable_definition() {
-            let scene1_starting_cam_info = definition.cameras.get(&definition.start_cam).unwrap();
-
-            self.settings.camera_location = glam::Vec3A::new(
-                scene1_starting_cam_info[0],
-                scene1_starting_cam_info[1],
-                scene1_starting_cam_info[2],
-            );
-            self.settings.camera_pitch = scene1_starting_cam_info[3];
-            self.settings.camera_yaw = scene1_starting_cam_info[4];
-        }
-        let playable_renderer_copy = Arc::clone(renderer);
-        let playable_routines_copy = Arc::clone(routines);
-        scene1.implement_playable(
-            &self.settings,
-            event_loop,
-            playable_renderer_copy,
-            playable_routines_copy,
-            &self.rts,
-        );
-
-        let skybox_renderer_copy = Arc::clone(renderer);
-        let skybox_routines_copy = Arc::clone(routines);
-        self.spawn(async move {
-            if let Err(e) = load_skybox(&skybox_renderer_copy, &skybox_routines_copy.skybox).await {
-                info!("Failed to load skybox {}", e)
-            };
-        });
-    }
-}
+use egui::Context;
+use nanorand::Rng;
+use parry3d::query::RayCast;
+use rend3::Renderer;
+use std::{collections::HashMap, f32::consts::PI, sync::Arc};
+use tokio::runtime::Runtime;
+use uuid::{uuid, Uuid};
+use winit::event::MouseButton;
+use winit::keyboard::KeyCode;
+use winit::window::{Fullscreen, WindowBuilder};
+use winit::{event_loop::EventLoop, window::Window};
+use DebugInputContext as DIC;
+use MyInputContexts as MIC;
+//use MyInputContexts::DebugInputContext as DIC;
 
 #[cfg_attr(
     target_os = "android",
@@ -587,7 +56,479 @@ fn main() {
         .with_fullscreen(Some(Fullscreen::Borderless(None)))
         .with_decorations(false);
     register_logger();
+    let play = define_play();
+    let mut the_game_programme = GameProgramme::new(play);
+    the_game_programme.state.cur_input_context =
+        MyInputContexts::DebugInputContext(DebugInputContext::Marker);
+    the_game_programme.start(window_builder);
+}
+#[enum_dispatch(Playable)] // this doesnt work across crates but it does generate at least the from and into stuff
+pub enum MyPlayables {
+    LinacLabScene(LinacLabScene),
+    //    Curtain,   // loading screens
+    //    TicketBox, // menus
+}
+#[derive(Default, Hash, Eq, PartialEq, Debug)]
+pub enum MyInputContexts {
+    DebugInputContext(DebugInputContext),
+    LinacLabIC(LinacLabIC),
+    #[default]
+    Pause,
+}
+impl InputContext for MyInputContexts {}
+#[derive(Default, Hash, Eq, PartialEq, Debug)]
+pub enum LinacLabIC {
+    FocusObject,
+    DiddleScrotum,
+    #[default]
+    Marker,
+}
+impl Playable<MyInputContexts> for MyPlayables {
+    fn playable_uuid(&self) -> Uuid {
+        match self {
+            MyPlayables::LinacLabScene(inner) => inner.playable_uuid(),
+        }
+    }
 
-    let the_game_programme = GameProgramme::new();
-    start(the_game_programme, window_builder);
+    fn playable_name(&self) -> &str {
+        match self {
+            MyPlayables::LinacLabScene(inner) => inner.playable_name(),
+        }
+    }
+
+    fn starting_cam_info(&self) -> CamInfo {
+        match self {
+            MyPlayables::LinacLabScene(inner) => inner.starting_cam_info(),
+        }
+    }
+
+    fn implement_playable(
+        &mut self,
+        settings: &GameProgrammeSettings,
+        event_loop: &EventLoop<MyEvent>,
+        renderer: Arc<Renderer>,
+        routines: Arc<DefaultRoutines>,
+        rts: &Runtime,
+    ) {
+        match self {
+            MyPlayables::LinacLabScene(inner) => {
+                inner.implement_playable(settings, event_loop, renderer, routines, rts)
+            }
+        }
+    }
+
+    fn define_playable(&mut self) {
+        match self {
+            MyPlayables::LinacLabScene(inner) => inner.define_playable(),
+        }
+    }
+    fn implement_chorus_for_playable(&self, egui_ctx: Context) {
+        match self {
+            MyPlayables::LinacLabScene(inner) => inner.implement_chorus_for_playable(egui_ctx),
+        }
+    }
+
+    fn playable_definition(&mut self) -> &mut Definitions {
+        match self {
+            MyPlayables::LinacLabScene(inner) => inner.playable_definition(),
+        }
+    }
+
+    fn playable_implementation(&mut self) -> &mut Option<Implementations> {
+        match self {
+            MyPlayables::LinacLabScene(inner) => inner.playable_implementation(),
+        }
+    }
+
+    fn handle_input_for_playable(
+        &mut self,
+        settings: &GameProgrammeSettings,
+        state: &mut GameProgrammeState<MyInputContexts>,
+        window: &Arc<Window>,
+    ) {
+        match self {
+            MyPlayables::LinacLabScene(inner) => {
+                inner.handle_input_for_playable(settings, state, window)
+            }
+        }
+    }
+}
+const PDP11_CAM_INFO: [f32; 5] = [-3.729838, 4.512105, -0.103016704, -0.4487015, 0.025398161];
+const VT100_CAM_INFO: [f32; 5] = [-5.068789, 1.3310424, -3.6215494, -0.31070346, 6.262584];
+const THERAC_CAM_INFO: [f32; 5] = [-2.580962, 2.8690546, 2.878742, -0.27470315, 5.620602];
+const TOITOI_CAM_INFO: [f32; 5] = [-6.814362, 2.740766, 0.7109763, -0.17870337, 0.0073876693];
+const OVERVIEW_CAM_INFO: [f32; 5] = [-6.217338, 3.8491437, 5.883971, -0.40870047, 5.76257];
+const PDP11_WITH_MIDORI_CAM_INFO: [f32; 5] =
+    [-3.7894087, 3.8481617, 0.3033728, -0.29471007, 6.2545333];
+
+//#[add_common_playable_fields] // this is not worth the stupid RA errors
+#[derive(Default, bl::proc_macros::Scenic, bl::proc_macros::Choral)]
+pub struct LinacLabScene {
+    pub uuid: Uuid,
+    pub name: String,
+    pub definition: Definitions,
+    pub implementation: Option<Implementations>,
+    pub test_text: String,
+    pub test_lines: String,
+    pub random_line_effects: Vec<KineticEffect>,
+    pub keybindings: KeyBindings<MyInputContexts>,
+}
+
+impl LinacLabScene {
+    fn define(&mut self) {
+        let mut keybindings = KeyBindings::from(
+            [
+                (DIC::Sprint, KeyCode::ShiftLeft),
+                (DIC::Forwards, KeyCode::KeyW),
+                (DIC::Backwards, KeyCode::KeyS),
+                (DebugInputContext::StrafeLeft, KeyCode::KeyA),
+                (DebugInputContext::StrafeRight, KeyCode::KeyD),
+                (DebugInputContext::LiftUp, KeyCode::KeyQ),
+                (DebugInputContext::Interact, KeyCode::Period),
+                (DebugInputContext::Back, KeyCode::Escape),
+                (DebugInputContext::DebugProfiling, KeyCode::KeyP),
+            ]
+            .map(|(lb, kc)| (MIC::DebugInputContext(lb), AcceptedInput::KB(kc))),
+        );
+        #[allow(clippy::single_element_loop)]
+        for (lb, mb) in [(DebugInputContext::GrabWindow, MouseButton::Left)] {
+            keybindings.insert(MIC::DebugInputContext(lb), AcceptedInput::M(mb));
+        }
+        self.keybindings = keybindings;
+        let next_to_pdp11 = glam::Mat4::from_scale_rotation_translation(
+            glam::Vec3::new(1.0, 1.0, 1.0),
+            glam::Quat::from_euler(glam::EulerRot::XYZ, 0., PI, 0.0),
+            glam::Vec3::new(-2.0586073, 1.5, -4.085335),
+        );
+        self.uuid = uuid!("517e70e9-9f6d-48fe-a685-e24482d6d409");
+        let midori = ActressDefinition {
+            name: "Midori".to_owned(),
+            directory: "assets/inochi2d-models".to_owned(),
+            transform: next_to_pdp11,
+            size: 5.0,
+        };
+        self.definition = Definitions::SceneDefinition(SceneDefinition {
+            stage: ("LinacLab".to_owned(), "assets/gltf_scenes".to_owned()),
+            actors: vec![midori],
+            props: vec![("fried_egg".to_owned(), "lfs_scam/props".to_owned())],
+            start_cam: "overview".to_owned(),
+            cameras: vec![
+                ("overview".to_owned(), OVERVIEW_CAM_INFO),
+                ("pdp11".to_owned(), PDP11_CAM_INFO),
+                ("pdp11+midori".to_owned(), PDP11_WITH_MIDORI_CAM_INFO),
+                ("vt100".to_owned(), VT100_CAM_INFO),
+                ("therac".to_owned(), THERAC_CAM_INFO),
+                ("toitoi".to_owned(), TOITOI_CAM_INFO),
+            ]
+            .iter()
+            .fold(HashMap::new(), |mut h, (k, v)| {
+                h.insert(k.to_owned(), CamInfo::from_arr(v));
+                h
+            }),
+        });
+        self.name = "LinacLab".to_owned();
+
+        let mut rng = nanorand::tls_rng();
+        let Some((test_text, test_lines)) = (match read_lines("assets/texts/PARADISE_LOST.txt") {
+            Ok(test_text) => {
+                let the_body = test_text.fold("".to_owned(), |acc: String, l| {
+                    if let Ok(l) = l {
+                        format!("{}{}\n", acc, l) // this is probably quadratic but fuck rust's string concatenation options wholesale
+                    } else {
+                        acc
+                    }
+                });
+                let good_number = rng.generate_range(0..(the_body.lines().count() - 66));
+                let random_lines = the_body.lines().collect::<Vec<&str>>()
+                    [good_number..good_number + 66]
+                    .to_owned();
+                Some((the_body.to_owned(), random_lines.to_owned().join("\n")))
+            }
+            Err(_) => None,
+        }) else {
+            panic!("couldnt read text file");
+        };
+        let mut random_line_effects = vec![];
+
+        for _ in test_lines.lines() {
+            random_line_effects.push(KineticEffect::random(&mut rng));
+        }
+        self.test_text = test_text;
+        self.test_lines = test_lines;
+        self.random_line_effects = random_line_effects;
+    }
+
+    fn implement(
+        &mut self,
+        settings: &GameProgrammeSettings,
+        event_loop: &EventLoop<MyEvent>,
+        renderer: Arc<Renderer>,
+        _routines: Arc<DefaultRoutines>,
+        rts: &Runtime,
+    ) {
+        let Definitions::SceneDefinition(definition) = &self.definition else {
+            panic!("scene has non-scene definition")
+        };
+        let scene1_starting_cam = make_camera((
+            definition.start_cam.clone(),
+            self.starting_cam_info().as_arr(),
+        ));
+        let mut scene1_cameras = HashMap::new();
+        scene1_cameras.insert(scene1_starting_cam.name.clone(), scene1_starting_cam);
+        let gltf_settings = settings.gltf_settings;
+        //        let renderer = Arc::clone(renderer);
+        //        let routines = Arc::clone(routines);
+        let event_loop_proxy = event_loop.create_proxy();
+        let scene1_uuid = self.uuid;
+        let scene1_stage_name = definition.stage.0.clone();
+        let scene1_stage_directory = definition.stage.1.clone();
+        let scene1_stage3d = AstinkScene::Loading;
+
+        let mut scene1_actor_impls = HashMap::new();
+        for ActressDefinition { name, .. } in definition.actors.clone() {
+            scene1_actor_impls.insert(name.clone(), AstinkSprite::Loading);
+        }
+        let scene1_implementation = SceneImplementation {
+            stage3d: scene1_stage3d,
+            actresses: HashMap::new(),
+            props: HashMap::new(), // todo!(),
+            cameras: scene1_cameras,
+        };
+
+        self.implementation = Some(Implementations::SceneImplementation(scene1_implementation));
+        let scene1_actors = definition.actors.clone();
+        for ActressDefinition {
+            name,
+            directory,
+            transform,
+            size,
+        } in scene1_actors
+        {
+            let renderer = Arc::clone(&renderer);
+            let event_loop_proxy = event_loop.create_proxy();
+            let name = name.to_owned();
+            rts.spawn(async move {
+                create_actor(
+                    name,
+                    directory,
+                    renderer,
+                    event_loop_proxy,
+                    transform,
+                    size,
+                    scene1_uuid,
+                )
+                .await
+            });
+        }
+        let mut collider_ids = HashMap::new();
+        [
+            "Therac-25",
+            "PortaPotty",
+            "vt100",
+            "pdp11",
+            "Podloga",
+            "Przedzialek",
+            "Sciana1",
+            "Sciana2",
+            "Sciana3",
+            "Sciana4",
+        ]
+        .iter()
+        .for_each(|c| {
+            let k = (*c).to_owned();
+            let v = k.clone();
+            collider_ids.insert(k, v.to_owned());
+        });
+        rts.spawn(async move {
+            load_stage3d(
+                scene1_stage_name,
+                scene1_stage_directory,
+                scene1_uuid,
+                renderer,
+                gltf_settings,
+                event_loop_proxy,
+                collider_ids,
+            )
+            .await;
+        });
+    }
+
+    fn starting_cam_info(&self) -> CamInfo {
+        let Definitions::SceneDefinition(definition) = &self.definition else {
+            panic!("scene has non-scene definition")
+        };
+        definition
+            .cameras
+            .get(&definition.start_cam)
+            .unwrap()
+            .clone()
+    }
+
+    fn implement_chorus(&self, egui_ctx: Context) {
+        egui::Window::new("egui widget testing").show(&egui_ctx, |ui| {
+            //
+            ui.horizontal(|ui| {
+                ui.add(KineticLabel::new("blabla"));
+                ui.add(KineticLabel::new("same").kinesis(vec![&KineticEffect::default()]));
+                ui.add(
+                    KineticLabel::new("line").kinesis(vec![&KineticEffect::ShakeLetters {
+                        params: ShakeLetters::default(),
+                    }]),
+                );
+                ui.add(
+                    KineticLabel::new("still").kinesis(vec![&KineticEffect::Gay {
+                        params: Gay::default(),
+                    }]),
+                );
+            });
+            for (i, line) in self.test_lines.lines().enumerate() {
+                ui.add(KineticLabel::new(line).kinesis(vec![&self.random_line_effects[i]]));
+            }
+        });
+    }
+}
+impl HandlesInputContexts<MyInputContexts> for LinacLabScene {
+    fn handle_input_for_context(
+        &mut self,
+        settings: &GameProgrammeSettings,
+        state: &mut GameProgrammeState<MyInputContexts>,
+        window: &Arc<Window>,
+    ) {
+        update_camera_rotation(state);
+        let cur_camera = state.cur_camera.as_mut().unwrap();
+        let rotation = cur_camera.rotation;
+        let forward = -rotation.z_axis;
+        let up = rotation.y_axis;
+        let side = -rotation.x_axis;
+        let buttons = &mut state.input_status.buttons;
+        let cur_context = &state.cur_input_context;
+        match cur_context {
+            &MyInputContexts::DebugInputContext(_) => {
+                let really_pressed = |binding| {
+                    Self::input_down(buttons, &self.keybindings, binding).is_some_and(|k| k)
+                };
+                let really_released = |binding| {
+                    Self::input_up(buttons, &self.keybindings, binding).is_some_and(|k| k)
+                };
+                let interacted_with = |binding| really_pressed(binding) || really_released(binding);
+                let velocity = if really_pressed(&MIC::DebugInputContext(DIC::Sprint)) {
+                    settings.run_speed
+                } else {
+                    settings.walk_speed
+                };
+                let mut location = cur_camera.info.location();
+                let last_update = state.last_update.unwrap();
+                if really_pressed(&MIC::DebugInputContext(DIC::Forwards)) {
+                    location += forward * velocity * last_update.elapsed().as_secs_f32();
+                }
+                if really_pressed(&MIC::DebugInputContext(DIC::Backwards)) {
+                    location -= forward * velocity * last_update.elapsed().as_secs_f32();
+                }
+                if really_pressed(&MIC::DebugInputContext(DIC::StrafeLeft)) {
+                    location += side * velocity * last_update.elapsed().as_secs_f32();
+                }
+                if really_pressed(&MIC::DebugInputContext(DIC::StrafeRight)) {
+                    location -= side * velocity * last_update.elapsed().as_secs_f32();
+                }
+                if really_pressed(&MIC::DebugInputContext(DIC::LiftUp)) {
+                    location += up * velocity * last_update.elapsed().as_secs_f32();
+                }
+                cur_camera
+                    .info
+                    .set_location(location.x, location.y, location.z);
+                if really_released(&MIC::DebugInputContext(DIC::Interact)) {
+                    let rayman = make_ray(
+                        cur_camera,
+                        &state.input_status.mouse_physical_poz,
+                        window,
+                        settings.handedness,
+                    );
+
+                    if let Implementations::SceneImplementation(sc_imp) =
+                        self.implementation.as_mut().unwrap()
+                    {
+                        const MAX_TOI: f32 = 100000.0;
+                        if let AstinkScene::Loaded(stage3d) = &sc_imp.stage3d {
+                            for (c_name, colliders) in stage3d.2 .2.col_map.iter() {
+                                for c in colliders {
+                                    if let Some(toi) = c.cast_local_ray(&rayman, MAX_TOI, true) {
+                                        let intersection = rayman.point_at(toi);
+                                        let cam_point = nalgebra::Point3::from([
+                                            location.x, location.y, location.z,
+                                        ]);
+                                        if cam_point != intersection {
+                                            println!(
+                                                "{} intersects mouse ray at {}",
+                                                c_name, intersection
+                                            );
+                                            #[cfg(feature = "extra_debugging")]
+                                            {
+                                                let renderer = state.renderer.clone().unwrap();
+                                                crate::bl::theater::basement::debug_profiling_etc::draw_debug_mouse_picking_doodad(
+                                                    crate::bl::theater::basement::debug_profiling_etc::DebugPickingDoodad::TheRay,
+                                                    &cam_point,
+                                                    &intersection,
+                                                    &renderer,
+                                                    settings.handedness,
+                                                    c,
+                                                );
+                                                crate::bl::theater::basement::debug_profiling_etc::draw_debug_mouse_picking_doodad(
+                                                    crate::bl::theater::basement::debug_profiling_etc::DebugPickingDoodad::TheColliderShape,
+                                                    &cam_point,
+                                                    &intersection,
+                                                    &renderer,
+                                                    settings.handedness,
+                                                    c,
+                                                );
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if really_released(&MIC::DebugInputContext(DIC::Back)) {
+                    state.grabber.as_mut().unwrap().request_ungrab(window);
+                }
+
+                if really_released(&MIC::DebugInputContext(DIC::DebugProfiling)) {
+                    #[cfg(feature = "extra_debugging")]
+                    crate::bl::theater::basement::debug_profiling_etc::write_profiling_json(
+                        &state.previous_profiling_stats.as_ref(),
+                    );
+                }
+                if interacted_with(&MIC::DebugInputContext(DIC::GrabWindow)) {
+                    let grabber = state.grabber.as_mut().unwrap();
+
+                    if !grabber.grabbed() {
+                        grabber.request_grab(window);
+                    }
+                }
+            }
+            MyInputContexts::LinacLabIC(_) => {}
+            MyInputContexts::Pause => {}
+        }
+
+        buttons.retain(|_, v| v.is_pressed());
+    }
+}
+pub fn define_play() -> Play<MyPlayables> {
+    let mut linac_lab_scene = LinacLabScene::default();
+    linac_lab_scene.define_scene();
+    let mut playables = HashMap::new();
+    let mut playable_names = HashMap::new();
+    playable_names.insert(linac_lab_scene.name.clone(), linac_lab_scene.uuid);
+    let first_playable = linac_lab_scene.uuid;
+    playables.insert(
+        linac_lab_scene.uuid,
+        MyPlayables::LinacLabScene(linac_lab_scene),
+    );
+
+    Play {
+        first_playable,
+        playables,
+        playable_names,
+    }
 }
