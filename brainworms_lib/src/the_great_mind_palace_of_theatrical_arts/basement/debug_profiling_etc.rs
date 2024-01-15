@@ -4,11 +4,9 @@ use rend3::types::Handedness;
 
 use crate::theater::play::scene::stage3d::draw_line;
 
-use super::cla::GameProgrammeSettings;
-
 pub fn write_profiling_json(stats: &Option<&Vec<wgpu_profiler::GpuTimerScopeResult>>) {
     // write out gpu side performance info into a trace readable by chrome://tracing
-    if let Some(ref stats) = stats {
+    if let Some(stats) = stats {
         println!("Outputing gpu timing chrome trace to profile.json");
         wgpu_profiler::chrometrace::write_chrometrace(Path::new("profile.json"), stats).unwrap();
     } else {

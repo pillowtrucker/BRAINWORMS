@@ -464,16 +464,16 @@ impl HandlesInputContexts<MyInputContexts> for LinacLabScene {
                                             #[cfg(feature = "extra_debugging")]
                                             {
                                                 let renderer = state.renderer.clone().unwrap();
-                                                crate::theater::basement::debug_profiling_etc::draw_debug_mouse_picking_doodad(
-                                                    crate::theater::basement::debug_profiling_etc::DebugPickingDoodad::TheRay,
+                                                crate::bl::theater::basement::debug_profiling_etc::draw_debug_mouse_picking_doodad(
+                                                    crate::bl::theater::basement::debug_profiling_etc::DebugPickingDoodad::TheRay,
                                                     &cam_point,
                                                     &intersection,
                                                     &renderer,
                                                     settings.handedness,
                                                     c,
                                                 );
-                                                crate::theater::basement::debug_profiling_etc::draw_debug_mouse_picking_doodad(
-                                                    crate::theater::basement::debug_profiling_etc::DebugPickingDoodad::TheColliderShape,
+                                                crate::bl::theater::basement::debug_profiling_etc::draw_debug_mouse_picking_doodad(
+                                                    crate::bl::theater::basement::debug_profiling_etc::DebugPickingDoodad::TheColliderShape,
                                                     &cam_point,
                                                     &intersection,
                                                     &renderer,
@@ -495,7 +495,7 @@ impl HandlesInputContexts<MyInputContexts> for LinacLabScene {
 
                 if really_released(&MIC::DebugInputContext(DIC::DebugProfiling)) {
                     #[cfg(feature = "extra_debugging")]
-                    crate::theater::basement::debug_profiling_etc::write_profiling_json(
+                    crate::bl::theater::basement::debug_profiling_etc::write_profiling_json(
                         &state.previous_profiling_stats.as_ref(),
                     );
                 }
