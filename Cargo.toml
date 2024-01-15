@@ -43,4 +43,4 @@ members = [ "brainworms_lib",
 "proc-macros"
 ]
 [features]
-extra_debugging = []
+extra_debugging = ["brainworms_lib/extra_debugging"]
