@@ -11,7 +11,7 @@ keywords = ["wgpu", "rend3", "not-bevy", "no-ecs", "game", "program"]
 
 [dependencies]
 
-winit = "0.29.9"
+winit = "0.29.10"
 brainworms_lib = {path = "./brainworms_lib"}
 [[bin]]
 name = "brainworms"
