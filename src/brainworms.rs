@@ -1,4 +1,6 @@
 use bl::enum_dispatch::enum_dispatch;
+use bl::log::info;
+use bl::nalgebra::distance;
 use bl::nanorand::RandomGen;
 
 use bl::the_great_mind_palace_of_theatrical_arts::basement::input_handling::{
@@ -6,7 +8,9 @@ use bl::the_great_mind_palace_of_theatrical_arts::basement::input_handling::{
 };
 use bl::the_great_mind_palace_of_theatrical_arts::basement::logging::register_logger;
 use bl::the_great_mind_palace_of_theatrical_arts::play::scene::actors::create_actor;
-use bl::the_great_mind_palace_of_theatrical_arts::play::scene::stage3d::load_stage3d;
+use bl::the_great_mind_palace_of_theatrical_arts::play::scene::stage3d::{
+    get_collisions_from_camera, load_stage3d, CollisionMap,
+};
 use bl::the_great_mind_palace_of_theatrical_arts::play::Play;
 use bl::{
     egui, glam, nalgebra, nanorand, parry3d, rend3, tokio, uuid, winit, GameProgramme, MyEvent,
@@ -70,7 +74,7 @@ pub enum MyPlayables {
     //    Curtain,   // loading screens
     //    TicketBox, // menus
 }
-#[derive(Default, Hash, Eq, PartialEq, Debug)]
+#[derive(Default, Hash, Eq, PartialEq, Debug, Copy, Clone)]
 pub enum MyInputContexts {
     DebugInputContext(DebugInputContext),
     LinacLabIC(LinacLabIC),
@@ -78,10 +82,11 @@ pub enum MyInputContexts {
     Pause,
 }
 impl InputContext for MyInputContexts {}
-#[derive(Default, Hash, Eq, PartialEq, Debug)]
+#[derive(Default, Hash, Eq, PartialEq, Debug, Copy, Clone)]
 pub enum LinacLabIC {
     FocusObject,
-    DiddleScrotum,
+    SwitchToDebug,
+    Back,
     #[default]
     Marker,
 }
@@ -155,7 +160,7 @@ impl Playable<MyInputContexts> for MyPlayables {
         }
     }
 }
-const PDP11_CAM_INFO: [f32; 5] = [-3.729838, 4.512105, -0.103016704, -0.4487015, 0.025398161];
+//const PDP11_CAM_INFO: [f32; 5] = [-3.729838, 4.512105, -0.103016704, -0.4487015, 0.025398161];
 const VT100_CAM_INFO: [f32; 5] = [-5.068789, 1.3310424, -3.6215494, -0.31070346, 6.262584];
 const THERAC_CAM_INFO: [f32; 5] = [-2.580962, 2.8690546, 2.878742, -0.27470315, 5.620602];
 const TOITOI_CAM_INFO: [f32; 5] = [-6.814362, 2.740766, 0.7109763, -0.17870337, 0.0073876693];
@@ -178,6 +183,7 @@ pub struct LinacLabScene {
 
 impl LinacLabScene {
     fn define(&mut self) {
+        // add default debug bindings (this can probably be derived TODO)
         let mut keybindings = KeyBindings::from(
             [
                 (DIC::Sprint, KeyCode::ShiftLeft),
@@ -188,13 +194,27 @@ impl LinacLabScene {
                 (DebugInputContext::LiftUp, KeyCode::KeyQ),
                 (DebugInputContext::Interact, KeyCode::Period),
                 (DebugInputContext::Back, KeyCode::Escape),
-                (DebugInputContext::DebugProfiling, KeyCode::KeyP),
+                (DIC::Profiling, KeyCode::KeyP),
+                (DIC::SwitchToScene, KeyCode::F7),
             ]
             .map(|(lb, kc)| (MIC::DebugInputContext(lb), AcceptedInput::KB(kc))),
         );
         #[allow(clippy::single_element_loop)]
         for (lb, mb) in [(DebugInputContext::GrabWindow, MouseButton::Left)] {
             keybindings.insert(MIC::DebugInputContext(lb), AcceptedInput::M(mb));
+        }
+        // add keyboard bindings for scene1
+        #[allow(clippy::single_element_loop)]
+        for (lb, kc) in [(LinacLabIC::SwitchToDebug, KeyCode::F7)] {
+            keybindings.insert(MIC::LinacLabIC(lb), AcceptedInput::KB(kc));
+        }
+        // add mouse bindings for scene1
+        #[allow(clippy::single_element_loop)]
+        for (lb, mb) in [
+            (LinacLabIC::FocusObject, MouseButton::Left),
+            (LinacLabIC::Back, MouseButton::Right),
+        ] {
+            keybindings.insert(MIC::LinacLabIC(lb), AcceptedInput::M(mb));
         }
         self.keybindings = keybindings;
         let next_to_pdp11 = glam::Mat4::from_scale_rotation_translation(
@@ -216,11 +236,11 @@ impl LinacLabScene {
             start_cam: "overview".to_owned(),
             cameras: vec![
                 ("overview".to_owned(), OVERVIEW_CAM_INFO),
-                ("pdp11".to_owned(), PDP11_CAM_INFO),
-                ("pdp11+midori".to_owned(), PDP11_WITH_MIDORI_CAM_INFO),
+                //                ("pdp11".to_owned(), PDP11_CAM_INFO),
+                ("pdp11".to_owned(), PDP11_WITH_MIDORI_CAM_INFO),
                 ("vt100".to_owned(), VT100_CAM_INFO),
-                ("therac".to_owned(), THERAC_CAM_INFO),
-                ("toitoi".to_owned(), TOITOI_CAM_INFO),
+                ("Therac-25".to_owned(), THERAC_CAM_INFO),
+                ("PortaPotty".to_owned(), TOITOI_CAM_INFO),
             ]
             .iter()
             .fold(HashMap::new(), |mut h, (k, v)| {
@@ -271,12 +291,20 @@ impl LinacLabScene {
         let Definitions::SceneDefinition(definition) = &self.definition else {
             panic!("scene has non-scene definition")
         };
+        /*
         let scene1_starting_cam = make_camera((
             definition.start_cam.clone(),
             self.starting_cam_info().as_arr(),
         ));
+        */
+
         let mut scene1_cameras = HashMap::new();
-        scene1_cameras.insert(scene1_starting_cam.name.clone(), scene1_starting_cam);
+        //        scene1_cameras.insert(scene1_starting_cam.name.clone(), scene1_starting_cam);
+        for (c_n, cam_info) in &definition.cameras {
+            let cam = make_camera((c_n.to_owned(), cam_info.as_arr()));
+            scene1_cameras.insert(cam.name.clone(), cam);
+        }
+        //        let scene1_starting_cam = scene1_cameras[&definition.start_cam].clone();
         let gltf_settings = settings.gltf_settings;
         //        let renderer = Arc::clone(renderer);
         //        let routines = Arc::clone(routines);
@@ -404,45 +432,66 @@ impl HandlesInputContexts<MyInputContexts> for LinacLabScene {
         let side = -rotation.x_axis;
         let buttons = &mut state.input_status.buttons;
         let cur_context = &state.cur_input_context;
+        let mouse_physical_poz = &state.input_status.mouse_physical_poz;
+        let handedness = settings.handedness;
+        let really_pressed =
+            |binding| Self::input_down(buttons, &self.keybindings, &binding).is_some_and(|k| k);
+        let really_released =
+            |binding| Self::input_up(buttons, &self.keybindings, &binding).is_some_and(|k| k);
+        let interacted_with = |binding| really_pressed(binding) || really_released(binding);
+        let wown: fn(LinacLabIC) -> MIC = MIC::LinacLabIC; // RA thinks this is an unused variable without the signature..
+        let wdbg: fn(DebugInputContext) -> MIC = MIC::DebugInputContext;
+        //        bl::log::info!("cur_context is {:?}", cur_context);
+
+        let (win_w, win_h) = window.inner_size().into();
+
         match cur_context {
-            &MyInputContexts::DebugInputContext(_) => {
-                let really_pressed = |binding| {
-                    Self::input_down(buttons, &self.keybindings, binding).is_some_and(|k| k)
-                };
-                let really_released = |binding| {
-                    Self::input_up(buttons, &self.keybindings, binding).is_some_and(|k| k)
-                };
-                let interacted_with = |binding| really_pressed(binding) || really_released(binding);
-                let velocity = if really_pressed(&MIC::DebugInputContext(DIC::Sprint)) {
+            MyInputContexts::DebugInputContext(DIC::Marker) => {
+                if really_released(wdbg(DIC::SwitchToScene)) {
+                    if let Some(Implementations::SceneImplementation(ref si)) = self.implementation
+                    {
+                        if let Definitions::SceneDefinition(ref sd) = self.definition {
+                            // reset camera to default from wherever we were in debug mode
+                            state.cur_camera = Some(si.cameras[&sd.start_cam].clone()); // ehh this should have been a reference all along tbh TODO
+                                                                                        // set input context to scene
+                            state.cur_input_context = wown(LinacLabIC::Marker);
+                            // ignore all of the other inputs since they mean something else in debug mode
+                            state.input_status.buttons.clear();
+                            return;
+                        }
+                    }
+                }
+                let velocity = if really_pressed(wdbg(DIC::Sprint)) {
                     settings.run_speed
                 } else {
                     settings.walk_speed
                 };
                 let mut location = cur_camera.info.location();
                 let last_update = state.last_update.unwrap();
-                if really_pressed(&MIC::DebugInputContext(DIC::Forwards)) {
+                if really_pressed(wdbg(DIC::Forwards)) {
                     location += forward * velocity * last_update.elapsed().as_secs_f32();
                 }
-                if really_pressed(&MIC::DebugInputContext(DIC::Backwards)) {
+                if really_pressed(wdbg(DIC::Backwards)) {
                     location -= forward * velocity * last_update.elapsed().as_secs_f32();
                 }
-                if really_pressed(&MIC::DebugInputContext(DIC::StrafeLeft)) {
+                if really_pressed(wdbg(DIC::StrafeLeft)) {
                     location += side * velocity * last_update.elapsed().as_secs_f32();
                 }
-                if really_pressed(&MIC::DebugInputContext(DIC::StrafeRight)) {
+                if really_pressed(wdbg(DIC::StrafeRight)) {
                     location -= side * velocity * last_update.elapsed().as_secs_f32();
                 }
-                if really_pressed(&MIC::DebugInputContext(DIC::LiftUp)) {
+                if really_pressed(wdbg(DIC::LiftUp)) {
                     location += up * velocity * last_update.elapsed().as_secs_f32();
                 }
                 cur_camera
                     .info
                     .set_location(location.x, location.y, location.z);
-                if really_released(&MIC::DebugInputContext(DIC::Interact)) {
+                if really_released(wdbg(DIC::Interact)) {
                     let rayman = make_ray(
                         cur_camera,
                         &state.input_status.mouse_physical_poz,
-                        window,
+                        win_w,
+                        win_h,
                         settings.handedness,
                     );
 
@@ -491,17 +540,17 @@ impl HandlesInputContexts<MyInputContexts> for LinacLabScene {
                     }
                 }
 
-                if really_released(&MIC::DebugInputContext(DIC::Back)) {
+                if really_released(wdbg(DIC::Back)) {
                     state.grabber.as_mut().unwrap().request_ungrab(window);
                 }
 
-                if really_released(&MIC::DebugInputContext(DIC::DebugProfiling)) {
+                if really_released(wdbg(DIC::Profiling)) {
                     #[cfg(feature = "extra_debugging")]
                     crate::bl::theater::basement::debug_profiling_etc::write_profiling_json(
                         &state.previous_profiling_stats.as_ref(),
                     );
                 }
-                if interacted_with(&MIC::DebugInputContext(DIC::GrabWindow)) {
+                if interacted_with(wdbg(DIC::GrabWindow)) {
                     let grabber = state.grabber.as_mut().unwrap();
 
                     if !grabber.grabbed() {
@@ -509,8 +558,78 @@ impl HandlesInputContexts<MyInputContexts> for LinacLabScene {
                     }
                 }
             }
-            MyInputContexts::LinacLabIC(_) => {}
-            MyInputContexts::Pause => {}
+            MyInputContexts::LinacLabIC(LinacLabIC::Marker) => {
+                if really_released(wown(LinacLabIC::SwitchToDebug)) {
+                    // set input context to debug
+                    state.cur_input_context = wdbg(DIC::Marker);
+                    // ignore all of the other inputs since they mean something else in debug mode
+                    state.input_status.buttons.clear();
+                    return;
+                }
+                if really_released(wown(LinacLabIC::FocusObject)) {
+                    let Implementations::SceneImplementation(sc_imp) =
+                        self.implementation.as_ref().unwrap()
+                    else {
+                        return;
+                    };
+                    let AstinkScene::Loaded(stage3d) = &sc_imp.stage3d else {
+                        return;
+                    };
+                    let col_map = &stage3d.2 .2.col_map;
+                    let collisions: CollisionMap = get_collisions_from_camera(
+                        cur_camera,
+                        mouse_physical_poz,
+                        win_w,
+                        win_h,
+                        handedness,
+                        col_map,
+                    )
+                    .iter()
+                    .filter_map(|(k, v)| {
+                        sc_imp
+                            .cameras
+                            .contains_key(k)
+                            .then_some((k.to_owned(), v.to_owned()))
+                    })
+                    .collect();
+                    info!("collisions: {collisions:?}");
+                    let Some((closest, _)) = collisions.iter().min_by(|c1, c2| {
+                        let cam_point: nalgebra::Point3<f32> = cur_camera.info.location().into();
+                        let min_c1 =
+                            c1.1.iter()
+                                .min_by(|cd1, cd2| {
+                                    distance(cd1, &cam_point).total_cmp(&distance(cd2, &cam_point))
+                                })
+                                .unwrap();
+                        bl::log::info!("min_c1 {min_c1}");
+                        let min_c2 =
+                            c2.1.iter()
+                                .min_by(|cd1, cd2| {
+                                    distance(cd1, &cam_point).total_cmp(&distance(cd2, &cam_point))
+                                })
+                                .unwrap();
+                        bl::log::info!("min_c2 {min_c2}");
+                        distance(min_c1, &cam_point).total_cmp(&distance(min_c2, &cam_point))
+                    }) else {
+                        buttons.retain(|_, v| v.is_pressed());
+                        return;
+                    };
+
+                    state.cur_camera = Some(sc_imp.cameras[closest].clone());
+                }
+                if really_released(wown(LinacLabIC::Back)) {
+                    let Implementations::SceneImplementation(sc_imp) =
+                        self.implementation.as_ref().unwrap()
+                    else {
+                        return;
+                    };
+                    let Definitions::SceneDefinition(ref sd) = self.definition else {
+                        return;
+                    };
+                    state.cur_camera = Some(sc_imp.cameras[&sd.start_cam].clone());
+                }
+            }
+            _ => {}
         }
 
         buttons.retain(|_, v| v.is_pressed());

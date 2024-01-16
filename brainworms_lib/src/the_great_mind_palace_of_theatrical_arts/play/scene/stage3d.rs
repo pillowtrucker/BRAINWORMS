@@ -7,8 +7,11 @@ use std::{
     path::Path,
     sync::Arc,
 };
+pub type ColliderName = String;
+pub type ColliderMap = HashMap<ColliderName, Vec<parry3d::shape::TriMesh>>;
+pub type CollisionMap = HashMap<ColliderName, Vec<nalgebra::OPoint<f32, nalgebra::Const<3>>>>;
 pub struct Colliders {
-    pub col_map: HashMap<String, Vec<parry3d::shape::TriMesh>>,
+    pub col_map: ColliderMap,
 }
 use glam::{vec3, vec4, Mat3A, UVec2};
 
@@ -16,7 +19,7 @@ use log::info;
 use nalgebra::{Isometry3, Matrix, Point3, Translation3};
 use parking_lot::Mutex;
 
-use parry3d::query::Ray;
+use parry3d::query::{Ray, RayCast};
 use rend3::{
     types::{CameraProjection, Handedness, Texture, TextureFormat},
     util::typedefs::SsoString,
@@ -25,7 +28,7 @@ use rend3::{
 use rend3_gltf::{GltfLoadError, GltfLoadSettings, GltfSceneInstance};
 use rend3_routine::skybox::SkyboxRoutine;
 use uuid::Uuid;
-use winit::{dpi::PhysicalPosition, event_loop::EventLoopProxy, window::Window};
+use winit::{dpi::PhysicalPosition, event_loop::EventLoopProxy};
 
 use std::time;
 
@@ -338,7 +341,8 @@ pub(crate) fn compute_projection_matrix(
 pub fn make_ray(
     cur_camera: &Camera,
     mouse_physical_poz: &PhysicalPosition<f64>,
-    window: &Arc<Window>,
+    win_w: f64,
+    win_h: f64,
     handedness: Handedness,
 ) -> Ray {
     let cam_x = cur_camera.info.x;
@@ -350,8 +354,6 @@ pub fn make_ray(
     let mouse_x = mouse_physical_poz.x;
     let mouse_y = mouse_physical_poz.y;
     info!("mouse at {},{}", mouse_x, mouse_y);
-    let win_w = window.inner_size().width as f64;
-    let win_h = window.inner_size().height as f64;
 
     let x = (2.0 * mouse_x) / win_w - 1.0;
 
@@ -375,6 +377,44 @@ pub fn make_ray(
     let ray_wor = ray_wor.normalize();
     info!("ray_world: {ray_wor}");
     Ray::new(nalgebra::Point3::new(cam_x, cam_y, cam_z), ray_wor.into())
+}
+const MAX_TOI: f32 = 100000.0;
+pub fn get_collisions_from_camera(
+    cur_camera: &Camera,
+    mouse_physical_poz: &PhysicalPosition<f64>,
+    win_w: f64,
+    win_h: f64,
+    handedness: Handedness,
+    col_map: &ColliderMap,
+) -> CollisionMap {
+    let cam_point: nalgebra::Point3<f32> = cur_camera.info.location().into();
+    let rayman = make_ray(cur_camera, mouse_physical_poz, win_w, win_h, handedness);
+    let collisions: CollisionMap = col_map.iter().filter_map(
+        |(c_name, colliders)| -> Option<(String, Vec<nalgebra::OPoint<f32, nalgebra::Const<3>>>)> {
+            let intersections: Vec<_> = colliders
+                .iter()
+                .filter_map(|c| -> Option<nalgebra::OPoint<f32, nalgebra::Const<3>>> {
+                    if let Some(toi) = c.cast_local_ray(&rayman, MAX_TOI, true) {
+                        let intersection = rayman.point_at(toi);
+
+                        if cam_point != intersection {
+                            log::info!("{} intersects mouse ray at {}", c_name, intersection);
+                            Some(intersection)
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                }).collect();
+            if intersections.is_empty() {
+                None
+            } else {
+                Some((c_name.clone(), intersections))
+            }
+        },
+    ).collect();
+    collisions
 }
 #[cfg(feature = "extra_debugging")]
 pub fn draw_line(points: Vec<[f32; 3]>) -> rend3::types::Mesh {

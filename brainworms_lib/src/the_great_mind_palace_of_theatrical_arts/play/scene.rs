@@ -48,6 +48,7 @@ impl CamInfo {
         [self.x, self.y, self.z, self.pitch, self.yaw]
     }
 }
+#[derive(Debug, Default, Clone)]
 pub struct Camera {
     pub name: String,
     pub renderer_camera: rend3::types::Camera,

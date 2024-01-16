@@ -14,7 +14,7 @@ use crate::{GameProgrammeSettings, GameProgrammeState};
 pub type KeyStates = HashMap<AcceptedInput, ElementState>;
 pub type KeyBindings<TO> = HashMap<TO, AcceptedInput>;
 
-#[derive(Debug, Hash, Eq, PartialEq)]
+#[derive(Debug, Hash, Eq, PartialEq, Copy, Clone)]
 pub enum DebugInputContext {
     Sprint,
     Forwards,
@@ -24,8 +24,9 @@ pub enum DebugInputContext {
     LiftUp,
     Interact,
     Back,
-    DebugProfiling,
+    Profiling,
     GrabWindow,
+    SwitchToScene,
     Marker,
 }
 pub trait InputContext:
