@@ -11,7 +11,6 @@ keywords = ["wgpu", "rend3", "not-bevy", "no-ecs", "game", "program"]
 
 [dependencies]
 
-
 brainworms_lib = {path = "./brainworms_lib"}
 [[bin]]
 name = "brainworms"
@@ -39,7 +38,7 @@ orientation = "landscape"
 ndk-glue = "0.7"
 
 [workspace]
-members = [ "brainworms_lib",
+members = [ "brainworms_arson", "brainworms_lib",
 "proc-macros"
 ]
 [features]

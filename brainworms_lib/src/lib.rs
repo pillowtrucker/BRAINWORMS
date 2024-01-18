@@ -2,8 +2,8 @@
 pub mod the_great_mind_palace_of_theatrical_arts;
 // the reexports suck but this stays until I can focus on wrapping this
 
+pub use brainworms_arson::{self, egui, egui_winit, nanorand};
 pub use cfg_if::cfg_if;
-pub use egui;
 
 use egui::{Color32, TextStyle, Visuals};
 pub use glam;
@@ -15,7 +15,7 @@ pub use rend3;
 
 pub use enum_dispatch;
 pub use nalgebra;
-pub use nanorand;
+
 pub use parry3d;
 pub use proc_macros;
 use rend3::types::DirectionalLight;

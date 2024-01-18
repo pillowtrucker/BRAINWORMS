@@ -1,3 +1,4 @@
+use brainworms_arson::egui;
 use egui::Context;
 
 pub trait Choral {

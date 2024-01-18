@@ -1,3 +1,4 @@
+use bl::brainworms_arson::{Gay, KineticEffect, KineticLabel, ShakeLetters};
 use bl::enum_dispatch::enum_dispatch;
 use bl::log::info;
 use bl::nalgebra::distance;
@@ -21,10 +22,7 @@ use brainworms_lib::{
     theater::{
         basement::{cla::GameProgrammeSettings, text_files::read_lines},
         play::{
-            backstage::{
-                plumbing::DefaultRoutines,
-                pyrotechnics::kinetic_narrative::{Gay, KineticEffect, KineticLabel, ShakeLetters},
-            },
+            backstage::plumbing::DefaultRoutines,
             scene::{
                 actors::{ActressDefinition, AstinkSprite},
                 chorus::Choral,
@@ -161,7 +159,7 @@ impl Playable<MyInputContexts> for MyPlayables {
     }
 }
 //const PDP11_CAM_INFO: [f32; 5] = [-3.729838, 4.512105, -0.103016704, -0.4487015, 0.025398161];
-const VT100_CAM_INFO: [f32; 5] = [-5.068789, 1.3310424, -3.6215494, -0.31070346, 6.262584];
+const VT100_CAM_INFO: [f32; 5] = [-5.0835533, 1.3423158, -2.9590514, -0.26870108, 6.278548];
 const THERAC_CAM_INFO: [f32; 5] = [-2.580962, 2.8690546, 2.878742, -0.27470315, 5.620602];
 const TOITOI_CAM_INFO: [f32; 5] = [-6.814362, 2.740766, 0.7109763, -0.17870337, 0.0073876693];
 const OVERVIEW_CAM_INFO: [f32; 5] = [-6.217338, 3.8491437, 5.883971, -0.40870047, 5.76257];

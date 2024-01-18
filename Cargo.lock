@@ -359,15 +359,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "brainworms_arson"
+version = "0.1.0"
+dependencies = [
+ "egui",
+ "egui-wgpu",
+ "egui-winit",
+ "nanorand",
+]
+
+[[package]]
 name = "brainworms_lib"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "brainworms_arson",
  "bytemuck",
  "cfg-if 1.0.0",
- "egui",
- "egui-wgpu",
- "egui-winit",
  "enum_dispatch",
  "env_logger",
  "glam",
@@ -379,7 +387,6 @@ dependencies = [
  "inox2d-wgpu",
  "log",
  "nalgebra",
- "nanorand",
  "ndk-glue",
  "notify",
  "parking_lot 0.12.1",

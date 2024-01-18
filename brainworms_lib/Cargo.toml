@@ -11,15 +11,16 @@ keywords = ["wgpu", "rend3", "not-bevy", "no-ecs", "game", "program"]
 
 
 [dependencies]
+brainworms_arson = {path = "../brainworms_arson"}
 wgpu = { version = "0.18.0", default-features = false }
-egui = { version = "0.25", git = "https://github.com/emilk/egui.git", branch="master"}
+
 pollster = "0.3.0"
 log = "0.4.20"
 winit = "0.29.10"
 
 env_logger = "0.10.1"
 
-egui-wgpu = {version = "0.25", git = "https://github.com/emilk/egui.git", branch="master", features = ["winit"] }
+
 #egui-winit = { version = "0.24.1", default-features = false, features = ["clipboard", "links", "wayland"] }
 
 # Linear algebra library
@@ -41,7 +42,7 @@ webbrowser = "0.8.2"
 inox2d = {path = "../inox2d/inox2d"}
 inox2d-wgpu = {path = "../inox2d/inox2d-wgpu"}
 bytemuck = { version = "1.14.0", features = ["derive"] }
-nanorand = { version = "0.7", default-features = false, features = ["wyrand"] }
+
 pico-args = "0.5"
 wgpu-profiler = "0.15.0"
 gluon = {git = "https://github.com/gluon-lang/gluon", branch = "master"}
@@ -55,7 +56,7 @@ thiserror = { version = "1" }
 #rayon = "1.8"
 
 tokio = { version = "1", features = ["full"] }
-egui-winit = {version = "0.25", git = "https://github.com/emilk/egui.git", branch="master", default-features = false, features = ["clipboard", "links", "wayland"] }
+
 notify = "6.1.1"
 rust-embed = "8.2.0" # Enable shader hot reload for native compilation.
 enum_dispatch = "0.3.12"

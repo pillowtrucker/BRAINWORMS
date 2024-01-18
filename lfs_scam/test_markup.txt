@@ -1,0 +1,27 @@
+{first_row_indentation=10.0}first row indentation{/first_row_indentation}
+{small}small style{/small}
+{style=small}also small style{/style}
+{body}normal text{/body}
+{style=body}also normal text{/style}
+{monospace}monospace text{monospace}
+{style=monospace}also monospace text{/style}
+{heading}heading text{/heading}
+{style=heading}also heading text{/style}
+{style=MyCustomStyle}my custom style text{/style}
+{color=Color32::RED}red text from constant{/color}
+{color=Color32::from_rgb(0,255,0)}green text from rgb{/color}
+{background=Color32::RED}red background{/background}
+{font=FontId::proportional(7.0)}ad-hoc font style{/font}
+{valign=Align::TOP}raised text{/valign}
+{underline=Stroke::new(1.0, Color32::LIGHT_BLUE)}underlined with blue{/underline}
+{strikethrough=Stroke::new(2.0, Color32::RED.linear_multiply(0.5)}stricken-out{/strikethrough}
+{strong}strong text{/strong}
+{post_effect=Gay}rainbow text{/post_effect}
+{post_effect=ShakeLetters}shakey text{/post_effect}
+{post_effect=SineWavify}wavy text{/post_effect}
+{i}italics{/i}
+{i}{b}{ul}{monospace}{color=Color32::from_rgb(0,0,255)}{background=Color::RED}italic, bold, underlined, monospaced and blue on red bg{/i}{/ul}{/b}{/background}{/monospace}{/color}
+
+default text with no modifiers
+
+{unknown}unknown tags get ignored but must still be terminated{/unknown}
