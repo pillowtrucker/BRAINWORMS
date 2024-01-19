@@ -18,7 +18,7 @@ pollster = "0.3.0"
 log = "0.4.20"
 winit = "0.29.10"
 
-env_logger = "0.10.1"
+env_logger = "0.10.2"
 
 
 #egui-winit = { version = "0.24.1", default-features = false, features = ["clipboard", "links", "wayland"] }
