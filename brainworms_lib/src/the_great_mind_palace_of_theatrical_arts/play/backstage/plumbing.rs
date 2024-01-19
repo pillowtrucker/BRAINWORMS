@@ -1,5 +1,6 @@
 use std::{future::Future, sync::Arc};
 
+use brainworms_arson::anyhow;
 use glam::UVec2;
 use parking_lot::Mutex;
 use rend3::{types::SampleCount, Renderer, ShaderPreProcessor};

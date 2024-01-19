@@ -16,29 +16,22 @@ pub use nanorand;
 use nanorand::{RandomGen, Rng};
 use nom::{
     branch::alt,
-    bytes::complete::{tag, take_till, take_till1, take_while1},
-    character::complete::{alpha1, anychar, char},
+    bytes::complete::{tag, take_till, take_till1},
+    character::complete::alpha1,
     combinator::{eof, opt},
-    multi::{many1, many_till},
-    sequence::separated_pair,
+    multi::many1,
     IResult, Parser,
 };
-use std::{
-    borrow::BorrowMut,
-    collections::{BTreeSet, HashSet, VecDeque},
-    f32::consts::PI,
-    mem::variant_count,
-    sync::Arc,
-};
-
-pub struct KineticLabel<'a> {
+use std::{collections::VecDeque, f32::consts::PI, mem::variant_count, sync::Arc};
+#[derive(Clone)]
+pub struct KineticLabel {
     pub text: WidgetText,
     pub wrap: Option<bool>,
     pub truncate: bool,
     pub sense: Option<Sense>,
-    pub kinesis: Option<Vec<&'a KineticEffect>>,
+    pub kinesis: Option<Vec<KineticEffect>>,
 }
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum KineticEffect {
     SineWavify { params: SineWavify },
     ShakeLetters { params: ShakeLetters },
@@ -60,7 +53,7 @@ impl<Generator: Rng<OUTPUT>, const OUTPUT: usize> RandomGen<Generator, OUTPUT> f
         }
     }
 }
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct Gay {
     pub rainbow: Vec<Color32>,
     pub live: bool,
@@ -84,12 +77,12 @@ impl Default for Gay {
     }
 }
 /// This is way too dependent on fps and screen dimensions and resolution to figure out good defaults
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 pub struct ShakeLetters {
     pub max_distortion: i32,
     pub dampen: u64,
 }
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 pub struct SineWavify {
     pub amp: f32,
     pub x_0: f32,
@@ -125,7 +118,7 @@ impl Default for KineticEffect {
     }
 }
 
-impl<'a> KineticLabel<'a> {
+impl KineticLabel {
     pub fn new(text: impl Into<WidgetText>) -> Self {
         Self {
             text: text.into(),
@@ -137,7 +130,7 @@ impl<'a> KineticLabel<'a> {
     }
 
     #[inline]
-    pub fn kinesis(mut self, kinesis: Vec<&'a KineticEffect>) -> Self {
+    pub fn kinesis(mut self, kinesis: Vec<KineticEffect>) -> Self {
         self.kinesis = Some(kinesis);
         self
     }
@@ -204,7 +197,7 @@ impl<'a> KineticLabel<'a> {
     }
 }
 
-impl KineticLabel<'_> {
+impl KineticLabel {
     /// Do layout and position the galley in the ui, without painting it or adding widget info.
     pub fn layout_in_ui(&mut self, ui: &mut Ui) -> (Pos2, Arc<Galley>, Response) {
         let sense = self.sense.unwrap_or_else(|| {
@@ -303,7 +296,7 @@ impl KineticLabel<'_> {
     }
 }
 
-impl Widget for KineticLabel<'_> {
+impl Widget for KineticLabel {
     fn ui(mut self, ui: &mut Ui) -> Response {
         let (pos, galley, mut response) = self.layout_in_ui(ui);
 
@@ -444,7 +437,83 @@ pub fn parse_fireworks(input: &str) -> IResult<&str, Vec<KineticLabel>> {
         (l_input, maybe_opening_transition) = opt(parse_my_tag).parse(l_input)?;
 
         match maybe_opening_transition {
-            Some(_) => todo!(),
+            Some(transition) => match transition {
+                Transition::Enable(mfer) => match mfer {
+                    TextModifier::PrevOpen => {
+                        println!("Nonsense {{}} tag somehow made it into processing")
+                    }
+                    TextModifier::BuiltinOption(ref the_builtin) => match the_builtin {
+                        BuiltinOption::FirstRowIndentation(_) => todo!(),
+                        BuiltinOption::Style(ref the_style) => match the_style {
+                            TextStyle::Small => state.push_back(mfer),
+                            TextStyle::Body => todo!(),
+                            TextStyle::Monospace => todo!(),
+                            TextStyle::Button => todo!(),
+                            TextStyle::Heading => todo!(),
+                            TextStyle::Name(_) => todo!(),
+                        },
+                        BuiltinOption::TextColor(_) => todo!(),
+                        BuiltinOption::BgColor(_) => todo!(),
+                        BuiltinOption::FontStyle(_) => todo!(),
+                        BuiltinOption::VerticalAlign(_) => todo!(),
+                        BuiltinOption::Underline(_) => todo!(),
+                        BuiltinOption::Strikethrough(_) => todo!(),
+                        BuiltinOption::StrongText => todo!(),
+                        BuiltinOption::Italics => todo!(),
+                    },
+                    TextModifier::KineticEffect(_) => todo!(),
+                    TextModifier::Unknown(_) => {
+                        println!("Adding unknown {:?}", mfer);
+                        state.push_back(mfer);
+                    }
+                },
+                Transition::Disable(mfer) => match mfer {
+                    TextModifier::PrevOpen => {
+                        println!(
+                            "removed {:?} from state by implicit {{/}} tag",
+                            state.pop_back()
+                        );
+                    }
+                    TextModifier::BuiltinOption(ref the_builtin) => match the_builtin {
+                        BuiltinOption::FirstRowIndentation(_) => todo!(),
+                        BuiltinOption::Style(ref the_style) => match the_style {
+                            TextStyle::Small => {
+                                state
+                                    .remove(state.iter().position(|tm| *tm == mfer).unwrap())
+                                    .unwrap();
+                            }
+                            TextStyle::Body => todo!(),
+                            TextStyle::Monospace => todo!(),
+                            TextStyle::Button => todo!(),
+                            TextStyle::Heading => todo!(),
+                            TextStyle::Name(_) => todo!(),
+                        },
+                        BuiltinOption::TextColor(_) => todo!(),
+                        BuiltinOption::BgColor(_) => todo!(),
+                        BuiltinOption::FontStyle(_) => todo!(),
+                        BuiltinOption::VerticalAlign(_) => todo!(),
+                        BuiltinOption::Underline(_) => todo!(),
+                        BuiltinOption::Strikethrough(_) => todo!(),
+                        BuiltinOption::StrongText => todo!(),
+                        BuiltinOption::Italics => todo!(),
+                    },
+                    TextModifier::KineticEffect(_) => todo!(),
+                    TextModifier::Unknown((name, _)) => {
+                        state.remove(
+                            state
+                                .iter()
+                                .position(|tm| {
+                                    if let TextModifier::Unknown((other_name, _)) = tm {
+                                        *other_name == name
+                                    } else {
+                                        false
+                                    }
+                                })
+                                .unwrap(),
+                        );
+                    }
+                },
+            },
             None => {
                 (l_input, maybe_eof) = opt(eof).parse(l_input)?;
                 if maybe_eof.is_some() {
@@ -455,50 +524,20 @@ pub fn parse_fireworks(input: &str) -> IResult<&str, Vec<KineticLabel>> {
                 let lay_section = job.sections.first_mut().unwrap();
                 for (i, mfer) in state.iter().enumerate() {
                     match mfer {
-                        TextModifier::PrevOpen => match state[i - 1] {
-                            TextModifier::PrevOpen => {
-                                panic!("previous {{/}} closing tag unhandled");
-                            }
-                            TextModifier::BuiltinOption(ref the_builtin) => match the_builtin {
-                                BuiltinOption::FirstRowIndentation(_) => todo!(),
-                                BuiltinOption::Style(ref the_style) => match the_style {
-                                    TextStyle::Small => match lay_section.format.font_id.clone() {
-                                        FontId { size: _, family } => {
-                                            lay_section.format.font_id = FontId {
-                                                family,
-                                                ..Default::default()
-                                            }
-                                        }
-                                    },
-                                    TextStyle::Body => todo!(),
-                                    TextStyle::Monospace => todo!(),
-                                    TextStyle::Button => todo!(),
-                                    TextStyle::Heading => todo!(),
-                                    TextStyle::Name(_) => todo!(),
-                                },
-                                BuiltinOption::TextColor(_) => todo!(),
-                                BuiltinOption::BgColor(_) => todo!(),
-                                BuiltinOption::FontStyle(_) => todo!(),
-                                BuiltinOption::VerticalAlign(_) => todo!(),
-                                BuiltinOption::Underline(_) => todo!(),
-                                BuiltinOption::Strikethrough(_) => todo!(),
-                                BuiltinOption::StrongText => todo!(),
-                                BuiltinOption::Italics => todo!(),
-                            },
-                            TextModifier::KineticEffect(_) => todo!(),
-                            TextModifier::Unknown(_) => todo!(),
-                        },
+                        TextModifier::PrevOpen => {}
                         TextModifier::BuiltinOption(ref the_builtin) => match the_builtin {
                             BuiltinOption::FirstRowIndentation(_) => todo!(),
                             BuiltinOption::Style(ref the_style) => match the_style {
-                                TextStyle::Small => match lay_section.format.font_id.clone() {
-                                    FontId { size, family } => {
-                                        lay_section.format.font_id = FontId {
-                                            size: size - 2.0,
-                                            family,
-                                        }
+                                TextStyle::Small => {
+                                    let FontId { size, family } =
+                                        lay_section.format.font_id.clone();
+
+                                    lay_section.format.font_id = FontId {
+                                        size: size * 0.5,
+                                        family,
                                     }
-                                },
+                                }
+
                                 TextStyle::Body => todo!(),
                                 TextStyle::Monospace => todo!(),
                                 TextStyle::Button => todo!(),
@@ -520,6 +559,7 @@ pub fn parse_fireworks(input: &str) -> IResult<&str, Vec<KineticLabel>> {
                         }
                     }
                 }
+                out.push(KineticLabel::new(job).kinesis(kinesis));
             }
         }
         //        out.push(job);
@@ -567,17 +607,19 @@ fn parse_text_modifier(input: &str) -> IResult<&str, TextModifier> {
         None => Ok((input, TextModifier::PrevOpen)),
     }
 }
+#[derive(Debug, PartialEq)]
 pub enum Transition {
     Enable(TextModifier),
     Disable(TextModifier),
 }
+#[derive(Debug, PartialEq)]
 pub enum TextModifier {
     PrevOpen,
     BuiltinOption(BuiltinOption),
     KineticEffect(KineticEffect),
     Unknown((String, String)),
 }
-
+#[derive(Debug, PartialEq)]
 pub enum BuiltinOption {
     FirstRowIndentation(f32),
     Style(TextStyle),

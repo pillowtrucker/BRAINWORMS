@@ -1,4 +1,4 @@
-use bl::brainworms_arson::{Gay, KineticEffect, KineticLabel, ShakeLetters};
+use bl::brainworms_arson::{parse_fireworks, Gay, KineticEffect, KineticLabel, ShakeLetters};
 use bl::enum_dispatch::enum_dispatch;
 use bl::log::info;
 use bl::nalgebra::distance;
@@ -175,6 +175,8 @@ pub struct LinacLabScene {
     pub implementation: Option<Implementations>,
     pub test_text: String,
     pub test_lines: String,
+    pub test_markup: Vec<String>,
+    pub parsed_test_markup: Vec<KineticLabel>,
     pub random_line_effects: Vec<KineticEffect>,
     pub keybindings: KeyBindings<MyInputContexts>,
 }
@@ -251,23 +253,21 @@ impl LinacLabScene {
         let mut rng = nanorand::tls_rng();
         let Some((test_text, test_lines)) = (match read_lines("assets/texts/PARADISE_LOST.txt") {
             Ok(test_text) => {
-                let the_body = test_text.fold("".to_owned(), |acc: String, l| {
-                    if let Ok(l) = l {
-                        format!("{}{}\n", acc, l) // this is probably quadratic but fuck rust's string concatenation options wholesale
-                    } else {
-                        acc
-                    }
-                });
-                let good_number = rng.generate_range(0..(the_body.lines().count() - 66));
-                let random_lines = the_body.lines().collect::<Vec<&str>>()
-                    [good_number..good_number + 66]
-                    .to_owned();
-                Some((the_body.to_owned(), random_lines.to_owned().join("\n")))
+                let the_body = test_text.map(|w| w.unwrap()).collect::<Vec<_>>();
+                let good_number = rng.generate_range(0..(the_body.len() - 66));
+                let random_lines = the_body[good_number..good_number + 66].to_owned();
+                Some((the_body.join("\n"), random_lines.join("\n")))
             }
             Err(_) => None,
         }) else {
             panic!("couldnt read text file");
         };
+        if let Ok(markup_lines) = read_lines("lfs_scam/test_markup.txt") {
+            self.test_markup = markup_lines.map(Result::unwrap).collect();
+        }
+        if let Ok((_, parsed)) = parse_fireworks(&self.test_markup.join("\n")) {
+            self.parsed_test_markup = parsed;
+        }
         let mut random_line_effects = vec![];
 
         for _ in test_lines.lines() {
@@ -397,20 +397,24 @@ impl LinacLabScene {
             //
             ui.horizontal(|ui| {
                 ui.add(KineticLabel::new("blabla"));
-                ui.add(KineticLabel::new("same").kinesis(vec![&KineticEffect::default()]));
+                ui.add(KineticLabel::new("same").kinesis(vec![KineticEffect::default()]));
                 ui.add(
-                    KineticLabel::new("line").kinesis(vec![&KineticEffect::ShakeLetters {
+                    KineticLabel::new("line").kinesis(vec![KineticEffect::ShakeLetters {
                         params: ShakeLetters::default(),
                     }]),
                 );
-                ui.add(
-                    KineticLabel::new("still").kinesis(vec![&KineticEffect::Gay {
-                        params: Gay::default(),
-                    }]),
-                );
+                ui.add(KineticLabel::new("still").kinesis(vec![KineticEffect::Gay {
+                    params: Gay::default(),
+                }]));
             });
             for (i, line) in self.test_lines.lines().enumerate() {
-                ui.add(KineticLabel::new(line).kinesis(vec![&self.random_line_effects[i]]));
+                ui.add(KineticLabel::new(line).kinesis(vec![self.random_line_effects[i].clone()]));
+            }
+        });
+
+        egui::Window::new("markup test").show(&egui_ctx, |ui| {
+            for pkl in &self.parsed_test_markup {
+                ui.add(pkl.clone());
             }
         });
     }
