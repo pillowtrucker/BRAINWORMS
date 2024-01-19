@@ -2,7 +2,7 @@
 pub mod the_great_mind_palace_of_theatrical_arts;
 // the reexports suck but this stays until I can focus on wrapping this
 
-pub use brainworms_arson::{self, egui, egui_winit, nanorand};
+pub use brainworms_arson::{self, anyhow, egui, egui_winit, nanorand};
 pub use cfg_if::cfg_if;
 
 use egui::{Color32, TextStyle, Visuals};

@@ -1,8 +1,7 @@
 {first_row_indentation=10.0}first row indentation{/first_row_indentation}
 {small}small style{/small}
+{small}small style with implicit close{/}
 {style=small}also small style{/style}
-{body}normal text{/body}
-{style=body}also normal text{/style}
 {monospace}monospace text{monospace}
 {style=monospace}also monospace text{/style}
 {heading}heading text{/heading}

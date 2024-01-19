@@ -1,18 +1,35 @@
 #![feature(variant_count, exact_size_is_empty, array_chunks, iter_array_chunks)]
 
-use std::{f32::consts::PI, mem::variant_count, sync::Arc};
-
+pub use anyhow;
 pub use egui;
 use egui::{
     egui_assert,
     epaint::{self, ClippedShape, Primitive, TextShape},
-    lerp, pos2, vec2, Align, Color32, Direction, FontSelection, Galley, Pos2, Rect, Response,
-    Sense, Shape, Stroke, Ui, Widget, WidgetInfo, WidgetText, WidgetType,
+    lerp, pos2,
+    text::LayoutJob,
+    vec2, Align, Color32, Direction, FontId, FontSelection, Galley, Pos2, Rect, Response, Sense,
+    Shape, Stroke, TextFormat, TextStyle, Ui, Widget, WidgetInfo, WidgetText, WidgetType,
 };
 pub use egui_wgpu;
 pub use egui_winit;
 pub use nanorand;
 use nanorand::{RandomGen, Rng};
+use nom::{
+    branch::alt,
+    bytes::complete::{tag, take_till, take_till1, take_while1},
+    character::complete::{alpha1, anychar, char},
+    combinator::{eof, opt},
+    multi::{many1, many_till},
+    sequence::separated_pair,
+    IResult, Parser,
+};
+use std::{
+    borrow::BorrowMut,
+    collections::{BTreeSet, HashSet, VecDeque},
+    f32::consts::PI,
+    mem::variant_count,
+    sync::Arc,
+};
 
 pub struct KineticLabel<'a> {
     pub text: WidgetText,
@@ -408,4 +425,169 @@ impl Widget for KineticLabel<'_> {
         ui.painter().add(the_mesh.to_owned());
         response
     }
+}
+pub fn parse_fireworks(input: &str) -> IResult<&str, Vec<KineticLabel>> {
+    let mut state = VecDeque::<TextModifier>::new();
+    let mut out = Vec::new();
+    let mut l_input = input;
+    loop {
+        let mut maybe_eof;
+        (l_input, maybe_eof) = opt(eof).parse(l_input)?;
+        if maybe_eof.is_some() {
+            break;
+        }
+        let mut job = LayoutJob::default();
+
+        let mut kinesis: Vec<KineticEffect> = Vec::new();
+        let maybe_opening_transition: Option<Transition>;
+        let body: &str;
+        (l_input, maybe_opening_transition) = opt(parse_my_tag).parse(l_input)?;
+
+        match maybe_opening_transition {
+            Some(_) => todo!(),
+            None => {
+                (l_input, maybe_eof) = opt(eof).parse(l_input)?;
+                if maybe_eof.is_some() {
+                    break;
+                }
+                (l_input, body) = take_till1(|c| c == '{').parse(l_input)?;
+                job.append(body, 0., TextFormat::default());
+                let lay_section = job.sections.first_mut().unwrap();
+                for (i, mfer) in state.iter().enumerate() {
+                    match mfer {
+                        TextModifier::PrevOpen => match state[i - 1] {
+                            TextModifier::PrevOpen => {
+                                panic!("previous {{/}} closing tag unhandled");
+                            }
+                            TextModifier::BuiltinOption(ref the_builtin) => match the_builtin {
+                                BuiltinOption::FirstRowIndentation(_) => todo!(),
+                                BuiltinOption::Style(ref the_style) => match the_style {
+                                    TextStyle::Small => match lay_section.format.font_id.clone() {
+                                        FontId { size: _, family } => {
+                                            lay_section.format.font_id = FontId {
+                                                family,
+                                                ..Default::default()
+                                            }
+                                        }
+                                    },
+                                    TextStyle::Body => todo!(),
+                                    TextStyle::Monospace => todo!(),
+                                    TextStyle::Button => todo!(),
+                                    TextStyle::Heading => todo!(),
+                                    TextStyle::Name(_) => todo!(),
+                                },
+                                BuiltinOption::TextColor(_) => todo!(),
+                                BuiltinOption::BgColor(_) => todo!(),
+                                BuiltinOption::FontStyle(_) => todo!(),
+                                BuiltinOption::VerticalAlign(_) => todo!(),
+                                BuiltinOption::Underline(_) => todo!(),
+                                BuiltinOption::Strikethrough(_) => todo!(),
+                                BuiltinOption::StrongText => todo!(),
+                                BuiltinOption::Italics => todo!(),
+                            },
+                            TextModifier::KineticEffect(_) => todo!(),
+                            TextModifier::Unknown(_) => todo!(),
+                        },
+                        TextModifier::BuiltinOption(ref the_builtin) => match the_builtin {
+                            BuiltinOption::FirstRowIndentation(_) => todo!(),
+                            BuiltinOption::Style(ref the_style) => match the_style {
+                                TextStyle::Small => match lay_section.format.font_id.clone() {
+                                    FontId { size, family } => {
+                                        lay_section.format.font_id = FontId {
+                                            size: size - 2.0,
+                                            family,
+                                        }
+                                    }
+                                },
+                                TextStyle::Body => todo!(),
+                                TextStyle::Monospace => todo!(),
+                                TextStyle::Button => todo!(),
+                                TextStyle::Heading => todo!(),
+                                TextStyle::Name(_) => todo!(),
+                            },
+                            BuiltinOption::TextColor(_) => todo!(),
+                            BuiltinOption::BgColor(_) => todo!(),
+                            BuiltinOption::FontStyle(_) => todo!(),
+                            BuiltinOption::VerticalAlign(_) => todo!(),
+                            BuiltinOption::Underline(_) => todo!(),
+                            BuiltinOption::Strikethrough(_) => todo!(),
+                            BuiltinOption::StrongText => todo!(),
+                            BuiltinOption::Italics => todo!(),
+                        },
+                        TextModifier::KineticEffect(_) => todo!(),
+                        TextModifier::Unknown((um, uma)) => {
+                            println!("Unknown modifier {um} with args {uma}");
+                        }
+                    }
+                }
+            }
+        }
+        //        out.push(job);
+    }
+    //    let out = KineticLabel::new(job);
+
+    Ok((input, out))
+}
+//pub fn parse_egui_builtin(input: &str) {}
+pub fn parse_my_tag(input: &str) -> IResult<&str, Transition> {
+    let (input, _) = tag("{").parse(input)?;
+    let (input, close_my_tag) = opt(tag("/"))
+        .parse(input)
+        .map(|(input, cmt)| (input, cmt.is_some()))?;
+    let (input, the_modifier) = parse_text_modifier(input)?;
+    let (input, _) = tag("}").parse(input)?;
+    if close_my_tag {
+        Ok((input, Transition::Disable(the_modifier)))
+    } else {
+        Ok((input, Transition::Enable(the_modifier)))
+    }
+}
+fn parse_text_modifier(input: &str) -> IResult<&str, TextModifier> {
+    let (input, full_modifier) = take_till(|c| c == '}').parse(input)?;
+    let (rest, modifier_name) = opt(many1(alt((tag("_"), alpha1))))
+        .parse(full_modifier)
+        .map(|(r, frags)| (r, frags.map(|frags| frags.join(""))))?;
+    match modifier_name {
+        Some(modifier_name) => {
+            let modifier_args = opt(tag("="))
+                .parse(rest)
+                .map(|(modifier_args, _)| modifier_args)?;
+            match modifier_name.as_str() {
+                "small" => Ok((
+                    input,
+                    TextModifier::BuiltinOption(BuiltinOption::Style(TextStyle::Small)),
+                )),
+                blah => Ok((
+                    input,
+                    TextModifier::Unknown((blah.to_owned(), modifier_args.to_owned())),
+                )),
+            }
+        }
+
+        None => Ok((input, TextModifier::PrevOpen)),
+    }
+}
+pub enum Transition {
+    Enable(TextModifier),
+    Disable(TextModifier),
+}
+pub enum TextModifier {
+    PrevOpen,
+    BuiltinOption(BuiltinOption),
+    KineticEffect(KineticEffect),
+    Unknown((String, String)),
+}
+
+pub enum BuiltinOption {
+    FirstRowIndentation(f32),
+    Style(TextStyle),
+    TextColor(Color32),
+    BgColor(Color32),
+    FontStyle(FontId),
+
+    VerticalAlign(Align),
+    Underline(Stroke),
+    Strikethrough(Stroke),
+    StrongText,
+    Italics,
 }

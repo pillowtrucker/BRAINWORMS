@@ -10,3 +10,5 @@ egui = { version = "0.25", git = "https://github.com/emilk/egui.git", branch="ma
 egui-wgpu = {version = "0.25", git = "https://github.com/emilk/egui.git", branch="master", features = ["winit"] }
 egui-winit = {version = "0.25", git = "https://github.com/emilk/egui.git", branch="master", default-features = false, features = ["clipboard", "links", "wayland"] }
 nanorand = { version = "0.7", default-features = false, features = ["wyrand"] }
+nom = "7"
+anyhow = "1"

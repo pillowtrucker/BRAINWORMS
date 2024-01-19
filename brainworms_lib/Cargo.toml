@@ -45,8 +45,8 @@ bytemuck = { version = "1.14.0", features = ["derive"] }
 
 pico-args = "0.5"
 wgpu-profiler = "0.15.0"
-gluon = {git = "https://github.com/gluon-lang/gluon", branch = "master"}
-anyhow = "1"
+#gluon = {git = "https://github.com/gluon-lang/gluon", branch = "master"}
+
 cfg-if = "1"
 indoc = "2"
 profiling = { version = "1", default-features = false }
