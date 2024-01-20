@@ -463,17 +463,17 @@ pub fn parse_fireworks(input: &str) -> IResult<&str, Vec<KineticLabel>> {
                         BuiltinOption::FirstRowIndentation(_) => state.push_back(mfer),
                         BuiltinOption::Style(ref the_style) => match the_style {
                             TextStyle::Small => state.push_back(mfer),
-                            TextStyle::Body => todo!(),
+                            TextStyle::Body => todo!(), // no
                             TextStyle::Monospace => state.push_back(mfer),
-                            TextStyle::Button => todo!(),
+                            TextStyle::Button => todo!(), // no
                             TextStyle::Heading => state.push_back(mfer),
-                            TextStyle::Name(_) => todo!(),
+                            TextStyle::Name(_) => todo!(), // no
                         },
                         BuiltinOption::TextColor(_) => state.push_back(mfer),
-                        BuiltinOption::BgColor(_) => todo!(),
+                        BuiltinOption::BgColor(_) => state.push_back(mfer),
                         BuiltinOption::FontStyle(_) => todo!(),
                         BuiltinOption::VerticalAlign(_) => todo!(),
-                        BuiltinOption::Underline(_) => todo!(),
+                        BuiltinOption::Underline(_) => state.push_back(mfer),
                         BuiltinOption::Strikethrough(_) => todo!(),
                         BuiltinOption::Italics => state.push_back(mfer),
                     },
@@ -546,10 +546,42 @@ pub fn parse_fireworks(input: &str) -> IResult<&str, Vec<KineticLabel>> {
                                 )
                                 .unwrap();
                         }
-                        BuiltinOption::BgColor(_) => todo!(),
+                        BuiltinOption::BgColor(_) => {
+                            state
+                                .remove(
+                                    state
+                                        .iter()
+                                        .position(|tm| {
+                                            matches!(
+                                                tm,
+                                                TextModifier::BuiltinOption(
+                                                    BuiltinOption::BgColor(_)
+                                                )
+                                            )
+                                        })
+                                        .unwrap(),
+                                )
+                                .unwrap();
+                        }
                         BuiltinOption::FontStyle(_) => todo!(),
                         BuiltinOption::VerticalAlign(_) => todo!(),
-                        BuiltinOption::Underline(_) => todo!(),
+                        BuiltinOption::Underline(_) => {
+                            state
+                                .remove(
+                                    state
+                                        .iter()
+                                        .position(|tm| {
+                                            matches!(
+                                                tm,
+                                                TextModifier::BuiltinOption(
+                                                    BuiltinOption::Underline(_)
+                                                )
+                                            )
+                                        })
+                                        .unwrap(),
+                                )
+                                .unwrap();
+                        }
                         BuiltinOption::Strikethrough(_) => todo!(),
                         BuiltinOption::Italics => {
                             state
@@ -625,10 +657,17 @@ pub fn parse_fireworks(input: &str) -> IResult<&str, Vec<KineticLabel>> {
                             BuiltinOption::TextColor(the_color) => {
                                 lay_section.format.color = the_color.to_owned()
                             }
-                            BuiltinOption::BgColor(_) => todo!(),
+                            BuiltinOption::BgColor(the_color) => {
+                                lay_section.format.background = the_color.to_owned()
+                            }
                             BuiltinOption::FontStyle(_) => todo!(),
                             BuiltinOption::VerticalAlign(_) => todo!(),
-                            BuiltinOption::Underline(_) => todo!(),
+                            BuiltinOption::Underline(stroke) => {
+                                lay_section.format.underline = Stroke {
+                                    width: stroke.width,
+                                    color: lay_section.format.color,
+                                }
+                            }
                             BuiltinOption::Strikethrough(_) => todo!(),
                             BuiltinOption::Italics => lay_section.format.italics = true,
                         },
@@ -716,6 +755,27 @@ fn parse_text_modifier(input: &str) -> IResult<&str, TextModifier> {
                 .parse(rest)
                 .map(|(modifier_args, _)| modifier_args)?;
             match modifier_name.as_str() {
+                "ul" => Ok((
+                    input,
+                    TextModifier::BuiltinOption(BuiltinOption::Underline(Stroke {
+                        width: 2.0,
+                        color: Color32::default(),
+                    })),
+                )),
+                "bgcolor" => {
+                    let the_color = match parse_color(modifier_args) {
+                        Ok((_, c)) => c,
+                        Err(e) => {
+                            println!("{:?}", e);
+                            Color32::default()
+                        }
+                    };
+                    println!("adding bg color {:?}", the_color);
+                    Ok((
+                        input,
+                        TextModifier::BuiltinOption(BuiltinOption::BgColor(the_color)),
+                    ))
+                }
                 "color" => {
                     let the_color = match parse_color(modifier_args) {
                         Ok((_, c)) => c,
