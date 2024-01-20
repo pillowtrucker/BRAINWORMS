@@ -265,7 +265,7 @@ impl LinacLabScene {
         if let Ok(markup_lines) = read_lines("lfs_scam/test_markup.txt") {
             self.test_markup = markup_lines.map(Result::unwrap).collect();
         }
-        if let Ok((_, parsed)) = parse_fireworks(&self.test_markup.join("\n")) {
+        if let Ok((_, parsed)) = parse_fireworks(&self.test_markup.join("")) {
             self.parsed_test_markup = parsed;
         }
         let mut random_line_effects = vec![];

@@ -1,14 +1,23 @@
-#![feature(variant_count, exact_size_is_empty, array_chunks, iter_array_chunks)]
+#![feature(
+    variant_count,
+    exact_size_is_empty,
+    array_chunks,
+    iter_array_chunks,
+    const_trait_impl,
+    effects
+)]
 
 pub use anyhow;
+
 pub use egui;
 use egui::{
     egui_assert,
     epaint::{self, ClippedShape, Primitive, TextShape},
     lerp, pos2,
     text::LayoutJob,
-    vec2, Align, Color32, Direction, FontId, FontSelection, Galley, Pos2, Rect, Response, Sense,
-    Shape, Stroke, TextFormat, TextStyle, Ui, Widget, WidgetInfo, WidgetText, WidgetType,
+    vec2, Align, Color32, Direction, FontFamily, FontId, FontSelection, Galley, Pos2, Rect,
+    Response, Sense, Shape, Stroke, TextFormat, TextStyle, Ui, Widget, WidgetInfo, WidgetText,
+    WidgetType,
 };
 pub use egui_wgpu;
 pub use egui_winit;
@@ -17,12 +26,20 @@ use nanorand::{RandomGen, Rng};
 use nom::{
     branch::alt,
     bytes::complete::{tag, take_till, take_till1},
-    character::complete::alpha1,
-    combinator::{eof, opt},
-    multi::many1,
+    character::complete::{alpha1, anychar},
+    combinator::{eof, map_opt, opt},
+    error::{Error, ParseError},
+    multi::{many1, separated_list1},
+    number::{self, complete::be_u8},
+    sequence::preceded,
     IResult, Parser,
 };
-use std::{collections::VecDeque, f32::consts::PI, mem::variant_count, sync::Arc};
+use std::{
+    collections::{HashMap, VecDeque},
+    f32::consts::PI,
+    mem::variant_count,
+    sync::Arc,
+};
 #[derive(Clone)]
 pub struct KineticLabel {
     pub text: WidgetText,
@@ -344,7 +361,7 @@ impl Widget for KineticLabel {
             underline,
             angle: 0.0,
             fallback_color: response_color,
-            override_text_color: Some(response_color),
+            override_text_color: None, //            override_text_color: Some(response_color),
         };
         let clipped_shape: ClippedShape = ClippedShape {
             clip_rect: Rect::EVERYTHING,
@@ -443,25 +460,25 @@ pub fn parse_fireworks(input: &str) -> IResult<&str, Vec<KineticLabel>> {
                         println!("Nonsense {{}} tag somehow made it into processing")
                     }
                     TextModifier::BuiltinOption(ref the_builtin) => match the_builtin {
-                        BuiltinOption::FirstRowIndentation(_) => todo!(),
+                        BuiltinOption::FirstRowIndentation(_) => state.push_back(mfer),
                         BuiltinOption::Style(ref the_style) => match the_style {
                             TextStyle::Small => state.push_back(mfer),
                             TextStyle::Body => todo!(),
-                            TextStyle::Monospace => todo!(),
+                            TextStyle::Monospace => state.push_back(mfer),
                             TextStyle::Button => todo!(),
-                            TextStyle::Heading => todo!(),
+                            TextStyle::Heading => state.push_back(mfer),
                             TextStyle::Name(_) => todo!(),
                         },
-                        BuiltinOption::TextColor(_) => todo!(),
+                        BuiltinOption::TextColor(_) => state.push_back(mfer),
                         BuiltinOption::BgColor(_) => todo!(),
                         BuiltinOption::FontStyle(_) => todo!(),
                         BuiltinOption::VerticalAlign(_) => todo!(),
                         BuiltinOption::Underline(_) => todo!(),
                         BuiltinOption::Strikethrough(_) => todo!(),
-                        BuiltinOption::StrongText => todo!(),
-                        BuiltinOption::Italics => todo!(),
+                        BuiltinOption::Italics => state.push_back(mfer),
                     },
-                    TextModifier::KineticEffect(_) => todo!(),
+                    TextModifier::KineticEffect(_) => state.push_back(mfer),
+
                     TextModifier::Unknown(_) => {
                         println!("Adding unknown {:?}", mfer);
                         state.push_back(mfer);
@@ -475,29 +492,86 @@ pub fn parse_fireworks(input: &str) -> IResult<&str, Vec<KineticLabel>> {
                         );
                     }
                     TextModifier::BuiltinOption(ref the_builtin) => match the_builtin {
-                        BuiltinOption::FirstRowIndentation(_) => todo!(),
+                        BuiltinOption::FirstRowIndentation(_) => {
+                            state
+                                .remove(
+                                    state
+                                        .iter()
+                                        .position(|tm| {
+                                            matches!(
+                                                tm,
+                                                TextModifier::BuiltinOption(
+                                                    BuiltinOption::FirstRowIndentation(_),
+                                                )
+                                            )
+                                        })
+                                        .unwrap(),
+                                )
+                                .unwrap();
+                        }
                         BuiltinOption::Style(ref the_style) => match the_style {
                             TextStyle::Small => {
                                 state
                                     .remove(state.iter().position(|tm| *tm == mfer).unwrap())
                                     .unwrap();
                             }
-                            TextStyle::Body => todo!(),
-                            TextStyle::Monospace => todo!(),
-                            TextStyle::Button => todo!(),
-                            TextStyle::Heading => todo!(),
-                            TextStyle::Name(_) => todo!(),
+                            TextStyle::Body => todo!(), // annoying to implement and easy to work around
+                            TextStyle::Monospace => {
+                                state
+                                    .remove(state.iter().position(|tm| *tm == mfer).unwrap())
+                                    .unwrap();
+                            }
+                            TextStyle::Button => todo!(), // don't care
+                            TextStyle::Heading => {
+                                state
+                                    .remove(state.iter().position(|tm| *tm == mfer).unwrap())
+                                    .unwrap();
+                            }
+                            TextStyle::Name(_) => todo!(), // maybe later
                         },
-                        BuiltinOption::TextColor(_) => todo!(),
+                        BuiltinOption::TextColor(_) => {
+                            state
+                                .remove(
+                                    state
+                                        .iter()
+                                        .position(|tm| {
+                                            matches!(
+                                                tm,
+                                                TextModifier::BuiltinOption(
+                                                    BuiltinOption::TextColor(_)
+                                                )
+                                            )
+                                        })
+                                        .unwrap(),
+                                )
+                                .unwrap();
+                        }
                         BuiltinOption::BgColor(_) => todo!(),
                         BuiltinOption::FontStyle(_) => todo!(),
                         BuiltinOption::VerticalAlign(_) => todo!(),
                         BuiltinOption::Underline(_) => todo!(),
                         BuiltinOption::Strikethrough(_) => todo!(),
-                        BuiltinOption::StrongText => todo!(),
-                        BuiltinOption::Italics => todo!(),
+                        BuiltinOption::Italics => {
+                            state
+                                .remove(state.iter().position(|tm| *tm == mfer).unwrap())
+                                .unwrap();
+                        }
                     },
-                    TextModifier::KineticEffect(_) => todo!(),
+                    // this can probably be simplified to just compare the modifiers
+                    TextModifier::KineticEffect(the_effect) => {
+                        state.remove(
+                            state
+                                .iter()
+                                .position(|tm| {
+                                    if let TextModifier::KineticEffect(an_effect) = tm {
+                                        *an_effect == the_effect
+                                    } else {
+                                        false
+                                    }
+                                })
+                                .unwrap(),
+                        );
+                    }
                     TextModifier::Unknown((name, _)) => {
                         state.remove(
                             state
@@ -522,11 +596,13 @@ pub fn parse_fireworks(input: &str) -> IResult<&str, Vec<KineticLabel>> {
                 (l_input, body) = take_till1(|c| c == '{').parse(l_input)?;
                 job.append(body, 0., TextFormat::default());
                 let lay_section = job.sections.first_mut().unwrap();
-                for (i, mfer) in state.iter().enumerate() {
+                for mfer in state.iter() {
                     match mfer {
                         TextModifier::PrevOpen => {}
                         TextModifier::BuiltinOption(ref the_builtin) => match the_builtin {
-                            BuiltinOption::FirstRowIndentation(_) => todo!(),
+                            BuiltinOption::FirstRowIndentation(length) => {
+                                lay_section.leading_space = *length
+                            }
                             BuiltinOption::Style(ref the_style) => match the_style {
                                 TextStyle::Small => {
                                     let FontId { size, family } =
@@ -538,22 +614,25 @@ pub fn parse_fireworks(input: &str) -> IResult<&str, Vec<KineticLabel>> {
                                     }
                                 }
 
-                                TextStyle::Body => todo!(),
-                                TextStyle::Monospace => todo!(),
-                                TextStyle::Button => todo!(),
-                                TextStyle::Heading => todo!(),
-                                TextStyle::Name(_) => todo!(),
+                                TextStyle::Body => todo!(), // not implementing this
+                                TextStyle::Monospace => {
+                                    lay_section.format.font_id.family = FontFamily::Monospace
+                                }
+                                TextStyle::Button => todo!(), // don't care
+                                TextStyle::Heading => lay_section.format.font_id.size *= 2.0,
+                                TextStyle::Name(_) => todo!(), // don't care for now, maybe later
                             },
-                            BuiltinOption::TextColor(_) => todo!(),
+                            BuiltinOption::TextColor(the_color) => {
+                                lay_section.format.color = the_color.to_owned()
+                            }
                             BuiltinOption::BgColor(_) => todo!(),
                             BuiltinOption::FontStyle(_) => todo!(),
                             BuiltinOption::VerticalAlign(_) => todo!(),
                             BuiltinOption::Underline(_) => todo!(),
                             BuiltinOption::Strikethrough(_) => todo!(),
-                            BuiltinOption::StrongText => todo!(),
-                            BuiltinOption::Italics => todo!(),
+                            BuiltinOption::Italics => lay_section.format.italics = true,
                         },
-                        TextModifier::KineticEffect(_) => todo!(),
+                        TextModifier::KineticEffect(the_effect) => kinesis.push(the_effect.clone()),
                         TextModifier::Unknown((um, uma)) => {
                             println!("Unknown modifier {um} with args {uma}");
                         }
@@ -582,6 +661,50 @@ pub fn parse_my_tag(input: &str) -> IResult<&str, Transition> {
         Ok((input, Transition::Enable(the_modifier)))
     }
 }
+fn parse_color(input: &str) -> IResult<&str, Color32> {
+    const KNOWN_COLORS: [(&str, Color32); 20] = [
+        ("TRANSPARENT", Color32::TRANSPARENT),
+        ("BLACK", Color32::BLACK),
+        ("DARK_GRAY", Color32::DARK_GRAY),
+        ("GRAY", Color32::GRAY),
+        ("LIGHT_GRAY", Color32::LIGHT_GRAY),
+        ("WHITE", Color32::WHITE),
+        ("BROWN", Color32::BROWN),
+        ("DARK_RED", Color32::DARK_RED),
+        ("RED", Color32::RED),
+        ("LIGHT_RED", Color32::LIGHT_RED),
+        ("YELLOW", Color32::YELLOW),
+        ("LIGHT_YELLOW", Color32::LIGHT_YELLOW),
+        ("KHAKI", Color32::KHAKI),
+        ("DARK_GREEN", Color32::DARK_GREEN),
+        ("GREEN", Color32::GREEN),
+        ("LIGHT_GREEN", Color32::LIGHT_GREEN),
+        ("DARK_BLUE", Color32::DARK_BLUE),
+        ("BLUE", Color32::BLUE),
+        ("LIGHT_BLUE", Color32::LIGHT_BLUE),
+        ("GOLD", Color32::GOLD),
+    ];
+    let known_colors = HashMap::from(KNOWN_COLORS);
+    let ret = map_opt(
+        preceded(
+            tag("rgb"),
+            nom::sequence::delimited(
+                tag::<&str, &str, Error<_>>("("),
+                separated_list1(tag(","), nom::character::complete::u8),
+                tag(")"),
+            ),
+        ),
+        |kulerz| Some(Color32::from_rgb(kulerz[0], kulerz[1], kulerz[2])),
+    )
+    .parse(input)
+    .or(map_opt(many1(anychar), |wc: Vec<char>| {
+        known_colors
+            .get(wc.iter().collect::<String>().to_uppercase().as_str())
+            .map(|v| v.to_owned())
+    })
+    .parse(input));
+    ret
+}
 fn parse_text_modifier(input: &str) -> IResult<&str, TextModifier> {
     let (input, full_modifier) = take_till(|c| c == '}').parse(input)?;
     let (rest, modifier_name) = opt(many1(alt((tag("_"), alpha1))))
@@ -593,6 +716,52 @@ fn parse_text_modifier(input: &str) -> IResult<&str, TextModifier> {
                 .parse(rest)
                 .map(|(modifier_args, _)| modifier_args)?;
             match modifier_name.as_str() {
+                "color" => {
+                    let the_color = match parse_color(modifier_args) {
+                        Ok((_, c)) => c,
+                        Err(e) => {
+                            println!("{:?}", e);
+                            Color32::default()
+                        }
+                    };
+                    println!("adding text color {:?}", the_color);
+                    Ok((
+                        input,
+                        TextModifier::BuiltinOption(BuiltinOption::TextColor(the_color)),
+                    ))
+                }
+                "h" => Ok((
+                    input,
+                    TextModifier::BuiltinOption(BuiltinOption::Style(TextStyle::Heading)),
+                )),
+                "mono" => Ok((
+                    input,
+                    TextModifier::BuiltinOption(BuiltinOption::Style(TextStyle::Monospace)),
+                )),
+                "p" => Ok((
+                    input,
+                    TextModifier::BuiltinOption(BuiltinOption::FirstRowIndentation(10.0)),
+                )),
+                "gay" => Ok((
+                    input,
+                    TextModifier::KineticEffect(KineticEffect::Gay {
+                        params: Gay::default(),
+                    }),
+                )),
+                "shakey" => Ok((
+                    input,
+                    TextModifier::KineticEffect(KineticEffect::ShakeLetters {
+                        params: ShakeLetters::default(),
+                    }),
+                )),
+                "wavy" => Ok((
+                    input,
+                    TextModifier::KineticEffect(KineticEffect::SineWavify {
+                        params: SineWavify::default(),
+                    }),
+                )),
+
+                "i" => Ok((input, TextModifier::BuiltinOption(BuiltinOption::Italics))),
                 "small" => Ok((
                     input,
                     TextModifier::BuiltinOption(BuiltinOption::Style(TextStyle::Small)),
@@ -612,8 +781,9 @@ pub enum Transition {
     Enable(TextModifier),
     Disable(TextModifier),
 }
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Default)]
 pub enum TextModifier {
+    #[default]
     PrevOpen,
     BuiltinOption(BuiltinOption),
     KineticEffect(KineticEffect),
@@ -630,6 +800,6 @@ pub enum BuiltinOption {
     VerticalAlign(Align),
     Underline(Stroke),
     Strikethrough(Stroke),
-    StrongText,
+    //    StrongText, this isn't really implemented in egui
     Italics,
 }
