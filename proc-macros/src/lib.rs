@@ -1,6 +1,7 @@
 use proc_macro::TokenStream;
 
-use quote::quote;
+use proc_macro2::{Ident, Span};
+use quote::{quote, ToTokens};
 use syn::{parse_macro_input, DeriveInput};
 
 /// Example of [function-like procedural macro][1].
@@ -43,13 +44,13 @@ pub fn derive_scenic_partial(input: TokenStream) -> TokenStream {
                 implementation
             }
             */
-            fn raw_definition(&mut self) -> &mut Definitions {
+            fn raw_definition(&mut self) -> &mut brainworms_lib::theater::play::Definitions {
                 &mut self.definition
             }
-            fn raw_implementation(&mut self) -> &mut Option<Implementations> {
+            fn raw_implementation(&mut self) -> &mut Option<brainworms_lib::theater::play::Implementations> {
                 &mut self.implementation
             }
-            fn scene_uuid(&self) -> Uuid {
+            fn scene_uuid(&self) -> brainworms_lib::uuid::Uuid {
                 self.uuid
             }
             fn scene_name(&self) -> &str {
@@ -59,11 +60,11 @@ pub fn derive_scenic_partial(input: TokenStream) -> TokenStream {
                 self.define()
             }
             fn implement_scene(&mut self,
-                               settings: &GameProgrammeSettings,
-                               event_loop: &EventLoop<MyEvent>,
-                               renderer: Arc<Renderer>,
-                               routines: Arc<DefaultRoutines>,
-                               rts: &Runtime,) {
+                               settings: &brainworms_lib::theater::basement::cla::GameProgrammeSettings,
+                               event_loop: &brainworms_lib::winit::event_loop::EventLoop<brainworms_lib::MyEvent>,
+                               renderer: Arc<brainworms_lib::rend3::Renderer>,
+                               routines: Arc<brainworms_lib::theater::play::backstage::plumbing::DefaultRoutines>,
+                               rts: &brainworms_lib::tokio::runtime::Runtime,) {
                 self.implement(
                     settings,
                     event_loop,
@@ -71,7 +72,7 @@ pub fn derive_scenic_partial(input: TokenStream) -> TokenStream {
                     routines,
                     rts)
             }
-            fn scene_starting_cam_info(&self) -> CamInfo {
+            fn scene_starting_cam_info(&self) -> brainworms_lib::theater::play::scene::CamInfo {
                 self.starting_cam_info()
             }
 
@@ -86,7 +87,7 @@ pub fn derive_choral_partial(input: TokenStream) -> TokenStream {
     let ident = input.ident;
     let tokens = quote! {
         impl Choral for #ident {
-            fn implement_chorus_for_choral(&self, egui_ctx: Context) {
+            fn implement_chorus_for_choral(&self, egui_ctx: brainworms_lib::egui::Context) {
                 self.implement_chorus(egui_ctx);
             }
 
@@ -95,102 +96,135 @@ pub fn derive_choral_partial(input: TokenStream) -> TokenStream {
 
     tokens.into()
 }
-/*
+
 // enum_dispatch doesn't work across crates..
-#[proc_macro_derive(EnumPlayable)]
+#[proc_macro_derive(Playable, attributes(input_context_enum))]
 pub fn derive_playable_for_enum(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
-    let enum_ident = input.ident;
+
+    let enum_ident = &input.ident;
     //    let mut tokens: TokenStream;
-    match input.data {
-        syn::Data::Struct(_) => panic!("enums only"),
-        syn::Data::Enum(enum_data) => {
-            for variant_ident in enum_data.variants.iter() {
-                let tokens = quote! {
-                    impl Playable for #variant_ident {
-                        fn playable_uuid(&self) -> Uuid {
-                            self.playable_uuid()
-                        }
-
-                        fn playable_name(&self) -> &str {
-                            self.playable_name()
-                        }
-
-                        fn starting_cam_info(&self) -> CamInfo {
-                            self.scene_starting_cam_info()
-                        }
-
-                        fn implement_playable(
-                            &mut self,
-                            settings: &GameProgrammeSettings,
-                            event_loop: &EventLoop<MyEvent>,
-                            renderer: Arc<Renderer>,
-                            routines: Arc<DefaultRoutines>,
-                            rts: &Runtime,
-                        ) {
-                            self.implement_scene(settings, event_loop, renderer, routines, rts)
-                        }
-
-                        fn define_playable(&mut self) {
-                            self.define_scene()
-                        }
-                        fn implement_chorus_for_playable(&self, egui_ctx: Context) {
-                            self.implement_chorus_for_choral(egui_ctx);
-                        }
-
-                        fn playable_definition(&mut self) -> &mut Definitions {
-                            self.raw_definition()
-                        }
-
-                        fn playable_implementation(&mut self) -> &mut Option<Implementations> {
-                            self.raw_implementation()
-                        }
-
-                        fn handle_input_for_playable(
-                            &mut self,
-                            settings: &GameProgrammeSettings,
-                            state: &mut GameProgrammeState<InputContextEnum>,
-                            window: &Arc<Window>,
-                        ) {
-                            self.handle_input_for_context(settings, state, window)
-                        }
-                    }
-
-                };
-            }
+    let out = match input.data {
+        syn::Data::Struct(_) => {
+            panic!("enums only");
         }
-        syn::Data::Union(_) => panic!("enums only"),
-    }
+        syn::Data::Enum(enum_data) => {
+            let this_language_is_for_tards: &Ident = &enum_data
+                .variants
+                .iter()
+                .find_map(|a| {
+                    a.attrs
+                        .iter()
+                        .find(|aa| {
+                            aa.path()
+                                .get_ident()
+                                .is_some_and(|id| id == "input_context_enum")
+                        })
+                        .map(|aaa| aaa.parse_args().unwrap())
+                })
+                .expect("input_context_enum attribute required");
 
-    tokens.into()
-}
-*/
-/*
-#[proc_macro_derive(HandlesInputContext)]
-pub fn derive_input_context_partial(input: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(input as DeriveInput);
-    let ident = input.ident;
+            let variants = &enum_data.variants;
+            let imp_fn = |fn_name, fn_args: &'static str| {
+                variants.iter().map(move |v| {
+                    let name = &v.ident;
+                    let fn_name = Ident::new(fn_name, Span::call_site());
+                    let fn_args = if fn_args.is_empty() {
+                        vec![]
+                    } else {
+                        fn_args
+                            .split(',')
+                            .map(|a| Ident::new(a, Span::call_site()))
+                            .collect()
+                    };
+                    quote! {
+                        #enum_ident :: #name(inner) => inner.#fn_name(#(#fn_args),*)
+                    }
+                })
+            };
+            let imp_pl_uuid = imp_fn("playable_uuid", "");
+            let imp_pl_name = imp_fn("playable_name", "");
+            let imp_pl_start_cam = imp_fn("starting_cam_info", "");
+            let def_pl = imp_fn("define_playable", "");
+            let imp_pl = imp_fn(
+                "implement_playable",
+                "settings,event_loop,renderer,routines,rts",
+            );
+            let imp_chr = imp_fn("implement_chorus_for_playable", "egui_ctx");
+            let pl_def = imp_fn("playable_definition", "");
+            let pl_imp = imp_fn("playable_implementation", "");
+            let pl_inp = imp_fn("handle_input_for_playable", "settings,state,window");
+            quote! {
+            impl Playable<#this_language_is_for_tards> for #enum_ident {
+                fn playable_uuid(&self) -> Uuid {
+                    match self {
+                        #(#imp_pl_uuid),*
+                    }
+                }
+                fn playable_name(&self) -> &str {
+                    match self {
+                        #(#imp_pl_name),*
+                    }
+                }
+                fn starting_cam_info(&self) -> CamInfo {
+                    match self {
+                        #(#imp_pl_start_cam),*
+                    }
+                }
+                fn implement_playable(
+                    &mut self,
+                    settings: &GameProgrammeSettings,
+                    event_loop: &EventLoop<MyEvent>,
+                    renderer: Arc<Renderer>,
+                    routines: Arc<DefaultRoutines>,
+                    rts: &Runtime,
+                ) {
+                    match self {
+                        #(#imp_pl),*
+                    }
+                }
+                fn define_playable(&mut self) {
+                    match self {
+                        #(#def_pl),*
+                    }
+                }
+                fn implement_chorus_for_playable(&self, egui_ctx: Context) {
+                    match self {
+                        #(#imp_chr),*
+                    }
+                }
+                fn playable_definition(&mut self) -> &mut Definitions {
+                    match self {
+                        #(#pl_def),*
+                    }
+                }
+                fn playable_implementation(&mut self) -> &mut Option<Implementations> {
+                    match self {
+                        #(#pl_imp),*
+                    }
+                }
 
-    let tokens = quote! {
-        impl HandlesInputContexts for #ident {
-            fn handle_input_for_context (&mut self,
-                                                         settings: &GameProgrammeSettings,
-                                                         state: &mut GameProgrammeState,
-                                                         window: &Arc<Window>,
-            ) {
-
-                self.handle_input(
-                    settings,
-                    state,
-                    window);
-            }
-
+                fn handle_input_for_playable(
+                    &mut self,
+                    settings: &GameProgrammeSettings,
+                    state: &mut GameProgrammeState<MyInputContexts>,
+                    window: &Arc<Window>,
+                ) {
+                    match self {
+                        #(#pl_inp),*
+                    }
+                }
+            }}
+        }
+        syn::Data::Union(_) => {
+            panic!("enums only");
         }
     };
-
-    tokens.into()
+    //    println!("{}", out);
+    out.into()
 }
 
+/*
 // this is not worth the stupid RA errors
 #[proc_macro_attribute]
 pub fn add_common_playable_fields(args: TokenStream, input: TokenStream) -> TokenStream {

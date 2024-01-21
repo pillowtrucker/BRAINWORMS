@@ -64,6 +64,7 @@ impl Default for Definitions {
         Definitions::SceneDefinition(SceneDefinition::default())
     }
 }
+
 #[allow(clippy::large_enum_variant)]
 #[derive(Default)]
 pub enum Implementations {
