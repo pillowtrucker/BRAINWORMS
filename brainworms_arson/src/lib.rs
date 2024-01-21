@@ -472,9 +472,9 @@ pub fn parse_fireworks(input: &str) -> IResult<&str, Vec<KineticLabel>> {
                         BuiltinOption::TextColor(_) => state.push_back(mfer),
                         BuiltinOption::BgColor(_) => state.push_back(mfer),
                         BuiltinOption::FontStyle(_) => todo!(),
-                        BuiltinOption::VerticalAlign(_) => todo!(),
+                        BuiltinOption::VerticalAlign(_) => state.push_back(mfer),
                         BuiltinOption::Underline(_) => state.push_back(mfer),
-                        BuiltinOption::Strikethrough(_) => todo!(),
+                        BuiltinOption::Strikethrough(_) => state.push_back(mfer),
                         BuiltinOption::Italics => state.push_back(mfer),
                     },
                     TextModifier::KineticEffect(_) => state.push_back(mfer),
@@ -564,7 +564,23 @@ pub fn parse_fireworks(input: &str) -> IResult<&str, Vec<KineticLabel>> {
                                 .unwrap();
                         }
                         BuiltinOption::FontStyle(_) => todo!(),
-                        BuiltinOption::VerticalAlign(_) => todo!(),
+                        BuiltinOption::VerticalAlign(_) => {
+                            state
+                                .remove(
+                                    state
+                                        .iter()
+                                        .position(|tm| {
+                                            matches!(
+                                                tm,
+                                                TextModifier::BuiltinOption(
+                                                    BuiltinOption::VerticalAlign(_)
+                                                )
+                                            )
+                                        })
+                                        .unwrap(),
+                                )
+                                .unwrap();
+                        }
                         BuiltinOption::Underline(_) => {
                             state
                                 .remove(
@@ -582,7 +598,23 @@ pub fn parse_fireworks(input: &str) -> IResult<&str, Vec<KineticLabel>> {
                                 )
                                 .unwrap();
                         }
-                        BuiltinOption::Strikethrough(_) => todo!(),
+                        BuiltinOption::Strikethrough(_) => {
+                            state
+                                .remove(
+                                    state
+                                        .iter()
+                                        .position(|tm| {
+                                            matches!(
+                                                tm,
+                                                TextModifier::BuiltinOption(
+                                                    BuiltinOption::Strikethrough(_)
+                                                )
+                                            )
+                                        })
+                                        .unwrap(),
+                                )
+                                .unwrap();
+                        }
                         BuiltinOption::Italics => {
                             state
                                 .remove(state.iter().position(|tm| *tm == mfer).unwrap())
@@ -661,14 +693,21 @@ pub fn parse_fireworks(input: &str) -> IResult<&str, Vec<KineticLabel>> {
                                 lay_section.format.background = the_color.to_owned()
                             }
                             BuiltinOption::FontStyle(_) => todo!(),
-                            BuiltinOption::VerticalAlign(_) => todo!(),
+                            BuiltinOption::VerticalAlign(the_align) => {
+                                lay_section.format.valign = the_align.to_owned()
+                            }
                             BuiltinOption::Underline(stroke) => {
                                 lay_section.format.underline = Stroke {
                                     width: stroke.width,
                                     color: lay_section.format.color,
                                 }
                             }
-                            BuiltinOption::Strikethrough(_) => todo!(),
+                            BuiltinOption::Strikethrough(stroke) => {
+                                lay_section.format.strikethrough = Stroke {
+                                    width: stroke.width,
+                                    color: lay_section.format.color,
+                                }
+                            }
                             BuiltinOption::Italics => lay_section.format.italics = true,
                         },
                         TextModifier::KineticEffect(the_effect) => kinesis.push(the_effect.clone()),
@@ -755,6 +794,17 @@ fn parse_text_modifier(input: &str) -> IResult<&str, TextModifier> {
                 .parse(rest)
                 .map(|(modifier_args, _)| modifier_args)?;
             match modifier_name.as_str() {
+                "strikethrough" => Ok((
+                    input,
+                    TextModifier::BuiltinOption(BuiltinOption::Strikethrough(Stroke {
+                        width: 1.0,
+                        color: Color32::default(),
+                    })),
+                )),
+                "raised" => Ok((
+                    input,
+                    TextModifier::BuiltinOption(BuiltinOption::VerticalAlign(Align::TOP)),
+                )),
                 "ul" => Ok((
                     input,
                     TextModifier::BuiltinOption(BuiltinOption::Underline(Stroke {
