@@ -18,4 +18,4 @@
 
 default text with no modifiers
 
-{unknown}unknown tags get ignored but must still be terminated{/unknown}
+{unknown}unknown tags get ignored but should still be terminated unless you want implicit close to act weird{/unknown}

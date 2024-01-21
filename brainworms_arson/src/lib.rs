@@ -15,9 +15,8 @@ use egui::{
     epaint::{self, ClippedShape, Primitive, TextShape},
     lerp, pos2,
     text::LayoutJob,
-    vec2, Align, Color32, Direction, FontFamily, FontId, FontSelection, Galley, Pos2, Rect,
-    Response, Sense, Shape, Stroke, TextFormat, TextStyle, Ui, Widget, WidgetInfo, WidgetText,
-    WidgetType,
+    vec2, Align, Color32, Direction, FontFamily, FontSelection, Galley, Pos2, Rect, Response,
+    Sense, Shape, Stroke, TextFormat, TextStyle, Ui, Widget, WidgetInfo, WidgetText, WidgetType,
 };
 pub use egui_wgpu;
 pub use egui_winit;
@@ -28,9 +27,8 @@ use nom::{
     bytes::complete::{tag, take_till, take_till1},
     character::complete::{alpha1, anychar},
     combinator::{eof, map_opt, opt},
-    error::{Error, ParseError},
+    error::Error,
     multi::{many1, separated_list1},
-    number::{self, complete::be_u8},
     sequence::preceded,
     IResult, Parser,
 };
@@ -436,6 +434,7 @@ impl Widget for KineticLabel {
         response
     }
 }
+
 pub fn parse_fireworks(input: &str) -> IResult<&str, Vec<KineticLabel>> {
     let mut state = VecDeque::<TextModifier>::new();
     let mut out = Vec::new();
@@ -460,22 +459,19 @@ pub fn parse_fireworks(input: &str) -> IResult<&str, Vec<KineticLabel>> {
                         println!("Nonsense {{}} tag somehow made it into processing")
                     }
                     TextModifier::BuiltinOption(ref the_builtin) => match the_builtin {
-                        BuiltinOption::FirstRowIndentation(_) => state.push_back(mfer),
                         BuiltinOption::Style(ref the_style) => match the_style {
-                            TextStyle::Small => state.push_back(mfer),
-                            TextStyle::Body => todo!(), // no
-                            TextStyle::Monospace => state.push_back(mfer),
-                            TextStyle::Button => todo!(), // no
-                            TextStyle::Heading => state.push_back(mfer),
-                            TextStyle::Name(_) => todo!(), // no
+                            TextStyle::Small | TextStyle::Monospace | TextStyle::Heading => {
+                                state.push_back(mfer)
+                            }
+                            ignored => println!("ignoring {}", ignored),
                         },
-                        BuiltinOption::TextColor(_) => state.push_back(mfer),
-                        BuiltinOption::BgColor(_) => state.push_back(mfer),
-                        BuiltinOption::FontStyle(_) => todo!(),
-                        BuiltinOption::VerticalAlign(_) => state.push_back(mfer),
-                        BuiltinOption::Underline(_) => state.push_back(mfer),
-                        BuiltinOption::Strikethrough(_) => state.push_back(mfer),
-                        BuiltinOption::Italics => state.push_back(mfer),
+                        BuiltinOption::FirstRowIndentation(_)
+                        | BuiltinOption::TextColor(_)
+                        | BuiltinOption::BgColor(_)
+                        | BuiltinOption::VerticalAlign(_)
+                        | BuiltinOption::Underline(_)
+                        | BuiltinOption::Strikethrough(_)
+                        | BuiltinOption::Italics => state.push_back(mfer),
                     },
                     TextModifier::KineticEffect(_) => state.push_back(mfer),
 
@@ -510,24 +506,12 @@ pub fn parse_fireworks(input: &str) -> IResult<&str, Vec<KineticLabel>> {
                                 .unwrap();
                         }
                         BuiltinOption::Style(ref the_style) => match the_style {
-                            TextStyle::Small => {
+                            TextStyle::Small | TextStyle::Monospace | TextStyle::Heading => {
                                 state
                                     .remove(state.iter().position(|tm| *tm == mfer).unwrap())
                                     .unwrap();
                             }
-                            TextStyle::Body => todo!(), // annoying to implement and easy to work around
-                            TextStyle::Monospace => {
-                                state
-                                    .remove(state.iter().position(|tm| *tm == mfer).unwrap())
-                                    .unwrap();
-                            }
-                            TextStyle::Button => todo!(), // don't care
-                            TextStyle::Heading => {
-                                state
-                                    .remove(state.iter().position(|tm| *tm == mfer).unwrap())
-                                    .unwrap();
-                            }
-                            TextStyle::Name(_) => todo!(), // maybe later
+                            ignored => println!("ignored {}", ignored),
                         },
                         BuiltinOption::TextColor(_) => {
                             state
@@ -563,7 +547,6 @@ pub fn parse_fireworks(input: &str) -> IResult<&str, Vec<KineticLabel>> {
                                 )
                                 .unwrap();
                         }
-                        BuiltinOption::FontStyle(_) => todo!(),
                         BuiltinOption::VerticalAlign(_) => {
                             state
                                 .remove(
@@ -668,23 +651,14 @@ pub fn parse_fireworks(input: &str) -> IResult<&str, Vec<KineticLabel>> {
                                 lay_section.leading_space = *length
                             }
                             BuiltinOption::Style(ref the_style) => match the_style {
-                                TextStyle::Small => {
-                                    let FontId { size, family } =
-                                        lay_section.format.font_id.clone();
+                                TextStyle::Small => lay_section.format.font_id.size *= 0.5,
 
-                                    lay_section.format.font_id = FontId {
-                                        size: size * 0.5,
-                                        family,
-                                    }
-                                }
-
-                                TextStyle::Body => todo!(), // not implementing this
                                 TextStyle::Monospace => {
                                     lay_section.format.font_id.family = FontFamily::Monospace
                                 }
-                                TextStyle::Button => todo!(), // don't care
+
                                 TextStyle::Heading => lay_section.format.font_id.size *= 2.0,
-                                TextStyle::Name(_) => todo!(), // don't care for now, maybe later
+                                ignored => println!("ignored {}", ignored),
                             },
                             BuiltinOption::TextColor(the_color) => {
                                 lay_section.format.color = the_color.to_owned()
@@ -692,7 +666,6 @@ pub fn parse_fireworks(input: &str) -> IResult<&str, Vec<KineticLabel>> {
                             BuiltinOption::BgColor(the_color) => {
                                 lay_section.format.background = the_color.to_owned()
                             }
-                            BuiltinOption::FontStyle(_) => todo!(),
                             BuiltinOption::VerticalAlign(the_align) => {
                                 lay_section.format.valign = the_align.to_owned()
                             }
@@ -719,9 +692,7 @@ pub fn parse_fireworks(input: &str) -> IResult<&str, Vec<KineticLabel>> {
                 out.push(KineticLabel::new(job).kinesis(kinesis));
             }
         }
-        //        out.push(job);
     }
-    //    let out = KineticLabel::new(job);
 
     Ok((input, out))
 }
@@ -905,11 +876,8 @@ pub enum BuiltinOption {
     Style(TextStyle),
     TextColor(Color32),
     BgColor(Color32),
-    FontStyle(FontId),
-
     VerticalAlign(Align),
     Underline(Stroke),
     Strikethrough(Stroke),
-    //    StrongText, this isn't really implemented in egui
     Italics,
 }
