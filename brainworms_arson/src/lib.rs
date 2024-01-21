@@ -1,27 +1,52 @@
-#![feature(variant_count, exact_size_is_empty, array_chunks, iter_array_chunks)]
+#![feature(
+    variant_count,
+    exact_size_is_empty,
+    array_chunks,
+    iter_array_chunks,
+    const_trait_impl,
+    effects
+)]
 
-use std::{f32::consts::PI, mem::variant_count, sync::Arc};
+pub use anyhow;
 
 pub use egui;
 use egui::{
     egui_assert,
     epaint::{self, ClippedShape, Primitive, TextShape},
-    lerp, pos2, vec2, Align, Color32, Direction, FontSelection, Galley, Pos2, Rect, Response,
-    Sense, Shape, Stroke, Ui, Widget, WidgetInfo, WidgetText, WidgetType,
+    lerp, pos2,
+    text::LayoutJob,
+    vec2, Align, Color32, Direction, FontFamily, FontSelection, Galley, Pos2, Rect, Response,
+    Sense, Shape, Stroke, TextFormat, TextStyle, Ui, Widget, WidgetInfo, WidgetText, WidgetType,
 };
 pub use egui_wgpu;
 pub use egui_winit;
 pub use nanorand;
 use nanorand::{RandomGen, Rng};
-
-pub struct KineticLabel<'a> {
+use nom::{
+    branch::alt,
+    bytes::complete::{tag, take_till, take_till1},
+    character::complete::{alpha1, anychar},
+    combinator::{eof, map_opt, opt},
+    error::Error,
+    multi::{many1, separated_list1},
+    sequence::preceded,
+    IResult, Parser,
+};
+use std::{
+    collections::{HashMap, VecDeque},
+    f32::consts::PI,
+    mem::variant_count,
+    sync::Arc,
+};
+#[derive(Clone)]
+pub struct KineticLabel {
     pub text: WidgetText,
     pub wrap: Option<bool>,
     pub truncate: bool,
     pub sense: Option<Sense>,
-    pub kinesis: Option<Vec<&'a KineticEffect>>,
+    pub kinesis: Option<Vec<KineticEffect>>,
 }
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum KineticEffect {
     SineWavify { params: SineWavify },
     ShakeLetters { params: ShakeLetters },
@@ -43,7 +68,7 @@ impl<Generator: Rng<OUTPUT>, const OUTPUT: usize> RandomGen<Generator, OUTPUT> f
         }
     }
 }
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct Gay {
     pub rainbow: Vec<Color32>,
     pub live: bool,
@@ -67,12 +92,12 @@ impl Default for Gay {
     }
 }
 /// This is way too dependent on fps and screen dimensions and resolution to figure out good defaults
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 pub struct ShakeLetters {
     pub max_distortion: i32,
     pub dampen: u64,
 }
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 pub struct SineWavify {
     pub amp: f32,
     pub x_0: f32,
@@ -108,7 +133,7 @@ impl Default for KineticEffect {
     }
 }
 
-impl<'a> KineticLabel<'a> {
+impl KineticLabel {
     pub fn new(text: impl Into<WidgetText>) -> Self {
         Self {
             text: text.into(),
@@ -120,7 +145,7 @@ impl<'a> KineticLabel<'a> {
     }
 
     #[inline]
-    pub fn kinesis(mut self, kinesis: Vec<&'a KineticEffect>) -> Self {
+    pub fn kinesis(mut self, kinesis: Vec<KineticEffect>) -> Self {
         self.kinesis = Some(kinesis);
         self
     }
@@ -187,7 +212,7 @@ impl<'a> KineticLabel<'a> {
     }
 }
 
-impl KineticLabel<'_> {
+impl KineticLabel {
     /// Do layout and position the galley in the ui, without painting it or adding widget info.
     pub fn layout_in_ui(&mut self, ui: &mut Ui) -> (Pos2, Arc<Galley>, Response) {
         let sense = self.sense.unwrap_or_else(|| {
@@ -286,7 +311,7 @@ impl KineticLabel<'_> {
     }
 }
 
-impl Widget for KineticLabel<'_> {
+impl Widget for KineticLabel {
     fn ui(mut self, ui: &mut Ui) -> Response {
         let (pos, galley, mut response) = self.layout_in_ui(ui);
 
@@ -334,7 +359,7 @@ impl Widget for KineticLabel<'_> {
             underline,
             angle: 0.0,
             fallback_color: response_color,
-            override_text_color: Some(response_color),
+            override_text_color: None, //            override_text_color: Some(response_color),
         };
         let clipped_shape: ClippedShape = ClippedShape {
             clip_rect: Rect::EVERYTHING,
@@ -408,4 +433,451 @@ impl Widget for KineticLabel<'_> {
         ui.painter().add(the_mesh.to_owned());
         response
     }
+}
+
+pub fn parse_fireworks(input: &str) -> IResult<&str, Vec<KineticLabel>> {
+    let mut state = VecDeque::<TextModifier>::new();
+    let mut out = Vec::new();
+    let mut l_input = input;
+    loop {
+        let mut maybe_eof;
+        (l_input, maybe_eof) = opt(eof).parse(l_input)?;
+        if maybe_eof.is_some() {
+            break;
+        }
+        let mut job = LayoutJob::default();
+
+        let mut kinesis: Vec<KineticEffect> = Vec::new();
+        let maybe_opening_transition: Option<Transition>;
+        let body: &str;
+        (l_input, maybe_opening_transition) = opt(parse_my_tag).parse(l_input)?;
+
+        match maybe_opening_transition {
+            Some(transition) => match transition {
+                Transition::Enable(mfer) => match mfer {
+                    TextModifier::PrevOpen => {
+                        println!("Nonsense {{}} tag somehow made it into processing")
+                    }
+                    TextModifier::BuiltinOption(ref the_builtin) => match the_builtin {
+                        BuiltinOption::Style(ref the_style) => match the_style {
+                            TextStyle::Small | TextStyle::Monospace | TextStyle::Heading => {
+                                state.push_back(mfer)
+                            }
+                            ignored => println!("ignoring {}", ignored),
+                        },
+                        BuiltinOption::FirstRowIndentation(_)
+                        | BuiltinOption::TextColor(_)
+                        | BuiltinOption::BgColor(_)
+                        | BuiltinOption::VerticalAlign(_)
+                        | BuiltinOption::Underline(_)
+                        | BuiltinOption::Strikethrough(_)
+                        | BuiltinOption::Italics => state.push_back(mfer),
+                    },
+                    TextModifier::KineticEffect(_) => state.push_back(mfer),
+
+                    TextModifier::Unknown(_) => {
+                        println!("Adding unknown {:?}", mfer);
+                        state.push_back(mfer);
+                    }
+                },
+                Transition::Disable(mfer) => match mfer {
+                    TextModifier::PrevOpen => {
+                        println!(
+                            "removed {:?} from state by implicit {{/}} tag",
+                            state.pop_back()
+                        );
+                    }
+                    TextModifier::BuiltinOption(ref the_builtin) => match the_builtin {
+                        BuiltinOption::FirstRowIndentation(_) => {
+                            state
+                                .remove(
+                                    state
+                                        .iter()
+                                        .position(|tm| {
+                                            matches!(
+                                                tm,
+                                                TextModifier::BuiltinOption(
+                                                    BuiltinOption::FirstRowIndentation(_),
+                                                )
+                                            )
+                                        })
+                                        .unwrap(),
+                                )
+                                .unwrap();
+                        }
+                        BuiltinOption::Style(ref the_style) => match the_style {
+                            TextStyle::Small | TextStyle::Monospace | TextStyle::Heading => {
+                                state
+                                    .remove(state.iter().position(|tm| *tm == mfer).unwrap())
+                                    .unwrap();
+                            }
+                            ignored => println!("ignored {}", ignored),
+                        },
+                        BuiltinOption::TextColor(_) => {
+                            state
+                                .remove(
+                                    state
+                                        .iter()
+                                        .position(|tm| {
+                                            matches!(
+                                                tm,
+                                                TextModifier::BuiltinOption(
+                                                    BuiltinOption::TextColor(_)
+                                                )
+                                            )
+                                        })
+                                        .unwrap(),
+                                )
+                                .unwrap();
+                        }
+                        BuiltinOption::BgColor(_) => {
+                            state
+                                .remove(
+                                    state
+                                        .iter()
+                                        .position(|tm| {
+                                            matches!(
+                                                tm,
+                                                TextModifier::BuiltinOption(
+                                                    BuiltinOption::BgColor(_)
+                                                )
+                                            )
+                                        })
+                                        .unwrap(),
+                                )
+                                .unwrap();
+                        }
+                        BuiltinOption::VerticalAlign(_) => {
+                            state
+                                .remove(
+                                    state
+                                        .iter()
+                                        .position(|tm| {
+                                            matches!(
+                                                tm,
+                                                TextModifier::BuiltinOption(
+                                                    BuiltinOption::VerticalAlign(_)
+                                                )
+                                            )
+                                        })
+                                        .unwrap(),
+                                )
+                                .unwrap();
+                        }
+                        BuiltinOption::Underline(_) => {
+                            state
+                                .remove(
+                                    state
+                                        .iter()
+                                        .position(|tm| {
+                                            matches!(
+                                                tm,
+                                                TextModifier::BuiltinOption(
+                                                    BuiltinOption::Underline(_)
+                                                )
+                                            )
+                                        })
+                                        .unwrap(),
+                                )
+                                .unwrap();
+                        }
+                        BuiltinOption::Strikethrough(_) => {
+                            state
+                                .remove(
+                                    state
+                                        .iter()
+                                        .position(|tm| {
+                                            matches!(
+                                                tm,
+                                                TextModifier::BuiltinOption(
+                                                    BuiltinOption::Strikethrough(_)
+                                                )
+                                            )
+                                        })
+                                        .unwrap(),
+                                )
+                                .unwrap();
+                        }
+                        BuiltinOption::Italics => {
+                            state
+                                .remove(state.iter().position(|tm| *tm == mfer).unwrap())
+                                .unwrap();
+                        }
+                    },
+                    // this can probably be simplified to just compare the modifiers
+                    TextModifier::KineticEffect(the_effect) => {
+                        state.remove(
+                            state
+                                .iter()
+                                .position(|tm| {
+                                    if let TextModifier::KineticEffect(an_effect) = tm {
+                                        *an_effect == the_effect
+                                    } else {
+                                        false
+                                    }
+                                })
+                                .unwrap(),
+                        );
+                    }
+                    TextModifier::Unknown((name, _)) => {
+                        state.remove(
+                            state
+                                .iter()
+                                .position(|tm| {
+                                    if let TextModifier::Unknown((other_name, _)) = tm {
+                                        *other_name == name
+                                    } else {
+                                        false
+                                    }
+                                })
+                                .unwrap(),
+                        );
+                    }
+                },
+            },
+            None => {
+                (l_input, maybe_eof) = opt(eof).parse(l_input)?;
+                if maybe_eof.is_some() {
+                    break;
+                }
+                (l_input, body) = take_till1(|c| c == '{').parse(l_input)?;
+                job.append(body, 0., TextFormat::default());
+                let lay_section = job.sections.first_mut().unwrap();
+                for mfer in state.iter() {
+                    match mfer {
+                        TextModifier::PrevOpen => {}
+                        TextModifier::BuiltinOption(ref the_builtin) => match the_builtin {
+                            BuiltinOption::FirstRowIndentation(length) => {
+                                lay_section.leading_space = *length
+                            }
+                            BuiltinOption::Style(ref the_style) => match the_style {
+                                TextStyle::Small => lay_section.format.font_id.size *= 0.5,
+
+                                TextStyle::Monospace => {
+                                    lay_section.format.font_id.family = FontFamily::Monospace
+                                }
+
+                                TextStyle::Heading => lay_section.format.font_id.size *= 2.0,
+                                ignored => println!("ignored {}", ignored),
+                            },
+                            BuiltinOption::TextColor(the_color) => {
+                                lay_section.format.color = the_color.to_owned()
+                            }
+                            BuiltinOption::BgColor(the_color) => {
+                                lay_section.format.background = the_color.to_owned()
+                            }
+                            BuiltinOption::VerticalAlign(the_align) => {
+                                lay_section.format.valign = the_align.to_owned()
+                            }
+                            BuiltinOption::Underline(stroke) => {
+                                lay_section.format.underline = Stroke {
+                                    width: stroke.width,
+                                    color: lay_section.format.color,
+                                }
+                            }
+                            BuiltinOption::Strikethrough(stroke) => {
+                                lay_section.format.strikethrough = Stroke {
+                                    width: stroke.width,
+                                    color: lay_section.format.color,
+                                }
+                            }
+                            BuiltinOption::Italics => lay_section.format.italics = true,
+                        },
+                        TextModifier::KineticEffect(the_effect) => kinesis.push(the_effect.clone()),
+                        TextModifier::Unknown((um, uma)) => {
+                            println!("Unknown modifier {um} with args {uma}");
+                        }
+                    }
+                }
+                out.push(KineticLabel::new(job).kinesis(kinesis));
+            }
+        }
+    }
+
+    Ok((input, out))
+}
+//pub fn parse_egui_builtin(input: &str) {}
+pub fn parse_my_tag(input: &str) -> IResult<&str, Transition> {
+    let (input, _) = tag("{").parse(input)?;
+    let (input, close_my_tag) = opt(tag("/"))
+        .parse(input)
+        .map(|(input, cmt)| (input, cmt.is_some()))?;
+    let (input, the_modifier) = parse_text_modifier(input)?;
+    let (input, _) = tag("}").parse(input)?;
+    if close_my_tag {
+        Ok((input, Transition::Disable(the_modifier)))
+    } else {
+        Ok((input, Transition::Enable(the_modifier)))
+    }
+}
+fn parse_color(input: &str) -> IResult<&str, Color32> {
+    const KNOWN_COLORS: [(&str, Color32); 20] = [
+        ("TRANSPARENT", Color32::TRANSPARENT),
+        ("BLACK", Color32::BLACK),
+        ("DARK_GRAY", Color32::DARK_GRAY),
+        ("GRAY", Color32::GRAY),
+        ("LIGHT_GRAY", Color32::LIGHT_GRAY),
+        ("WHITE", Color32::WHITE),
+        ("BROWN", Color32::BROWN),
+        ("DARK_RED", Color32::DARK_RED),
+        ("RED", Color32::RED),
+        ("LIGHT_RED", Color32::LIGHT_RED),
+        ("YELLOW", Color32::YELLOW),
+        ("LIGHT_YELLOW", Color32::LIGHT_YELLOW),
+        ("KHAKI", Color32::KHAKI),
+        ("DARK_GREEN", Color32::DARK_GREEN),
+        ("GREEN", Color32::GREEN),
+        ("LIGHT_GREEN", Color32::LIGHT_GREEN),
+        ("DARK_BLUE", Color32::DARK_BLUE),
+        ("BLUE", Color32::BLUE),
+        ("LIGHT_BLUE", Color32::LIGHT_BLUE),
+        ("GOLD", Color32::GOLD),
+    ];
+    let known_colors = HashMap::from(KNOWN_COLORS);
+    let ret = map_opt(
+        preceded(
+            tag("rgb"),
+            nom::sequence::delimited(
+                tag::<&str, &str, Error<_>>("("),
+                separated_list1(tag(","), nom::character::complete::u8),
+                tag(")"),
+            ),
+        ),
+        |kulerz| Some(Color32::from_rgb(kulerz[0], kulerz[1], kulerz[2])),
+    )
+    .parse(input)
+    .or(map_opt(many1(anychar), |wc: Vec<char>| {
+        known_colors
+            .get(wc.iter().collect::<String>().to_uppercase().as_str())
+            .map(|v| v.to_owned())
+    })
+    .parse(input));
+    ret
+}
+fn parse_text_modifier(input: &str) -> IResult<&str, TextModifier> {
+    let (input, full_modifier) = take_till(|c| c == '}').parse(input)?;
+    let (rest, modifier_name) = opt(many1(alt((tag("_"), alpha1))))
+        .parse(full_modifier)
+        .map(|(r, frags)| (r, frags.map(|frags| frags.join(""))))?;
+    match modifier_name {
+        Some(modifier_name) => {
+            let modifier_args = opt(tag("="))
+                .parse(rest)
+                .map(|(modifier_args, _)| modifier_args)?;
+            match modifier_name.as_str() {
+                "strikethrough" => Ok((
+                    input,
+                    TextModifier::BuiltinOption(BuiltinOption::Strikethrough(Stroke {
+                        width: 1.0,
+                        color: Color32::default(),
+                    })),
+                )),
+                "raised" => Ok((
+                    input,
+                    TextModifier::BuiltinOption(BuiltinOption::VerticalAlign(Align::TOP)),
+                )),
+                "ul" => Ok((
+                    input,
+                    TextModifier::BuiltinOption(BuiltinOption::Underline(Stroke {
+                        width: 2.0,
+                        color: Color32::default(),
+                    })),
+                )),
+                "bgcolor" => {
+                    let the_color = match parse_color(modifier_args) {
+                        Ok((_, c)) => c,
+                        Err(e) => {
+                            println!("{:?}", e);
+                            Color32::default()
+                        }
+                    };
+                    println!("adding bg color {:?}", the_color);
+                    Ok((
+                        input,
+                        TextModifier::BuiltinOption(BuiltinOption::BgColor(the_color)),
+                    ))
+                }
+                "color" => {
+                    let the_color = match parse_color(modifier_args) {
+                        Ok((_, c)) => c,
+                        Err(e) => {
+                            println!("{:?}", e);
+                            Color32::default()
+                        }
+                    };
+                    println!("adding text color {:?}", the_color);
+                    Ok((
+                        input,
+                        TextModifier::BuiltinOption(BuiltinOption::TextColor(the_color)),
+                    ))
+                }
+                "h" => Ok((
+                    input,
+                    TextModifier::BuiltinOption(BuiltinOption::Style(TextStyle::Heading)),
+                )),
+                "mono" => Ok((
+                    input,
+                    TextModifier::BuiltinOption(BuiltinOption::Style(TextStyle::Monospace)),
+                )),
+                "p" => Ok((
+                    input,
+                    TextModifier::BuiltinOption(BuiltinOption::FirstRowIndentation(10.0)),
+                )),
+                "gay" => Ok((
+                    input,
+                    TextModifier::KineticEffect(KineticEffect::Gay {
+                        params: Gay::default(),
+                    }),
+                )),
+                "shakey" => Ok((
+                    input,
+                    TextModifier::KineticEffect(KineticEffect::ShakeLetters {
+                        params: ShakeLetters::default(),
+                    }),
+                )),
+                "wavy" => Ok((
+                    input,
+                    TextModifier::KineticEffect(KineticEffect::SineWavify {
+                        params: SineWavify::default(),
+                    }),
+                )),
+
+                "i" => Ok((input, TextModifier::BuiltinOption(BuiltinOption::Italics))),
+                "small" => Ok((
+                    input,
+                    TextModifier::BuiltinOption(BuiltinOption::Style(TextStyle::Small)),
+                )),
+                blah => Ok((
+                    input,
+                    TextModifier::Unknown((blah.to_owned(), modifier_args.to_owned())),
+                )),
+            }
+        }
+
+        None => Ok((input, TextModifier::PrevOpen)),
+    }
+}
+#[derive(Debug, PartialEq)]
+pub enum Transition {
+    Enable(TextModifier),
+    Disable(TextModifier),
+}
+#[derive(Debug, PartialEq, Default)]
+pub enum TextModifier {
+    #[default]
+    PrevOpen,
+    BuiltinOption(BuiltinOption),
+    KineticEffect(KineticEffect),
+    Unknown((String, String)),
+}
+#[derive(Debug, PartialEq)]
+pub enum BuiltinOption {
+    FirstRowIndentation(f32),
+    Style(TextStyle),
+    TextColor(Color32),
+    BgColor(Color32),
+    VerticalAlign(Align),
+    Underline(Stroke),
+    Strikethrough(Stroke),
+    Italics,
 }
