@@ -36,78 +36,7 @@ pub enum MyPlayables {
     //    Curtain,   // loading screens
     //    TicketBox, // menus
 }
-/*
-impl Playable<MyInputContexts> for MyPlayables {
-    fn playable_uuid(&self) -> Uuid {
-        match self {
-            MyPlayables::LinacLabScene(inner) => inner.playable_uuid(),
-        }
-    }
 
-    fn playable_name(&self) -> &str {
-        match self {
-            MyPlayables::LinacLabScene(inner) => inner.playable_name(),
-        }
-    }
-
-    fn starting_cam_info(&self) -> CamInfo {
-        match self {
-            MyPlayables::LinacLabScene(inner) => inner.starting_cam_info(),
-        }
-    }
-
-    fn implement_playable(
-        &mut self,
-        settings: &GameProgrammeSettings,
-        event_loop: &EventLoop<MyEvent>,
-        renderer: Arc<Renderer>,
-        routines: Arc<DefaultRoutines>,
-        rts: &Runtime,
-    ) {
-        match self {
-            MyPlayables::LinacLabScene(inner) => {
-                inner.implement_playable(settings, event_loop, renderer, routines, rts)
-            }
-        }
-    }
-
-    fn define_playable(&mut self) {
-        match self {
-            MyPlayables::LinacLabScene(inner) => inner.define_playable(),
-        }
-    }
-    fn implement_chorus_for_playable(&self, egui_ctx: Context) {
-        match self {
-            MyPlayables::LinacLabScene(inner) => inner.implement_chorus_for_playable(egui_ctx),
-        }
-    }
-
-    fn playable_definition(&mut self) -> &mut Definitions {
-        match self {
-            MyPlayables::LinacLabScene(inner) => inner.playable_definition(),
-        }
-    }
-
-    fn playable_implementation(&mut self) -> &mut Option<Implementations> {
-        match self {
-            MyPlayables::LinacLabScene(inner) => inner.playable_implementation(),
-        }
-    }
-
-    fn handle_input_for_playable(
-        &mut self,
-        settings: &GameProgrammeSettings,
-        state: &mut GameProgrammeState<MyInputContexts>,
-        window: &Arc<Window>,
-    ) {
-        match self {
-            MyPlayables::LinacLabScene(inner) => {
-                inner.handle_input_for_playable(settings, state, window)
-            }
-        }
-    }
-}
-*/
 #[derive(Default, Hash, Eq, PartialEq, Debug, Copy, Clone)]
 pub enum MyInputContexts {
     DebugInputContext(DebugInputContext),

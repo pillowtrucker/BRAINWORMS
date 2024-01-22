@@ -1,7 +1,7 @@
 use proc_macro::TokenStream;
 
 use proc_macro2::{Ident, Span};
-use quote::{quote, ToTokens};
+use quote::quote;
 use syn::{parse_macro_input, DeriveInput};
 
 /// Example of [function-like procedural macro][1].
@@ -109,7 +109,7 @@ pub fn derive_playable_for_enum(input: TokenStream) -> TokenStream {
             panic!("enums only");
         }
         syn::Data::Enum(enum_data) => {
-            let this_language_is_for_tards: &Ident = &enum_data
+            let the_input_context_enum: &Ident = &enum_data
                 .variants
                 .iter()
                 .find_map(|a| {
@@ -155,7 +155,7 @@ pub fn derive_playable_for_enum(input: TokenStream) -> TokenStream {
             let pl_imp = imp_fn("playable_implementation", "");
             let pl_inp = imp_fn("handle_input_for_playable", "settings,state,window");
             quote! {
-            impl Playable<#this_language_is_for_tards> for #enum_ident {
+            impl Playable<#the_input_context_enum> for #enum_ident {
                 fn playable_uuid(&self) -> Uuid {
                     match self {
                         #(#imp_pl_uuid),*
@@ -207,7 +207,7 @@ pub fn derive_playable_for_enum(input: TokenStream) -> TokenStream {
                 fn handle_input_for_playable(
                     &mut self,
                     settings: &GameProgrammeSettings,
-                    state: &mut GameProgrammeState<MyInputContexts>,
+                    state: &mut GameProgrammeState<#the_input_context_enum>,
                     window: &Arc<Window>,
                 ) {
                     match self {
