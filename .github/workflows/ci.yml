@@ -25,8 +25,14 @@ jobs:
     steps:
       - name: get cmake
         uses: lukka/get-cmake@latest
+      - name: Install LLVM and Clang on mac
+        uses: KyleMayes/install-llvm-action@v1
+        if: matrix.config.target == "x86_64-apple-darwin" || matrix.config.target = "aarch64-apple-darwin"
+        with:
+          version: "13"
       - name: Install LLVM and Clang
         uses: KyleMayes/install-llvm-action@v1
+        if: matrix.config.target != "x86_64-apple-darwin" && matrix.config.target != "aarch64-apple-darwin"
         with:
           version: "16"
       - name: Checkout repository
@@ -46,8 +52,17 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@nightly
       - uses: Swatinem/rust-cache@v2
-      - name: Build
-        if: matrix.action == 'build'
+      - name: Build ymfm rust dingdong win # separate step so I can see earlier if CI fails..
+        if: matrix.config.target == x86_64-pc-windows-msvc
+        run: |
+          cd brainworms_farting_noises/libymfm.wasm
+          git submodule init
+          git submodule update
+          cmake -G "Visual Studio 17 2022" -T ClangCL -S . -B build
+          cmake --build build --parallel $(nproc)
+          cd ../..
+      - name: Build ymfm rust dingdong win # separate step so I can see earlier if CI fails..
+        if: matrix.config.target != x86_64-pc-windows-msvc
         run: |
           cd brainworms_farting_noises/libymfm.wasm
           git submodule init
@@ -55,7 +70,9 @@ jobs:
           cmake -S . -B build
           cmake --build build --parallel $(nproc)
           cd ../..
-          cargo build --all-features --workspace
+      - name: Build
+        if: matrix.action == 'build'
+        run: cargo build --all-features --workspace
           
 #      - name: Test
 #        if: matrix.action == 'test'
