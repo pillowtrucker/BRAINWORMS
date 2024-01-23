@@ -45,6 +45,8 @@ jobs:
         run: |
           sudo apt install cmake clang
           cd brainworms_farting_noises/libymfm.wasm
+          git submodule init
+          git submodule update
           cmake -DCMAKE_TOOLCHAIN_FILE=./cmake/x86-64.cmake -S . -B build
           cmake --build build --parallel $(nproc)
           cd ../..
@@ -71,6 +73,8 @@ jobs:
         run: |
           sudo apt install cmake clang
           cd brainworms_farting_noises/libymfm.wasm
+          git submodule init
+          git submodule update
           cmake -DCMAKE_TOOLCHAIN_FILE=./cmake/x86-64.cmake -S . -B build
           cmake --build build --parallel $(nproc)
           cd ../..
@@ -93,6 +97,8 @@ jobs:
         run: |
           sudo apt install cmake clang
           cd brainworms_farting_noises/libymfm.wasm
+          git submodule init
+          git submodule update
           cmake -DCMAKE_TOOLCHAIN_FILE=./cmake/x86-64.cmake -S . -B build
           cmake --build build --parallel $(nproc)
           cd ../..
@@ -130,6 +136,8 @@ jobs:
         run: |
           sudo apt install cmake clang
           cd brainworms_farting_noises/libymfm.wasm
+          git submodule init
+          git submodule update
           cmake -DCMAKE_TOOLCHAIN_FILE=./cmake/x86-64.cmake -S . -B build
           cmake --build build --parallel $(nproc)
           cd ../..
