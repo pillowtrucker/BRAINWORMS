@@ -23,8 +23,12 @@ jobs:
           - { name: MacOS (ARM),   os: macos-latest,   target: "aarch64-apple-darwin" }
           - { name: Windows (x86), os: windows-latest, target: "x86_64-pc-windows-msvc" }
     steps:
-      - name: get cmake/clang
+      - name: get cmake
         uses: lukka/get-cmake@latest
+      - name: Install LLVM and Clang
+        uses: KyleMayes/install-llvm-action@v1
+        with:
+          version: "16"
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
@@ -48,7 +52,7 @@ jobs:
           cd brainworms_farting_noises/libymfm.wasm
           git submodule init
           git submodule update
-          cmake -DCMAKE_TOOLCHAIN_FILE=./cmake/x86-64.cmake -S . -B build
+          cmake -S . -B build
           cmake --build build --parallel $(nproc)
           cd ../..
           cargo build --all-features --workspace
