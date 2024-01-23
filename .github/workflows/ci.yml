@@ -26,13 +26,13 @@ jobs:
       - name: get cmake
         uses: lukka/get-cmake@latest
       - name: Install LLVM and Clang on mac
-        uses: KyleMayes/install-llvm-action@v1
         if: (matrix.config.target == "x86_64-apple-darwin") || (matrix.config.target == "aarch64-apple-darwin")
+        uses: KyleMayes/install-llvm-action@v1
         with:
           version: "13"
       - name: Install LLVM and Clang
-        uses: KyleMayes/install-llvm-action@v1
         if: (matrix.config.target != "x86_64-apple-darwin") && (matrix.config.target != "aarch64-apple-darwin")
+        uses: KyleMayes/install-llvm-action@v1
         with:
           version: "16"
       - name: Checkout repository
