@@ -109,21 +109,19 @@ pub fn derive_playable_for_enum(input: TokenStream) -> TokenStream {
             panic!("enums only");
         }
         syn::Data::Enum(enum_data) => {
-            let the_input_context_enum: &Ident = &enum_data
-                .variants
+            let the_input_context_enum: &Ident = &input
+                .attrs
                 .iter()
-                .find_map(|a| {
-                    a.attrs
-                        .iter()
-                        .find(|aa| {
-                            aa.path()
-                                .get_ident()
-                                .is_some_and(|id| id == "input_context_enum")
-                        })
-                        .map(|aaa| aaa.parse_args().unwrap())
+                .find(|a| {
+                    a.path()
+                        .get_ident()
+                        .is_some_and(|aa| aa == "input_context_enum")
+                })
+                .map(|aa| {
+                    aa.parse_args()
+                        .expect("input_context_enum attribute required")
                 })
                 .expect("input_context_enum attribute required");
-
             let variants = &enum_data.variants;
             let imp_fn = |fn_name, fn_args: &'static str| {
                 variants.iter().map(move |v| {

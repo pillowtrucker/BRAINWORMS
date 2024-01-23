@@ -40,7 +40,7 @@ orientation = "landscape"
 ndk-glue = "0.7"
 
 [workspace]
-members = [ "brainworms_arson", "brainworms_lib",
+members = [ "brainworms_arson", "brainworms_farting_noises", "brainworms_lib",
 "proc-macros"
 ]
 [features]

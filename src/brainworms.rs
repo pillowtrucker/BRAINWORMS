@@ -30,8 +30,8 @@ use linac_lab::{LinacLabIC, LinacLabScene};
 
 #[bl::enum_dispatch::enum_dispatch(Playable)] // this doesnt work across crates but it does generate at least the from and into stuff
 #[derive(Playable)]
+#[input_context_enum(MyInputContexts)]
 pub enum MyPlayables {
-    #[input_context_enum(MyInputContexts)]
     LinacLabScene(LinacLabScene),
     //    Curtain,   // loading screens
     //    TicketBox, // menus

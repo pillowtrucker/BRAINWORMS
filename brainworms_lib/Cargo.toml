@@ -12,6 +12,7 @@ keywords = ["wgpu", "rend3", "not-bevy", "no-ecs", "game", "program"]
 
 [dependencies]
 brainworms_arson = {path = "../brainworms_arson"}
+brainworms_farting_noises = {path = "../brainworms_farting_noises"}
 wgpu = { version = "0.18.0", default-features = false }
 
 pollster = "0.3.0"
