@@ -11,16 +11,14 @@ rustflags = [
 ]
 [target.x86_64-apple-darwin]
 rustflags = [
-  "-lstdc++",
-  "-lc++abi", 
+#  "-lc++abi", 
   "-lc++"
 ]
 linker = "rust-lld"
 
 [target.aarch64-apple-darwin]
 rustflags = [
-  "-lstdc++",
-  "-lc++abi",
+#  "-lc++abi",
   "-lc++"
 ]
 linker = "rust-lld"
