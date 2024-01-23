@@ -1,3 +1,2 @@
 edition = "2021"
-[ignore]
-directories = ["brainworms_farting_noises/libymfm.wasm"]
+ignore = ["brainworms_farting_noises/libymfm.wasm"]
