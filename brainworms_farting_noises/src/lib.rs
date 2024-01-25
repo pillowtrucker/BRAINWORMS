@@ -43,6 +43,7 @@ pub async fn play(filepath: &str) -> Result<()> {
 
     let mut out_l = Vec::<f32>::with_capacity(MAX_SAMPLE_SIZE * 2);
     let mut out_r = Vec::<f32>::with_capacity(MAX_SAMPLE_SIZE * 2);
+
     let cv_playback_ended = Arc::new((Mutex::new(false), Condvar::new()));
     let cv_playback_ended_inside_copy = Arc::clone(&cv_playback_ended);
 
@@ -59,15 +60,20 @@ pub async fn play(filepath: &str) -> Result<()> {
         out_l.extend_from_slice(sampling_l);
         out_r.extend_from_slice(sampling_r);
     }
+    let out_length = out_l.len();
     builder
         .name("Cubeb stereo")
         .default_output(&params)
         .latency(0x1000)
         .data_callback(move |_, output| {
             for f in output.iter_mut() {
-                f.l = out_l[position as usize];
-                f.r = out_r[position as usize];
-                position += 1;
+                if (position as usize) < out_length {
+                    f.l = out_l[position as usize];
+                    f.r = out_r[position as usize];
+                    position += 1;
+                } else {
+                    return 0;
+                }
             }
             output.len() as isize
         })
