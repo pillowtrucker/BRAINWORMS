@@ -8,3 +8,5 @@ edition = "2021"
 [dependencies]
 cubeb = {git = "https://github.com/mozilla/cubeb-rs"}
 libymfm = {path = "./libymfm.wasm"}
+ustr = "1"
+glicol_synth = "0.13"

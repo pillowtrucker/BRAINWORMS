@@ -7,3 +7,6 @@
 [submodule "brainworms_farting_noises/libymfm.wasm"]
 	path = brainworms_farting_noises/libymfm.wasm
 	url = git@github.com:pillowtrucker/libymfm.wasm.git
+[submodule "furnace"]
+	path = furnace
+	url = git@github.com:pillowtrucker/furnace.git
