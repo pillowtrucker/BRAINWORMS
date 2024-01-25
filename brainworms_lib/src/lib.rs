@@ -418,6 +418,7 @@ impl<
 
                 match event {
                     WindowEvent::CloseRequested => {
+                        self.rts.shutdown_background();
                         event_loop_window_target.exit();
                     }
                     winit::event::WindowEvent::Resized(size) => {
