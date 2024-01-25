@@ -1,4 +1,5 @@
 use bl::brainworms_arson::{parse_fireworks, Gay, KineticEffect, KineticLabel, ShakeLetters};
+use bl::brainworms_farting_noises::play;
 use bl::log::info;
 use bl::nalgebra::distance;
 use bl::nanorand::RandomGen;
@@ -280,6 +281,9 @@ impl LinacLabScene {
             )
             .await;
         });
+        rts.spawn(play(
+            "./brainworms_farting_noises/libymfm.wasm/docs/vgm/ym2612.vgm",
+        ));
     }
 
     pub fn starting_cam_info(&self) -> CamInfo {
