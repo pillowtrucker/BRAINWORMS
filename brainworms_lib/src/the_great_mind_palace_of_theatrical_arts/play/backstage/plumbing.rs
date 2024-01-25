@@ -51,7 +51,7 @@ impl<PlayablesEnum: Playable<InputContextEnum> + 'static, InputContextEnum: Inpu
         Fut: Future + Send + 'static,
         Fut::Output: Send + 'static,
     {
-        self.rts.spawn(fut)
+        self.rts.as_ref().unwrap().spawn(fut)
     }
 
     pub fn new(play: Play<PlayablesEnum>) -> Self {
@@ -63,7 +63,7 @@ impl<PlayablesEnum: Playable<InputContextEnum> + 'static, InputContextEnum: Inpu
         Self {
             data,
             settings: GameProgrammeSettings::new(),
-            rts: tokio::runtime::Runtime::new().unwrap(),
+            rts: tokio::runtime::Runtime::new().ok(),
             state: GameProgrammeState::default(),
         }
     }

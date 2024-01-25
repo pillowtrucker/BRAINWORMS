@@ -92,7 +92,7 @@ pub struct GameProgramme<
     pub data: GameProgrammeData<PlayablesEnum>,
     pub state: GameProgrammeState<InputContextEnum>,
     pub settings: GameProgrammeSettings,
-    pub rts: tokio::runtime::Runtime,
+    pub rts: Option<tokio::runtime::Runtime>,
 }
 pub type MyEvent = MyWinitEvent<AstinkScene, AstinkSprite>;
 pub type Event = winit::event::Event<MyEvent>;
@@ -385,8 +385,10 @@ impl<
                         let renderer = Arc::clone(&renderer);
                         let a = Arc::clone(a);
                         // this kind of makes self.spawn at best useless and probably counter-productive
-                        self.rts.spawn(async move {
-                            draw_actor(a, renderer, t);
+                        self.rts.as_ref().map(|rts| {
+                            rts.spawn(async move {
+                                draw_actor(a, renderer, t);
+                            })
                         });
                     }
                 }
@@ -418,7 +420,8 @@ impl<
 
                 match event {
                     WindowEvent::CloseRequested => {
-                        self.rts.shutdown_background();
+                        let the_rt = self.rts.take();
+                        the_rt.unwrap().shutdown_background();
                         event_loop_window_target.exit();
                     }
                     winit::event::WindowEvent::Resized(size) => {
@@ -614,7 +617,7 @@ impl<
             event_loop,
             playable_renderer_copy,
             playable_routines_copy,
-            &self.rts,
+            self.rts.as_ref().unwrap(),
         );
 
         let skybox_renderer_copy = Arc::clone(&renderer);
