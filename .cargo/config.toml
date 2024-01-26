@@ -3,7 +3,7 @@
 linker = "rust-lld.exe"
 #rustflags = ["target-feature=+crt-static"]
 #rustflags = ["-lntdll"]
-rustflags=["-lucrt"]
+#rustflags=["-lucrtd"]
 # Uncomment this to enable unstable APIs in web_sys when targetting wasm.
 #[target.'cfg(target_family = "wasm")']
 #rustflags = "--cfg=web_sys_unstable_apis"
