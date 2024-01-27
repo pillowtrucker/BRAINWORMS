@@ -340,10 +340,14 @@ dependencies = [
 name = "brainworms_farting_noises"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "cubeb",
  "glicol_synth",
  "libymfm",
+ "parking_lot",
+ "tokio",
  "ustr",
+ "winit",
 ]
 
 [[package]]

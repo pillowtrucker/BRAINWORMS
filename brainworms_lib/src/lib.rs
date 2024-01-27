@@ -4,6 +4,8 @@ pub mod the_great_mind_palace_of_theatrical_arts;
 
 pub use brainworms_arson::{self, anyhow, egui, egui_winit, nanorand};
 pub use brainworms_farting_noises;
+
+use brainworms_farting_noises::{cubeb, Jingle};
 pub use cfg_if::cfg_if;
 use egui::{Color32, TextStyle, Visuals};
 pub use glam;
@@ -97,7 +99,7 @@ pub struct GameProgramme<
 pub type MyEvent = MyWinitEvent<AstinkScene, AstinkSprite>;
 pub type Event = winit::event::Event<MyEvent>;
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum MyWinitEvent<TS, TA: 'static> {
     /// Custom user event types
     Stage3D(TS),

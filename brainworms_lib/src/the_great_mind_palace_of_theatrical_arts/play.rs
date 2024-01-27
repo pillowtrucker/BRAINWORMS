@@ -20,6 +20,7 @@ use super::basement::{cla::GameProgrammeSettings, input_handling::HandlesInputCo
 
 pub mod backstage;
 pub mod definition;
+pub mod orchestra;
 pub mod scene;
 #[derive(Default)]
 pub struct Play<PlayablesEnum> {

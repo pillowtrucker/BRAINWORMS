@@ -63,7 +63,7 @@ impl<PlayablesEnum: Playable<InputContextEnum> + 'static, InputContextEnum: Inpu
         Self {
             data,
             settings: GameProgrammeSettings::new(),
-            rts: tokio::runtime::Runtime::new().ok(),
+            rts: tokio::runtime::Builder::new_multi_thread().build().ok(),
             state: GameProgrammeState::default(),
         }
     }
