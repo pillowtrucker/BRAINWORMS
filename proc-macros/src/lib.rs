@@ -64,13 +64,16 @@ pub fn derive_scenic_partial(input: TokenStream) -> TokenStream {
                                event_loop: &brainworms_lib::winit::event_loop::EventLoop<brainworms_lib::MyEvent>,
                                renderer: Arc<brainworms_lib::rend3::Renderer>,
                                routines: Arc<brainworms_lib::theater::play::backstage::plumbing::DefaultRoutines>,
-                               rts: &brainworms_lib::tokio::runtime::Runtime,) {
+                               rts: &brainworms_lib::tokio::runtime::Runtime,
+                               orchestra: Arc<brainworms_lib::theater::play::orchestra::Orchestra>
+            ) {
                 self.implement(
                     settings,
                     event_loop,
                     renderer,
                     routines,
-                    rts)
+                    rts,
+                    orchestra)
             }
             fn scene_starting_cam_info(&self) -> brainworms_lib::theater::play::scene::CamInfo {
                 self.starting_cam_info()
@@ -146,7 +149,7 @@ pub fn derive_playable_for_enum(input: TokenStream) -> TokenStream {
             let def_pl = imp_fn("define_playable", "");
             let imp_pl = imp_fn(
                 "implement_playable",
-                "settings,event_loop,renderer,routines,rts",
+                "settings,event_loop,renderer,routines,rts,orchestra",
             );
             let imp_chr = imp_fn("implement_chorus_for_playable", "egui_ctx");
             let pl_def = imp_fn("playable_definition", "");
@@ -176,6 +179,7 @@ pub fn derive_playable_for_enum(input: TokenStream) -> TokenStream {
                     renderer: Arc<Renderer>,
                     routines: Arc<DefaultRoutines>,
                     rts: &Runtime,
+                    orchestra: Arc<Orchestra>
                 ) {
                     match self {
                         #(#imp_pl),*

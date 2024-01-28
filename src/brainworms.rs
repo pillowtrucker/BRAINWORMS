@@ -1,3 +1,4 @@
+#![feature(async_closure)]
 pub mod linac_lab;
 
 use std::{collections::HashMap, sync::Arc};
@@ -12,8 +13,8 @@ use bl::{
             input_handling::{DebugInputContext, InputContext},
         },
         play::{
-            backstage::plumbing::DefaultRoutines, scene::CamInfo, scene::Scenic, Definitions,
-            Implementations, Play, Playable,
+            backstage::plumbing::DefaultRoutines, orchestra::Orchestra, scene::CamInfo,
+            scene::Scenic, Definitions, Implementations, Play, Playable,
         },
     },
     theater::basement::logging::register_logger,

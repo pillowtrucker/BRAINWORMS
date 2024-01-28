@@ -5,7 +5,6 @@ pub mod the_great_mind_palace_of_theatrical_arts;
 pub use brainworms_arson::{self, anyhow, egui, egui_winit, nanorand};
 pub use brainworms_farting_noises;
 
-use brainworms_farting_noises::{cubeb, Jingle};
 pub use cfg_if::cfg_if;
 use egui::{Color32, TextStyle, Visuals};
 pub use glam;
@@ -34,6 +33,7 @@ use theater::{
     },
     play::{
         backstage::plumbing::{create_base_rendergraph, DefaultRoutines, StoredSurfaceInfo},
+        orchestra::Orchestra,
         scene::{
             actors::AstinkSprite,
             stage3d::{load_skybox, lock, update_camera_mouse_params},
@@ -86,6 +86,7 @@ pub struct GameProgrammeState<InputContextEnum: InputContext> {
     pub routines: Option<Arc<DefaultRoutines>>,
     pub base_rendergraph: Option<Arc<Mutex<BaseRenderGraph>>>,
     pub cur_input_context: InputContextEnum,
+    pub orchestra: Option<Arc<Orchestra>>,
 }
 pub struct GameProgramme<
     PlayablesEnum: Playable<InputContextEnum>,
@@ -591,6 +592,9 @@ impl<
         state.current_playable = None;
         state.cur_camera = None;
         state.input_status = InputStatus::default();
+        state.orchestra = Some(Arc::new(Orchestra::new(
+            self.rts.as_ref().unwrap().handle().clone(),
+        )));
         //        state.cur_input_context = ;
 
         // Implementations for Play/Scene/etc go below
@@ -620,6 +624,7 @@ impl<
             playable_renderer_copy,
             playable_routines_copy,
             self.rts.as_ref().unwrap(),
+            self.state.orchestra.as_ref().unwrap().clone(),
         );
 
         let skybox_renderer_copy = Arc::clone(&renderer);

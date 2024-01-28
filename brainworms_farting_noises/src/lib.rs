@@ -1,25 +1,22 @@
+pub mod prison_for_retarded_mozilla_dog_shit;
+
 use std::{
-    borrow::BorrowMut,
-    collections::HashMap,
-    fs::File,
-    io::{Error, Read},
-    path::Path,
-    ptr::slice_from_raw_parts,
-    sync::Arc,
+    collections::HashMap, fs::File, io::Read, path::Path, ptr::slice_from_raw_parts, sync::Arc,
+    thread,
 };
 
+use cubeb::Stream;
 pub use cubeb::{self, Context, StereoFrame};
 use libymfm::{driver::VgmPlay, sound::SoundSlot};
 
-use parking_lot::{Condvar, Mutex};
-use tokio::sync::mpsc::Receiver;
+use parking_lot::Mutex;
+use tokio::sync::mpsc::UnboundedReceiver;
+
+use crate::prison_for_retarded_mozilla_dog_shit::{prison, AudioPrisonOrder};
 const SAMPLE_FREQUENCY: u32 = 48_000;
 const STREAM_FORMAT: cubeb::SampleFormat = cubeb::SampleFormat::Float32LE;
 const MAX_SAMPLE_SIZE: usize = 2048;
-pub fn init(ctx_name: &str) -> anyhow::Result<Context> {
-    let ctx_name = ustr::ustr(ctx_name);
-    Ok(Context::init(Some(ctx_name.as_cstr()), None)?)
-}
+
 pub enum AudioCommand {
     Prebake(PathToJingle),
     Play(JingleName),
@@ -29,25 +26,43 @@ pub enum AudioCommand {
     Die,
 }
 
+pub type Jukebox = HashMap<JingleName, Vec<Stream<StereoFrame<f32>>>>;
+
 pub type JingleRegistry = HashMap<JingleName, Jingle>;
 pub async fn audio_router_thread(
-    mut rx: Receiver<AudioCommand>,
+    mut rx: UnboundedReceiver<AudioCommand>,
     registry: Arc<Mutex<JingleRegistry>>,
-    audio_ctx: Arc<Mutex<Context>>,
+    gen: u64,
 ) {
+    //    let mut state = Jukebox::new();
+    let (prison_tx, prison_rx) = std::sync::mpsc::channel();
+    let prison_registry = registry.clone();
+    let prison_tx_theirs = prison_tx.clone();
+    let prison_handle =
+        thread::spawn(move || prison(gen, prison_rx, prison_registry, prison_tx_theirs));
     use tokio::runtime::Handle;
     while let Some(cmd) = rx.recv().await {
+        let registry = registry.clone();
+        let handle = Handle::current();
         match cmd {
             AudioCommand::Prebake(p) => {
-                let registry = registry.clone();
-                let handle = Handle::current();
                 handle.spawn(async move { prebake(p, registry) });
             }
-            AudioCommand::Play(_) => todo!(),
+            AudioCommand::Play(name) => {
+                println!("sending play command for {name} to prison");
+                let _ = prison_tx.send(AudioPrisonOrder::Play(name));
+            }
             AudioCommand::Pause(_) => todo!(),
             AudioCommand::Stop(_) => todo!(),
-            AudioCommand::Drop(_) => todo!(),
-            AudioCommand::Die => return,
+            AudioCommand::Drop(n) => {
+                let mut registry = registry.lock();
+                registry.remove(&n);
+            }
+            AudioCommand::Die => {
+                let _ = prison_tx.send(AudioPrisonOrder::Die);
+                let _ = prison_handle.join();
+                return;
+            }
         }
     }
 }
@@ -57,10 +72,11 @@ pub type JingleName = String;
 #[derive(Debug, Clone, PartialEq)]
 pub struct Jingle {
     pub name: JingleName,
-    pub l: Vec<f32>,
-    pub r: Vec<f32>,
+    pub l: Arc<Vec<f32>>,
+    pub r: Arc<Vec<f32>>,
     pub len: usize,
 }
+
 fn prebake(ptj: PathToJingle, registry: Arc<Mutex<JingleRegistry>>) -> anyhow::Result<()> {
     let mut file = File::open(&ptj)?;
     let mut buffer = Vec::new();
@@ -99,21 +115,22 @@ fn prebake(ptj: PathToJingle, registry: Arc<Mutex<JingleRegistry>>) -> anyhow::R
         .unwrap()
         .to_string_lossy()
         .into_owned();
+    println!("added {jn} to registry");
     registry.insert(
         jn.clone(),
         Jingle {
             name: jn,
-            l: out_l,
-            r: out_r,
+            l: out_l.into(),
+            r: out_r.into(),
             len,
         },
     );
 
     Ok(())
 }
-
+/*
 pub async fn play(filepath: &str) -> anyhow::Result<()> {
-    let ctx = init("booger").await?;
+    let ctx = init("booger")?;
     let params = cubeb::StreamParamsBuilder::new()
         .format(STREAM_FORMAT)
         .rate(SAMPLE_FREQUENCY)
@@ -196,3 +213,4 @@ pub async fn play(filepath: &str) -> anyhow::Result<()> {
     cvar.wait_while(lock.lock().borrow_mut(), |&mut ended| !ended);
     Ok(())
 }
+*/

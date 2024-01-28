@@ -11,7 +11,9 @@ use crate::{theater::basement::cla::GameProgrammeSettings, MyEvent};
 
 use self::{actors::ActressDefinition, stage3d::Colliders};
 
-use super::{backstage::plumbing::DefaultRoutines, Definitions, Implementations};
+use super::{
+    backstage::plumbing::DefaultRoutines, orchestra::Orchestra, Definitions, Implementations,
+};
 
 pub mod actors;
 pub mod chorus;
@@ -100,6 +102,7 @@ pub trait Scenic {
         renderer: Arc<Renderer>,
         routines: Arc<DefaultRoutines>,
         rts: &Runtime,
+        orchestra: Arc<Orchestra>,
     );
     fn scene_starting_cam_info(&self) -> CamInfo;
     fn raw_definition(&mut self) -> &mut Definitions;

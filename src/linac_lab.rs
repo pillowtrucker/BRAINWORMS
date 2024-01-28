@@ -1,5 +1,6 @@
 use bl::brainworms_arson::{parse_fireworks, Gay, KineticEffect, KineticLabel, ShakeLetters};
-use bl::brainworms_farting_noises::play;
+
+use bl::brainworms_farting_noises::AudioCommand;
 use bl::log::info;
 use bl::nalgebra::distance;
 use bl::nanorand::RandomGen;
@@ -10,6 +11,7 @@ use bl::rend3::Renderer;
 use bl::the_great_mind_palace_of_theatrical_arts::basement::input_handling::{
     AcceptedInput, DebugInputContext, HandlesInputContexts, KeyBindings,
 };
+use bl::the_great_mind_palace_of_theatrical_arts::play::orchestra::Orchestra;
 use bl::the_great_mind_palace_of_theatrical_arts::play::scene::actors::create_actor;
 use bl::the_great_mind_palace_of_theatrical_arts::play::scene::chorus::Choral;
 use bl::the_great_mind_palace_of_theatrical_arts::play::scene::stage3d::{
@@ -43,6 +45,8 @@ use brainworms_lib::{
 use egui::Context;
 use nanorand::Rng;
 
+use std::thread::sleep;
+use std::time::Duration;
 use std::{collections::HashMap, f32::consts::PI, sync::Arc};
 
 use DebugInputContext as DIC;
@@ -187,6 +191,7 @@ impl LinacLabScene {
         renderer: Arc<Renderer>,
         _routines: Arc<DefaultRoutines>,
         rts: &Runtime,
+        orchestra: Arc<Orchestra>,
     ) {
         let Definitions::SceneDefinition(definition) = &self.definition else {
             panic!("scene has non-scene definition")
@@ -281,9 +286,18 @@ impl LinacLabScene {
             )
             .await;
         });
-        rts.spawn(play(
-            "./brainworms_farting_noises/libymfm.wasm/docs/vgm/ym2612.vgm",
+        orchestra.send_cmd(AudioCommand::Prebake(
+            "./brainworms_farting_noises/libymfm.wasm/docs/vgm/ym2612.vgm".to_owned(),
         ));
+        let orchestra = Arc::clone(&orchestra);
+        rts.spawn_blocking(move || {
+            while !orchestra.is_registered("ym2612.vgm") {
+                println!("audio file not ready");
+                sleep(Duration::from_secs(2));
+            }
+            println!("sending command from shitty closure to play");
+            orchestra.send_cmd(AudioCommand::Play("ym2612.vgm".to_owned()));
+        });
     }
 
     pub fn starting_cam_info(&self) -> CamInfo {

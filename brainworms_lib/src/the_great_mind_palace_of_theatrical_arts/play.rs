@@ -13,6 +13,7 @@ use crate::{theater::basement::input_handling::InputContext, GameProgrammeState,
 
 use self::{
     backstage::plumbing::DefaultRoutines,
+    orchestra::Orchestra,
     scene::{chorus::Choral, CamInfo, SceneDefinition, SceneImplementation, Scenic},
 };
 
@@ -43,6 +44,7 @@ pub trait Playable<InputContextEnum: InputContext> {
         renderer: Arc<Renderer>,
         routines: Arc<DefaultRoutines>,
         rts: &Runtime,
+        orchestra: Arc<Orchestra>,
     );
     fn define_playable(&mut self);
     fn implement_chorus_for_playable(&self, egui_ctx: Context);
@@ -97,8 +99,9 @@ impl<
         renderer: Arc<Renderer>,
         routines: Arc<DefaultRoutines>,
         rts: &Runtime,
+        orchestra: Arc<Orchestra>,
     ) {
-        self.implement_scene(settings, event_loop, renderer, routines, rts)
+        self.implement_scene(settings, event_loop, renderer, routines, rts, orchestra)
     }
 
     fn define_playable(&mut self) {
