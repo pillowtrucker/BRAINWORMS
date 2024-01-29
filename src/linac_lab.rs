@@ -45,6 +45,7 @@ use brainworms_lib::{
 use egui::Context;
 use nanorand::Rng;
 
+use std::borrow::BorrowMut;
 use std::thread::sleep;
 use std::time::Duration;
 use std::{collections::HashMap, f32::consts::PI, sync::Arc};
@@ -289,14 +290,57 @@ impl LinacLabScene {
         orchestra.send_cmd(AudioCommand::Prebake(
             "./brainworms_farting_noises/libymfm.wasm/docs/vgm/ym2612.vgm".to_owned(),
         ));
-        let orchestra = Arc::clone(&orchestra);
+        let orchestra_player = Arc::clone(&orchestra);
+        let cv_playback_started_send = Arc::new((bl::Mutex::new(false), bl::Condvar::new()));
+        let cv_playback_started_recv = Arc::clone(&cv_playback_started_send);
+
         rts.spawn_blocking(move || {
-            while !orchestra.is_registered("ym2612.vgm") {
+            while !orchestra_player.is_registered("ym2612.vgm") {
                 println!("audio file not ready");
                 sleep(Duration::from_secs(2));
             }
             println!("sending command from shitty closure to play");
-            orchestra.send_cmd(AudioCommand::Play("ym2612.vgm".to_owned()));
+            orchestra_player.send_cmd(AudioCommand::Play("ym2612.vgm".to_owned()));
+            let (lock, cvar) = &*cv_playback_started_send;
+            let mut playback_started = lock.lock();
+            *playback_started = true;
+            cvar.notify_one();
+        });
+        let cv_playback_paused_send = Arc::new((bl::Mutex::new(false), bl::Condvar::new()));
+        let cv_playback_paused_recv = Arc::clone(&cv_playback_paused_send);
+        let orchestra_pauser = Arc::clone(&orchestra);
+        rts.spawn_blocking(move || {
+            let (lock, cvar) = &*cv_playback_started_recv;
+            cvar.wait_while(lock.lock().borrow_mut(), |&mut started| !started);
+            sleep(Duration::from_secs(2));
+            println!("sending command from shitty closure to pause");
+            orchestra_pauser.send_cmd(AudioCommand::Pause("ym2612.vgm".to_owned()));
+            let (lock, cvar) = &*cv_playback_paused_send;
+            let mut playback_paused = lock.lock();
+            *playback_paused = true;
+            cvar.notify_one();
+        });
+        let orchestra_unpauser = Arc::clone(&orchestra);
+        let cv_playback_unpaused_send = Arc::new((bl::Mutex::new(false), bl::Condvar::new()));
+        let cv_playback_unpaused_recv = Arc::clone(&cv_playback_unpaused_send);
+        rts.spawn_blocking(move || {
+            let (lock, cvar) = &*cv_playback_paused_recv;
+            cvar.wait_while(lock.lock().borrow_mut(), |&mut paused| !paused);
+            sleep(Duration::from_secs(2));
+            println!("sending command from shitty closure to unpause");
+            orchestra_unpauser.send_cmd(AudioCommand::UnPause("ym2612.vgm".to_owned()));
+            let (lock, cvar) = &*cv_playback_unpaused_send;
+            let mut playback_unpaused = lock.lock();
+            *playback_unpaused = true;
+            cvar.notify_one();
+        });
+        let orchestra_stopper = Arc::clone(&orchestra);
+        rts.spawn_blocking(move || {
+            let (lock, cvar) = &*cv_playback_unpaused_recv;
+            cvar.wait_while(lock.lock().borrow_mut(), |&mut unpaused| !unpaused);
+            sleep(Duration::from_secs(2));
+            println!("sending command from shitty closure to stop");
+            orchestra_stopper.send_cmd(AudioCommand::Stop("ym2612.vgm".to_owned()));
         });
     }
 

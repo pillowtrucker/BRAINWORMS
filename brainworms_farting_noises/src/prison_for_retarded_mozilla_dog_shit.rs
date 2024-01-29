@@ -1,6 +1,9 @@
 use std::{
     borrow::BorrowMut,
-    collections::hash_map::Entry::{Occupied, Vacant},
+    collections::{
+        hash_map::Entry::{Occupied, Vacant},
+        VecDeque,
+    },
     sync::{
         mpsc::{Receiver, Sender},
         Arc,
@@ -20,7 +23,7 @@ pub fn init(ctx_name: &str) -> anyhow::Result<Context> {
 pub enum AudioPrisonOrder {
     Play(JingleName),
     Pause(JingleName),
-    Stop(JingleName),
+    UnPause(JingleName),
     Drop(JingleName),
     Die,
 }
@@ -30,7 +33,7 @@ pub fn prison(
     registry: Arc<Mutex<JingleRegistry>>,
     tx: Sender<AudioPrisonOrder>,
 ) {
-    let ctx = init(&format!("audio ctx gen {}", gen)).expect("failed context init");
+    let ctx = init(&format!("audio ctx gen {}", gen)).expect("failed audio context init");
     let mut state = Jukebox::new();
     while let Ok(cmd) = rx.recv() {
         match cmd {
@@ -53,8 +56,10 @@ pub fn prison(
                 let cv_playback_ended_inside_copy = Arc::clone(&cv_playback_ended);
                 let out_l = jingle.l.clone();
                 let out_r = jingle.r.clone();
+                let n_dc = name.clone();
+                let n_sc = name.clone();
                 builder
-                    .name("Cubeb jingle {name}")
+                    .name(format!("Cubeb jingle {n_dc}"))
                     .default_output(&params)
                     .latency(0x1000)
                     .data_callback(move |_, output| {
@@ -70,7 +75,7 @@ pub fn prison(
                         output.len() as isize
                     })
                     .state_callback(move |state| {
-                        println!("stream {:?}", state);
+                        println!("stream {:?} {n_sc}", state);
                         match state {
                             cubeb::State::Started => {}
                             cubeb::State::Stopped => {}
@@ -80,19 +85,22 @@ pub fn prison(
                                 *playback_ended = true;
                                 cvar.notify_one();
                             }
-                            cubeb::State::Error => panic!("playback error"),
+                            cubeb::State::Error => panic!("playback error {n_sc}"),
                         }
                     });
 
-                let stream = builder.init(&ctx).expect("Failed to create cubeb stream");
+                let stream = builder
+                    .init(&ctx)
+                    .expect("Failed to create cubeb stream for {name}");
+
                 let _ = stream.start();
                 {
                     match state.entry(name.clone()) {
                         Occupied(mut eo) => {
-                            eo.get_mut().push(stream);
+                            eo.get_mut().push_back(stream);
                         }
                         Vacant(v) => {
-                            v.insert(vec![stream]);
+                            v.insert(VecDeque::from([stream]));
                         }
                     };
                 }
@@ -104,10 +112,24 @@ pub fn prison(
                     let _ = tx.send(AudioPrisonOrder::Drop(name));
                 });
             }
-            AudioPrisonOrder::Pause(_) => todo!(),
-            AudioPrisonOrder::Stop(_) => todo!(),
+            AudioPrisonOrder::Pause(name) => {
+                for stream in &state[&name] {
+                    let _ = stream.stop();
+                }
+            }
+            // this one drops the stream but keeps data prebaked
             AudioPrisonOrder::Drop(name) => {
-                state.remove(&name);
+                match state.entry(name.clone()) {
+                    Occupied(mut eo) => {
+                        eo.get_mut().pop_front();
+                    }
+                    Vacant(_) => {}
+                };
+            }
+            AudioPrisonOrder::UnPause(name) => {
+                for stream in &state[&name] {
+                    let _ = stream.start();
+                }
             }
             AudioPrisonOrder::Die => return,
         }

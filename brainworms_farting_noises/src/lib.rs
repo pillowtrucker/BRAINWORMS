@@ -1,7 +1,12 @@
 pub mod prison_for_retarded_mozilla_dog_shit;
 
 use std::{
-    collections::HashMap, fs::File, io::Read, path::Path, ptr::slice_from_raw_parts, sync::Arc,
+    collections::{HashMap, VecDeque},
+    fs::File,
+    io::Read,
+    path::Path,
+    ptr::slice_from_raw_parts,
+    sync::Arc,
     thread,
 };
 
@@ -21,12 +26,13 @@ pub enum AudioCommand {
     Prebake(PathToJingle),
     Play(JingleName),
     Pause(JingleName),
-    Stop(JingleName),
+    UnPause(JingleName),
     Drop(JingleName),
+    Stop(JingleName),
     Die,
 }
 
-pub type Jukebox = HashMap<JingleName, Vec<Stream<StereoFrame<f32>>>>;
+pub type Jukebox = HashMap<JingleName, VecDeque<Stream<StereoFrame<f32>>>>;
 
 pub type JingleRegistry = HashMap<JingleName, Jingle>;
 pub async fn audio_router_thread(
@@ -52,11 +58,24 @@ pub async fn audio_router_thread(
                 println!("sending play command for {name} to prison");
                 let _ = prison_tx.send(AudioPrisonOrder::Play(name));
             }
-            AudioCommand::Pause(_) => todo!(),
-            AudioCommand::Stop(_) => todo!(),
+            AudioCommand::Pause(name) => {
+                println!("pausing {name}");
+                let _ = prison_tx.send(AudioPrisonOrder::Pause(name));
+            }
+            // this one drops the actual data
             AudioCommand::Drop(n) => {
                 let mut registry = registry.lock();
                 registry.remove(&n);
+            }
+
+            AudioCommand::UnPause(name) => {
+                println!("unpausing {name}");
+                let _ = prison_tx.send(AudioPrisonOrder::UnPause(name));
+            }
+            AudioCommand::Stop(name) => {
+                println!("stopping {name}");
+                let _ = prison_tx.send(AudioPrisonOrder::Pause(name.clone()));
+                let _ = prison_tx.send(AudioPrisonOrder::Drop(name));
             }
             AudioCommand::Die => {
                 let _ = prison_tx.send(AudioPrisonOrder::Die);
@@ -128,89 +147,3 @@ fn prebake(ptj: PathToJingle, registry: Arc<Mutex<JingleRegistry>>) -> anyhow::R
 
     Ok(())
 }
-/*
-pub async fn play(filepath: &str) -> anyhow::Result<()> {
-    let ctx = init("booger")?;
-    let params = cubeb::StreamParamsBuilder::new()
-        .format(STREAM_FORMAT)
-        .rate(SAMPLE_FREQUENCY)
-        .channels(2)
-        .layout(cubeb::ChannelLayout::STEREO)
-        .take();
-
-    let mut position = 0u32;
-
-    let mut builder = cubeb::StreamBuilder::<StereoFrame<f32>>::new();
-
-    let mut file = File::open(filepath).unwrap();
-    let mut buffer = Vec::new();
-    let _ = file.read_to_end(&mut buffer).unwrap();
-
-    // read vgm
-    let mut vgmplay = VgmPlay::new(
-        SoundSlot::new(SAMPLE_FREQUENCY, SAMPLE_FREQUENCY, MAX_SAMPLE_SIZE),
-        &buffer,
-    )
-    .unwrap();
-    let mut sampling_l;
-    let mut sampling_r;
-
-    let mut out_l = Vec::<f32>::with_capacity(MAX_SAMPLE_SIZE * 2);
-    let mut out_r = Vec::<f32>::with_capacity(MAX_SAMPLE_SIZE * 2);
-
-    let cv_playback_ended = Arc::new((Mutex::new(false), Condvar::new()));
-    let cv_playback_ended_inside_copy = Arc::clone(&cv_playback_ended);
-
-    #[allow(clippy::absurd_extreme_comparisons)]
-    while vgmplay.play(false) <= 0 {
-        unsafe {
-            sampling_l = slice_from_raw_parts(vgmplay.get_sampling_l_ref(), MAX_SAMPLE_SIZE)
-                .as_ref()
-                .unwrap();
-            sampling_r = slice_from_raw_parts(vgmplay.get_sampling_r_ref(), MAX_SAMPLE_SIZE)
-                .as_ref()
-                .unwrap();
-        }
-        out_l.extend_from_slice(sampling_l);
-        out_r.extend_from_slice(sampling_r);
-    }
-    let out_length = out_l.len();
-    builder
-        .name("Cubeb stereo")
-        .default_output(&params)
-        .latency(0x1000)
-        .data_callback(move |_, output| {
-            for f in output.iter_mut() {
-                if (position as usize) < out_length {
-                    f.l = out_l[position as usize];
-                    f.r = out_r[position as usize];
-                    position += 1;
-                } else {
-                    return 0;
-                }
-            }
-            output.len() as isize
-        })
-        .state_callback(move |state| {
-            println!("stream {:?}", state);
-            match state {
-                cubeb::State::Started => {}
-                cubeb::State::Stopped => {}
-                cubeb::State::Drained => {
-                    let (lock, cvar) = &*cv_playback_ended_inside_copy;
-                    let mut playback_ended = lock.lock();
-                    *playback_ended = true;
-                    cvar.notify_one();
-                }
-                cubeb::State::Error => panic!("playback error"),
-            }
-        });
-
-    let stream = builder.init(&ctx).expect("Failed to create cubeb stream");
-
-    stream.start()?;
-    let (lock, cvar) = &*cv_playback_ended;
-    cvar.wait_while(lock.lock().borrow_mut(), |&mut ended| !ended);
-    Ok(())
-}
-*/
