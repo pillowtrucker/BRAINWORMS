@@ -1,6 +1,7 @@
 use bl::brainworms_arson::{parse_fireworks, Gay, KineticEffect, KineticLabel, ShakeLetters};
 
 use bl::brainworms_farting_noises::AudioCommand;
+use bl::brainworms_farting_noises::TicketedAudioRequestData as TARD;
 use bl::log::info;
 use bl::nalgebra::distance;
 use bl::nanorand::RandomGen;
@@ -46,6 +47,7 @@ use egui::Context;
 use nanorand::Rng;
 
 use std::borrow::BorrowMut;
+use std::path::PathBuf;
 use std::thread::sleep;
 use std::time::Duration;
 use std::{collections::HashMap, f32::consts::PI, sync::Arc};
@@ -287,20 +289,29 @@ impl LinacLabScene {
             )
             .await;
         });
-        orchestra.send_cmd(AudioCommand::Prebake(
-            "./brainworms_farting_noises/libymfm.wasm/docs/vgm/ym2612.vgm".to_owned(),
-        ));
+        let test_path =
+            PathBuf::from("./brainworms_farting_noises/libymfm.wasm/docs/vgm/ym2612.vgm");
+        let test_filename = Arc::new(test_path.file_name().unwrap().to_string_lossy().to_string());
+        let mut rng = nanorand::tls_rng();
+        let random_bytes = [0; 16];
+        let random_bytes = random_bytes.map(|_| rng.generate::<u8>());
+        info!("random bytes {random_bytes:?}");
+        let test_uuid = bl::uuid::Builder::from_random_bytes(random_bytes).into_uuid();
+        orchestra.send_cmd(AudioCommand::Prebake(TARD::ByPath(test_path)));
         let orchestra_player = Arc::clone(&orchestra);
         let cv_playback_started_send = Arc::new((bl::Mutex::new(false), bl::Condvar::new()));
         let cv_playback_started_recv = Arc::clone(&cv_playback_started_send);
-
+        let fname = test_filename.clone();
         rts.spawn_blocking(move || {
-            while !orchestra_player.is_registered("ym2612.vgm") {
+            while !orchestra_player.is_registered(&fname) {
                 println!("audio file not ready");
                 sleep(Duration::from_secs(2));
             }
             println!("sending command from shitty closure to play");
-            orchestra_player.send_cmd(AudioCommand::Play("ym2612.vgm".to_owned()));
+            orchestra_player.send_cmd(AudioCommand::Play(TARD::Targeted(
+                fname.to_string(),
+                test_uuid,
+            )));
             let (lock, cvar) = &*cv_playback_started_send;
             let mut playback_started = lock.lock();
             *playback_started = true;
@@ -309,12 +320,16 @@ impl LinacLabScene {
         let cv_playback_paused_send = Arc::new((bl::Mutex::new(false), bl::Condvar::new()));
         let cv_playback_paused_recv = Arc::clone(&cv_playback_paused_send);
         let orchestra_pauser = Arc::clone(&orchestra);
+        let fname = test_filename.clone();
         rts.spawn_blocking(move || {
             let (lock, cvar) = &*cv_playback_started_recv;
             cvar.wait_while(lock.lock().borrow_mut(), |&mut started| !started);
             sleep(Duration::from_secs(2));
             println!("sending command from shitty closure to pause");
-            orchestra_pauser.send_cmd(AudioCommand::Pause("ym2612.vgm".to_owned()));
+            orchestra_pauser.send_cmd(AudioCommand::Pause(TARD::Targeted(
+                fname.to_string(),
+                test_uuid,
+            )));
             let (lock, cvar) = &*cv_playback_paused_send;
             let mut playback_paused = lock.lock();
             *playback_paused = true;
@@ -323,12 +338,16 @@ impl LinacLabScene {
         let orchestra_unpauser = Arc::clone(&orchestra);
         let cv_playback_unpaused_send = Arc::new((bl::Mutex::new(false), bl::Condvar::new()));
         let cv_playback_unpaused_recv = Arc::clone(&cv_playback_unpaused_send);
+        let fname = test_filename.clone();
         rts.spawn_blocking(move || {
             let (lock, cvar) = &*cv_playback_paused_recv;
             cvar.wait_while(lock.lock().borrow_mut(), |&mut paused| !paused);
             sleep(Duration::from_secs(2));
             println!("sending command from shitty closure to unpause");
-            orchestra_unpauser.send_cmd(AudioCommand::UnPause("ym2612.vgm".to_owned()));
+            orchestra_unpauser.send_cmd(AudioCommand::UnPause(TARD::Targeted(
+                fname.to_string(),
+                test_uuid,
+            )));
             let (lock, cvar) = &*cv_playback_unpaused_send;
             let mut playback_unpaused = lock.lock();
             *playback_unpaused = true;
@@ -340,7 +359,10 @@ impl LinacLabScene {
             cvar.wait_while(lock.lock().borrow_mut(), |&mut unpaused| !unpaused);
             sleep(Duration::from_secs(2));
             println!("sending command from shitty closure to stop");
-            orchestra_stopper.send_cmd(AudioCommand::Stop("ym2612.vgm".to_owned()));
+            orchestra_stopper.send_cmd(AudioCommand::Stop(TARD::Targeted(
+                test_filename.to_string(),
+                test_uuid,
+            )));
         });
     }
 

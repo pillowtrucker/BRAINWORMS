@@ -1,42 +1,65 @@
 pub mod prison_for_retarded_mozilla_dog_shit;
 
 use std::{
-    collections::{HashMap, VecDeque},
-    fs::File,
-    io::Read,
-    path::Path,
-    ptr::slice_from_raw_parts,
-    sync::Arc,
+    collections::HashMap, fs::File, io::Read, path::PathBuf, ptr::slice_from_raw_parts, sync::Arc,
     thread,
 };
 
 use cubeb::Stream;
 pub use cubeb::{self, Context, StereoFrame};
 use libymfm::{driver::VgmPlay, sound::SoundSlot};
-
+use log::{info, warn};
 use parking_lot::Mutex;
-use tokio::sync::mpsc::UnboundedReceiver;
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use uuid::Uuid;
 
 use crate::prison_for_retarded_mozilla_dog_shit::{prison, AudioPrisonOrder};
 const SAMPLE_FREQUENCY: u32 = 48_000;
 const STREAM_FORMAT: cubeb::SampleFormat = cubeb::SampleFormat::Float32LE;
 const MAX_SAMPLE_SIZE: usize = 2048;
+#[derive(Debug, Clone, PartialEq, Hash, Eq)]
+pub enum TicketedAudioRequestData {
+    ByPath(PathToJingle),
+    ByName(JingleName),
+    Targeted(JingleName, Uuid),
+}
 
+use self::TicketedAudioRequestData as TARD;
+impl From<AudioCommand> for AudioPrisonOrder {
+    fn from(val: AudioCommand) -> Self {
+        match val {
+            AudioCommand::Prebake(_) => {
+                panic!("illegal conversion attempt from {val:?} into AudioPrisonOrder")
+            }
+            AudioCommand::Play(d) => AudioPrisonOrder::Play(d),
+            AudioCommand::Pause(d) => AudioPrisonOrder::Pause(d),
+            AudioCommand::UnPause(d) => AudioPrisonOrder::UnPause(d),
+            AudioCommand::Drop(_) => panic!("AudioCommand::Drop and AudioPrisonOrder::Drop have significantly different meaning. Encountered {val:?}"),
+            AudioCommand::Stop(d) => AudioPrisonOrder::Drop(d),
+            AudioCommand::Die => {
+                warn!("I'm not sure you really wanted to do this - converting AudioCommand::Die into AudioPrisonOrder::Die");
+                AudioPrisonOrder::Die
+            },
+        }
+    }
+}
+#[derive(Debug, Clone)]
 pub enum AudioCommand {
-    Prebake(PathToJingle),
-    Play(JingleName),
-    Pause(JingleName),
-    UnPause(JingleName),
-    Drop(JingleName),
-    Stop(JingleName),
+    Prebake(TARD),
+    Play(TARD),
+    Pause(TARD),
+    UnPause(TARD),
+    Drop(TARD),
+    Stop(TARD),
     Die,
 }
 
-pub type Jukebox = HashMap<JingleName, VecDeque<Stream<StereoFrame<f32>>>>;
-
+pub type Jukebox = HashMap<JingleName, TicketMap>;
 pub type JingleRegistry = HashMap<JingleName, Jingle>;
+pub type TicketMap = HashMap<Uuid, Stream<StereoFrame<f32>>>;
 pub async fn audio_router_thread(
     mut rx: UnboundedReceiver<AudioCommand>,
+    tx: UnboundedSender<AudioCommand>,
     registry: Arc<Mutex<JingleRegistry>>,
     gen: u64,
 ) {
@@ -51,34 +74,64 @@ pub async fn audio_router_thread(
         let registry = registry.clone();
         let handle = Handle::current();
         match cmd {
-            AudioCommand::Prebake(p) => {
-                handle.spawn(async move { prebake(p, registry) });
+            AudioCommand::Prebake(tard) => match tard {
+                TicketedAudioRequestData::ByPath(p) => {
+                    handle.spawn(async move {
+                        info!("compiling {p:?}");
+                        let _ = prebake(p, registry);
+                    });
+                }
+                TicketedAudioRequestData::ByName(n) => {
+                    warn!("prebake accepts paths only, illegal string argument {n}")
+                }
+                TicketedAudioRequestData::Targeted(n, u) => {
+                    warn!("prebake accepts paths only, illegal string+uuid argument {n},{u}")
+                }
+            },
+            AudioCommand::Play(tard) => {
+                let _ = prison_tx.send(AudioPrisonOrder::Play(tard));
             }
-            AudioCommand::Play(name) => {
-                println!("sending play command for {name} to prison");
-                let _ = prison_tx.send(AudioPrisonOrder::Play(name));
-            }
-            AudioCommand::Pause(name) => {
-                println!("pausing {name}");
-                let _ = prison_tx.send(AudioPrisonOrder::Pause(name));
+            AudioCommand::Pause(tard) => {
+                let _ = prison_tx.send(AudioPrisonOrder::Pause(tard));
             }
             // this one drops the actual data
-            AudioCommand::Drop(n) => {
-                let mut registry = registry.lock();
-                registry.remove(&n);
+            AudioCommand::Drop(tard) => {
+                match tard {
+                    TicketedAudioRequestData::ByPath(p) => {
+                        let n: String = p.file_name().unwrap().to_string_lossy().into();
+                        warn!("Found path {p:?} instead of filename in Drop request, continuing with {n}");
+                        let _ = tx.send(AudioCommand::Drop(TARD::ByName(n)));
+                    }
+                    TicketedAudioRequestData::ByName(n) => {
+                        let mut registry = registry.lock();
+                        registry.remove(&n);
+                    }
+                    TicketedAudioRequestData::Targeted(n, u) => {
+                        warn!("illegal uuid argument {u} to Drop - Send the file name {n} alone instead");
+                    }
+                }
             }
 
-            AudioCommand::UnPause(name) => {
-                println!("unpausing {name}");
-                let _ = prison_tx.send(AudioPrisonOrder::UnPause(name));
+            AudioCommand::UnPause(tard) => {
+                let _ = prison_tx.send(AudioPrisonOrder::UnPause(tard));
             }
-            AudioCommand::Stop(name) => {
-                println!("stopping {name}");
-                let _ = prison_tx.send(AudioPrisonOrder::Pause(name.clone()));
-                let _ = prison_tx.send(AudioPrisonOrder::Drop(name));
+            AudioCommand::Stop(ref tard) => {
+                match tard {
+                    TicketedAudioRequestData::ByPath(p) => {
+                        let n: String = p.file_name().unwrap().to_string_lossy().into();
+                        warn!("Found path {p:?} instead of filename in Stop request, continuing with {n}");
+                        let _ = tx.send(AudioCommand::Stop(TARD::ByName(n)));
+                    }
+                    clean_one => {
+                        info!("processing {:?}", clean_one);
+                        let _ = prison_tx.send(AudioPrisonOrder::Pause(tard.to_owned()));
+                        let _ = prison_tx.send(cmd.into());
+                    }
+                }
             }
             AudioCommand::Die => {
-                let _ = prison_tx.send(AudioPrisonOrder::Die);
+                warn!("Killing audio backend and audio data manager.");
+                let _ = prison_tx.send(cmd.into());
                 let _ = prison_handle.join();
                 return;
             }
@@ -86,7 +139,7 @@ pub async fn audio_router_thread(
     }
 }
 
-pub type PathToJingle = String;
+pub type PathToJingle = PathBuf;
 pub type JingleName = String;
 #[derive(Debug, Clone, PartialEq)]
 pub struct Jingle {
@@ -129,11 +182,7 @@ fn prebake(ptj: PathToJingle, registry: Arc<Mutex<JingleRegistry>>) -> anyhow::R
 
     let len = out_l.len().max(out_r.len());
     let mut registry = registry.lock();
-    let jn = Path::new(&ptj)
-        .file_name()
-        .unwrap()
-        .to_string_lossy()
-        .into_owned();
+    let jn: String = ptj.file_name().unwrap().to_string_lossy().into();
     println!("added {jn} to registry");
     registry.insert(
         jn.clone(),

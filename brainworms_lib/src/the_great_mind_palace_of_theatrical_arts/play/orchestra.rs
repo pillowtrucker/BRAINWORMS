@@ -25,8 +25,13 @@ impl Orchestra {
     fn replace_worker(&mut self) {
         let gen = self.handler.0 + 1;
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
-        self.rth
-            .spawn(audio_router_thread(rx, self.jingle_registry.clone(), gen));
+        let tx_theirs = tx.clone();
+        self.rth.spawn(audio_router_thread(
+            rx,
+            tx_theirs,
+            self.jingle_registry.clone(),
+            gen,
+        ));
         let old_tx = take(&mut self.handler.1);
         old_tx.map(|old_tx| old_tx.send(AudioCommand::Die));
         self.handler = (gen, Some(tx));
