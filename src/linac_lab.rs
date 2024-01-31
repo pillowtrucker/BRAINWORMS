@@ -1,8 +1,8 @@
 use bl::brainworms_arson::{parse_fireworks, Gay, KineticEffect, KineticLabel, ShakeLetters};
 
-use bl::brainworms_farting_noises::AudioCommand;
 use bl::brainworms_farting_noises::TicketedAudioRequestData as TARD;
-use bl::log::info;
+use bl::brainworms_farting_noises::{AudioCommand, SoundGroup};
+use bl::log::{debug, info};
 use bl::nalgebra::distance;
 use bl::nanorand::RandomGen;
 
@@ -199,23 +199,16 @@ impl LinacLabScene {
         let Definitions::SceneDefinition(definition) = &self.definition else {
             panic!("scene has non-scene definition")
         };
-        /*
-        let scene1_starting_cam = make_camera((
-            definition.start_cam.clone(),
-            self.starting_cam_info().as_arr(),
-        ));
-        */
 
         let mut scene1_cameras = HashMap::new();
-        //        scene1_cameras.insert(scene1_starting_cam.name.clone(), scene1_starting_cam);
+
         for (c_n, cam_info) in &definition.cameras {
             let cam = make_camera((c_n.to_owned(), cam_info.as_arr()));
             scene1_cameras.insert(cam.name.clone(), cam);
         }
-        //        let scene1_starting_cam = scene1_cameras[&definition.start_cam].clone();
+
         let gltf_settings = settings.gltf_settings;
-        //        let renderer = Arc::clone(renderer);
-        //        let routines = Arc::clone(routines);
+
         let event_loop_proxy = event_loop.create_proxy();
         let scene1_uuid = self.uuid;
         let scene1_stage_name = definition.stage.0.clone();
@@ -295,9 +288,13 @@ impl LinacLabScene {
         let mut rng = nanorand::tls_rng();
         let random_bytes = [0; 16];
         let random_bytes = random_bytes.map(|_| rng.generate::<u8>());
+
         info!("random bytes {random_bytes:?}");
         let test_uuid = bl::uuid::Builder::from_random_bytes(random_bytes).into_uuid();
-        orchestra.send_cmd(AudioCommand::Prebake(TARD::ByPath(test_path)));
+        orchestra.send_cmd(AudioCommand::Prebake(
+            TARD::ByPath(test_path),
+            SoundGroup::BGM,
+        ));
         let orchestra_player = Arc::clone(&orchestra);
         let cv_playback_started_send = Arc::new((bl::Mutex::new(false), bl::Condvar::new()));
         let cv_playback_started_recv = Arc::clone(&cv_playback_started_send);
@@ -428,7 +425,6 @@ impl HandlesInputContexts<MyInputContexts> for LinacLabScene {
         let interacted_with = |binding| really_pressed(binding) || really_released(binding);
         let wown: fn(LinacLabIC) -> MIC = MIC::LinacLabIC; // RA thinks this is an unused variable without the signature..
         let wdbg: fn(DebugInputContext) -> MIC = MIC::DebugInputContext;
-        //        bl::log::info!("cur_context is {:?}", cur_context);
 
         let (win_w, win_h) = window.inner_size().into();
 
@@ -579,7 +575,7 @@ impl HandlesInputContexts<MyInputContexts> for LinacLabScene {
                             .then_some((k.to_owned(), v.to_owned()))
                     })
                     .collect();
-                    info!("collisions: {collisions:?}");
+                    debug!("collisions: {collisions:?}");
                     let Some((closest, _)) = collisions.iter().min_by(|c1, c2| {
                         let cam_point: nalgebra::Point3<f32> = cur_camera.info.location().into();
                         let min_c1 =
@@ -588,14 +584,15 @@ impl HandlesInputContexts<MyInputContexts> for LinacLabScene {
                                     distance(cd1, &cam_point).total_cmp(&distance(cd2, &cam_point))
                                 })
                                 .unwrap();
-                        bl::log::info!("min_c1 {min_c1}");
+
+                        debug!("min_c1 {min_c1}");
                         let min_c2 =
                             c2.1.iter()
                                 .min_by(|cd1, cd2| {
                                     distance(cd1, &cam_point).total_cmp(&distance(cd2, &cam_point))
                                 })
                                 .unwrap();
-                        bl::log::info!("min_c2 {min_c2}");
+                        debug!("min_c2 {min_c2}");
                         distance(min_c1, &cam_point).total_cmp(&distance(min_c2, &cam_point))
                     }) else {
                         buttons.retain(|_, v| v.is_pressed());
@@ -618,7 +615,6 @@ impl HandlesInputContexts<MyInputContexts> for LinacLabScene {
             }
             _ => {}
         }
-
         buttons.retain(|_, v| v.is_pressed());
     }
 }

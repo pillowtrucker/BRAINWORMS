@@ -28,7 +28,7 @@ use self::TicketedAudioRequestData as TARD;
 impl From<AudioCommand> for AudioPrisonOrder {
     fn from(val: AudioCommand) -> Self {
         match val {
-            AudioCommand::Prebake(_) => {
+            AudioCommand::Prebake(_,_) => {
                 panic!("illegal conversion attempt from {val:?} into AudioPrisonOrder")
             }
             AudioCommand::Play(d) => AudioPrisonOrder::Play(d),
@@ -40,22 +40,45 @@ impl From<AudioCommand> for AudioPrisonOrder {
                 warn!("I'm not sure you really wanted to do this - converting AudioCommand::Die into AudioPrisonOrder::Die");
                 AudioPrisonOrder::Die
             },
+            AudioCommand::SetVolume(g,v) => AudioPrisonOrder::SetVolume(g,v),
         }
     }
 }
 #[derive(Debug, Clone)]
 pub enum AudioCommand {
-    Prebake(TARD),
+    Prebake(TARD, SoundGroup),
     Play(TARD),
     Pause(TARD),
     UnPause(TARD),
     Drop(TARD),
     Stop(TARD),
+    SetVolume(SoundGroup, SoundVolume),
     Die,
 }
-
+pub type VoiceID = String;
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub enum SoundGroup {
+    BGM,
+    SFX,
+    Voice(VoiceID),
+}
+// this seems to be logarithmic scale like decibels but normalized to [0,1] which is very cool and useful I guess if you are an alien studying human acoustics
+pub type SoundVolume = f32;
 pub type Jukebox = HashMap<JingleName, TicketMap>;
-pub type JingleRegistry = HashMap<JingleName, Jingle>;
+#[derive(Debug)]
+pub struct JingleRegistry {
+    pub jingles: HashMap<JingleName, Jingle>,
+    pub volume: HashMap<SoundGroup, SoundVolume>,
+}
+
+impl Default for JingleRegistry {
+    fn default() -> Self {
+        Self {
+            jingles: Default::default(),
+            volume: HashMap::from([(SoundGroup::BGM, 0.1), (SoundGroup::SFX, 0.1)]),
+        }
+    }
+}
 pub type TicketMap = HashMap<Uuid, Stream<StereoFrame<f32>>>;
 pub async fn audio_router_thread(
     mut rx: UnboundedReceiver<AudioCommand>,
@@ -74,11 +97,11 @@ pub async fn audio_router_thread(
         let registry = registry.clone();
         let handle = Handle::current();
         match cmd {
-            AudioCommand::Prebake(tard) => match tard {
+            AudioCommand::Prebake(tard, group) => match tard {
                 TicketedAudioRequestData::ByPath(p) => {
                     handle.spawn(async move {
                         info!("compiling {p:?}");
-                        let _ = prebake(p, registry);
+                        let _ = prebake(p, group, registry);
                     });
                 }
                 TicketedAudioRequestData::ByName(n) => {
@@ -104,7 +127,7 @@ pub async fn audio_router_thread(
                     }
                     TicketedAudioRequestData::ByName(n) => {
                         let mut registry = registry.lock();
-                        registry.remove(&n);
+                        registry.jingles.remove(&n);
                     }
                     TicketedAudioRequestData::Targeted(n, u) => {
                         warn!("illegal uuid argument {u} to Drop - Send the file name {n} alone instead");
@@ -135,6 +158,10 @@ pub async fn audio_router_thread(
                 let _ = prison_handle.join();
                 return;
             }
+            AudioCommand::SetVolume(ref group, volume) => {
+                info!("setting volume {}% for {group:?}", volume * 100.0);
+                let _ = prison_tx.send(cmd.into());
+            }
         }
     }
 }
@@ -147,9 +174,14 @@ pub struct Jingle {
     pub l: Arc<Vec<f32>>,
     pub r: Arc<Vec<f32>>,
     pub len: usize,
+    pub group: SoundGroup,
 }
 
-fn prebake(ptj: PathToJingle, registry: Arc<Mutex<JingleRegistry>>) -> anyhow::Result<()> {
+fn prebake(
+    ptj: PathToJingle,
+    group: SoundGroup,
+    registry: Arc<Mutex<JingleRegistry>>,
+) -> anyhow::Result<()> {
     let mut file = File::open(&ptj)?;
     let mut buffer = Vec::new();
     let _ = file.read_to_end(&mut buffer)?;
@@ -183,14 +215,15 @@ fn prebake(ptj: PathToJingle, registry: Arc<Mutex<JingleRegistry>>) -> anyhow::R
     let len = out_l.len().max(out_r.len());
     let mut registry = registry.lock();
     let jn: String = ptj.file_name().unwrap().to_string_lossy().into();
-    println!("added {jn} to registry");
-    registry.insert(
+    info!("added {jn} to registry");
+    registry.jingles.insert(
         jn.clone(),
         Jingle {
             name: jn,
             l: out_l.into(),
             r: out_r.into(),
             len,
+            group,
         },
     );
 

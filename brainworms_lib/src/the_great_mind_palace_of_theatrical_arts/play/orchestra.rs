@@ -13,7 +13,7 @@ pub struct Orchestra {
 }
 impl Orchestra {
     pub fn new(rth: Handle) -> Self {
-        let jingle_registry = Arc::new(Mutex::new(JingleRegistry::new()));
+        let jingle_registry = Arc::new(Mutex::new(JingleRegistry::default()));
         let mut me = Self {
             handler: (0, None),
             jingle_registry,
@@ -41,6 +41,6 @@ impl Orchestra {
     }
     pub fn is_registered(&self, name: &str) -> bool {
         let registry = self.jingle_registry.lock();
-        registry.contains_key(name)
+        registry.jingles.contains_key(name)
     }
 }

@@ -15,7 +15,7 @@ use cubeb::{Context, StereoFrame};
 use log::{error, info, warn};
 use parking_lot::{Condvar, Mutex};
 
-use crate::{JingleRegistry, Jukebox, SAMPLE_FREQUENCY, STREAM_FORMAT};
+use crate::{JingleRegistry, Jukebox, SoundGroup, SoundVolume, SAMPLE_FREQUENCY, STREAM_FORMAT};
 
 pub fn init(ctx_name: &str) -> anyhow::Result<Context> {
     let ctx_name = ustr::ustr(ctx_name);
@@ -27,6 +27,7 @@ pub enum AudioPrisonOrder {
     Pause(TARD),
     UnPause(TARD),
     Drop(TARD),
+    SetVolume(SoundGroup, SoundVolume),
     Die,
 }
 pub fn prison(
@@ -51,12 +52,14 @@ pub fn prison(
                     let out_length;
                     let out_l;
                     let out_r;
+                    let vol;
                     {
                         let reg = registry.lock();
-                        jingle = &reg[name];
+                        jingle = &reg.jingles[name];
                         out_length = jingle.len;
                         out_l = jingle.l.clone();
                         out_r = jingle.r.clone();
+                        vol = reg.volume[&jingle.group];
                     }
 
                     let mut builder = cubeb::StreamBuilder::<StereoFrame<f32>>::new();
@@ -107,7 +110,7 @@ pub fn prison(
                     let stream = builder
                         .init(&ctx)
                         .expect("Failed to create cubeb stream for {name}");
-
+                    let _ = stream.set_volume(vol);
                     let _ = stream.start();
                     {
                         match state.entry(name.clone()) {
@@ -176,6 +179,28 @@ pub fn prison(
                     state.get(&n).map(|m| m.get(&u).map(|s| s.start()));
                 }
             },
+            AudioPrisonOrder::SetVolume(group, volume) => {
+                let mut reg = registry.lock();
+                reg.volume.insert(group.clone(), volume);
+                let affected_js: Vec<_> = reg
+                    .jingles
+                    .values()
+                    .filter_map(|j| {
+                        if j.group == group {
+                            Some(j.name.to_owned())
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+                for (n, s) in &state {
+                    if affected_js.contains(n) {
+                        for s in s.values() {
+                            let _ = s.set_volume(volume);
+                        }
+                    }
+                }
+            }
             AudioPrisonOrder::Die => return,
         }
     }
