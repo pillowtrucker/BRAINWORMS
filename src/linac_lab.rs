@@ -1,6 +1,8 @@
 use bl::brainworms_arson::{parse_fireworks, Gay, KineticEffect, KineticLabel, ShakeLetters};
-use bl::brainworms_farting_noises::play;
-use bl::log::info;
+
+use bl::brainworms_farting_noises::TicketedAudioRequestData as TARD;
+use bl::brainworms_farting_noises::{AudioCommand, SoundGroup};
+use bl::log::{debug, info};
 use bl::nalgebra::distance;
 use bl::nanorand::RandomGen;
 
@@ -10,6 +12,7 @@ use bl::rend3::Renderer;
 use bl::the_great_mind_palace_of_theatrical_arts::basement::input_handling::{
     AcceptedInput, DebugInputContext, HandlesInputContexts, KeyBindings,
 };
+use bl::the_great_mind_palace_of_theatrical_arts::play::orchestra::Orchestra;
 use bl::the_great_mind_palace_of_theatrical_arts::play::scene::actors::create_actor;
 use bl::the_great_mind_palace_of_theatrical_arts::play::scene::chorus::Choral;
 use bl::the_great_mind_palace_of_theatrical_arts::play::scene::stage3d::{
@@ -43,6 +46,10 @@ use brainworms_lib::{
 use egui::Context;
 use nanorand::Rng;
 
+use std::borrow::BorrowMut;
+use std::path::PathBuf;
+use std::thread::sleep;
+use std::time::Duration;
 use std::{collections::HashMap, f32::consts::PI, sync::Arc};
 
 use DebugInputContext as DIC;
@@ -187,27 +194,21 @@ impl LinacLabScene {
         renderer: Arc<Renderer>,
         _routines: Arc<DefaultRoutines>,
         rts: &Runtime,
+        orchestra: Arc<Orchestra>,
     ) {
         let Definitions::SceneDefinition(definition) = &self.definition else {
             panic!("scene has non-scene definition")
         };
-        /*
-        let scene1_starting_cam = make_camera((
-            definition.start_cam.clone(),
-            self.starting_cam_info().as_arr(),
-        ));
-        */
 
         let mut scene1_cameras = HashMap::new();
-        //        scene1_cameras.insert(scene1_starting_cam.name.clone(), scene1_starting_cam);
+
         for (c_n, cam_info) in &definition.cameras {
             let cam = make_camera((c_n.to_owned(), cam_info.as_arr()));
             scene1_cameras.insert(cam.name.clone(), cam);
         }
-        //        let scene1_starting_cam = scene1_cameras[&definition.start_cam].clone();
+
         let gltf_settings = settings.gltf_settings;
-        //        let renderer = Arc::clone(renderer);
-        //        let routines = Arc::clone(routines);
+
         let event_loop_proxy = event_loop.create_proxy();
         let scene1_uuid = self.uuid;
         let scene1_stage_name = definition.stage.0.clone();
@@ -281,9 +282,85 @@ impl LinacLabScene {
             )
             .await;
         });
-        rts.spawn(play(
-            "./brainworms_farting_noises/libymfm.wasm/docs/vgm/ym2612.vgm",
+        let test_path =
+            PathBuf::from("./brainworms_farting_noises/libymfm.wasm/docs/vgm/ym2612.vgm");
+        let test_filename = Arc::new(test_path.file_name().unwrap().to_string_lossy().to_string());
+        let mut rng = nanorand::tls_rng();
+        let random_bytes = [0; 16];
+        let random_bytes = random_bytes.map(|_| rng.generate::<u8>());
+
+        info!("random bytes {random_bytes:?}");
+        let test_uuid = bl::uuid::Builder::from_random_bytes(random_bytes).into_uuid();
+        orchestra.send_cmd(AudioCommand::Prebake(
+            TARD::ByPath(test_path),
+            SoundGroup::BGM,
         ));
+        let orchestra_player = Arc::clone(&orchestra);
+        let cv_playback_started_send = Arc::new((bl::Mutex::new(false), bl::Condvar::new()));
+        let cv_playback_started_recv = Arc::clone(&cv_playback_started_send);
+        let fname = test_filename.clone();
+        rts.spawn_blocking(move || {
+            while !orchestra_player.is_registered(&fname) {
+                println!("audio file not ready");
+                sleep(Duration::from_secs(2));
+            }
+            println!("sending command from shitty closure to play");
+            orchestra_player.send_cmd(AudioCommand::Play(TARD::Targeted(
+                fname.to_string(),
+                test_uuid,
+            )));
+            let (lock, cvar) = &*cv_playback_started_send;
+            let mut playback_started = lock.lock();
+            *playback_started = true;
+            cvar.notify_one();
+        });
+        let cv_playback_paused_send = Arc::new((bl::Mutex::new(false), bl::Condvar::new()));
+        let cv_playback_paused_recv = Arc::clone(&cv_playback_paused_send);
+        let orchestra_pauser = Arc::clone(&orchestra);
+        let fname = test_filename.clone();
+        rts.spawn_blocking(move || {
+            let (lock, cvar) = &*cv_playback_started_recv;
+            cvar.wait_while(lock.lock().borrow_mut(), |&mut started| !started);
+            sleep(Duration::from_secs(2));
+            println!("sending command from shitty closure to pause");
+            orchestra_pauser.send_cmd(AudioCommand::Pause(TARD::Targeted(
+                fname.to_string(),
+                test_uuid,
+            )));
+            let (lock, cvar) = &*cv_playback_paused_send;
+            let mut playback_paused = lock.lock();
+            *playback_paused = true;
+            cvar.notify_one();
+        });
+        let orchestra_unpauser = Arc::clone(&orchestra);
+        let cv_playback_unpaused_send = Arc::new((bl::Mutex::new(false), bl::Condvar::new()));
+        let cv_playback_unpaused_recv = Arc::clone(&cv_playback_unpaused_send);
+        let fname = test_filename.clone();
+        rts.spawn_blocking(move || {
+            let (lock, cvar) = &*cv_playback_paused_recv;
+            cvar.wait_while(lock.lock().borrow_mut(), |&mut paused| !paused);
+            sleep(Duration::from_secs(2));
+            println!("sending command from shitty closure to unpause");
+            orchestra_unpauser.send_cmd(AudioCommand::UnPause(TARD::Targeted(
+                fname.to_string(),
+                test_uuid,
+            )));
+            let (lock, cvar) = &*cv_playback_unpaused_send;
+            let mut playback_unpaused = lock.lock();
+            *playback_unpaused = true;
+            cvar.notify_one();
+        });
+        let orchestra_stopper = Arc::clone(&orchestra);
+        rts.spawn_blocking(move || {
+            let (lock, cvar) = &*cv_playback_unpaused_recv;
+            cvar.wait_while(lock.lock().borrow_mut(), |&mut unpaused| !unpaused);
+            sleep(Duration::from_secs(2));
+            println!("sending command from shitty closure to stop");
+            orchestra_stopper.send_cmd(AudioCommand::Stop(TARD::Targeted(
+                test_filename.to_string(),
+                test_uuid,
+            )));
+        });
     }
 
     pub fn starting_cam_info(&self) -> CamInfo {
@@ -348,7 +425,6 @@ impl HandlesInputContexts<MyInputContexts> for LinacLabScene {
         let interacted_with = |binding| really_pressed(binding) || really_released(binding);
         let wown: fn(LinacLabIC) -> MIC = MIC::LinacLabIC; // RA thinks this is an unused variable without the signature..
         let wdbg: fn(DebugInputContext) -> MIC = MIC::DebugInputContext;
-        //        bl::log::info!("cur_context is {:?}", cur_context);
 
         let (win_w, win_h) = window.inner_size().into();
 
@@ -499,7 +575,7 @@ impl HandlesInputContexts<MyInputContexts> for LinacLabScene {
                             .then_some((k.to_owned(), v.to_owned()))
                     })
                     .collect();
-                    info!("collisions: {collisions:?}");
+                    debug!("collisions: {collisions:?}");
                     let Some((closest, _)) = collisions.iter().min_by(|c1, c2| {
                         let cam_point: nalgebra::Point3<f32> = cur_camera.info.location().into();
                         let min_c1 =
@@ -508,14 +584,15 @@ impl HandlesInputContexts<MyInputContexts> for LinacLabScene {
                                     distance(cd1, &cam_point).total_cmp(&distance(cd2, &cam_point))
                                 })
                                 .unwrap();
-                        bl::log::info!("min_c1 {min_c1}");
+
+                        debug!("min_c1 {min_c1}");
                         let min_c2 =
                             c2.1.iter()
                                 .min_by(|cd1, cd2| {
                                     distance(cd1, &cam_point).total_cmp(&distance(cd2, &cam_point))
                                 })
                                 .unwrap();
-                        bl::log::info!("min_c2 {min_c2}");
+                        debug!("min_c2 {min_c2}");
                         distance(min_c1, &cam_point).total_cmp(&distance(min_c2, &cam_point))
                     }) else {
                         buttons.retain(|_, v| v.is_pressed());
@@ -538,7 +615,6 @@ impl HandlesInputContexts<MyInputContexts> for LinacLabScene {
             }
             _ => {}
         }
-
         buttons.retain(|_, v| v.is_pressed());
     }
 }
