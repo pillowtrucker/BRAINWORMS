@@ -42,7 +42,7 @@ rend3-routine = { version = "^0.3.0",path = "../rend3/rend3-routine" }
 webbrowser = "0.8.2"
 inox2d = {path = "../inox2d/inox2d"}
 inox2d-wgpu = {path = "../inox2d/inox2d-wgpu"}
-bytemuck = { version = "1.14.0", features = ["derive"] }
+bytemuck = { version = "1.14.1", features = ["derive"] }
 
 pico-args = "0.5"
 wgpu-profiler = "0.15.0"
