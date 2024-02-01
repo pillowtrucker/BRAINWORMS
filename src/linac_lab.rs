@@ -374,7 +374,7 @@ impl LinacLabScene {
             .clone()
     }
 
-    pub fn implement_chorus(&self, egui_ctx: Context) {
+    pub fn implement_chorus(&self, egui_ctx: Context, _orchestra: Arc<Orchestra>) {
         egui::Window::new("egui widget testing").show(&egui_ctx, |ui| {
             //
             ui.horizontal(|ui| {

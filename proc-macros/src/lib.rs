@@ -30,20 +30,7 @@ pub fn derive_scenic_partial(input: TokenStream) -> TokenStream {
     let tokens = quote! {
 
         impl Scenic for #ident {
-            /*
-            fn scene_definition(&mut self) -> &mut SceneDefinition {
-                let Definitions::SceneDefinition(definition) = &mut self.definition else {
-                    panic!("scene has non-scene definition")
-                };
-                definition
-            }
-            fn scene_implementation(&mut self) -> &mut Option<SceneImplementation> {
-                let Implementations::SceneImplementation(implementation) = &mut self.implementation else {
-                    panic!("scene has non-scene implementation")
-                };
-                implementation
-            }
-            */
+
             fn raw_definition(&mut self) -> &mut brainworms_lib::theater::play::Definitions {
                 &mut self.definition
             }
@@ -85,13 +72,28 @@ pub fn derive_scenic_partial(input: TokenStream) -> TokenStream {
     tokens.into()
 }
 #[proc_macro_derive(Choral)]
-pub fn derive_choral_partial(input: TokenStream) -> TokenStream {
+pub fn derive_choral(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let ident = input.ident;
     let tokens = quote! {
         impl Choral for #ident {
-            fn implement_chorus_for_choral(&self, egui_ctx: brainworms_lib::egui::Context) {
-                self.implement_chorus(egui_ctx);
+            fn implement_chorus_for_choral(&self, egui_ctx: brainworms_lib::egui::Context, orchestra: Arc<brainworms_lib::theater::play::orchestra::Orchestra>) {
+                self.implement_chorus(egui_ctx, orchestra);
+            }
+            fn chorus_uuid(&self) -> Uuid {
+                self.uuid
+            }
+            fn chorus_name(&self) -> &str {
+                &self.name
+            }
+            fn chorus_definition(&mut self) -> &mut Definitions {
+                &mut self.definition
+            }
+            fn chorus_implementation(&mut self) -> &mut Option<Implementations> {
+                &mut self.implementation
+            }
+            fn define_chorus(&mut self) {
+                self.define()
             }
 
         }
@@ -102,29 +104,70 @@ pub fn derive_choral_partial(input: TokenStream) -> TokenStream {
 
 // enum_dispatch doesn't work across crates..
 #[proc_macro_derive(Playable, attributes(input_context_enum))]
-pub fn derive_playable_for_enum(input: TokenStream) -> TokenStream {
+pub fn derive_playable(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 
-    let enum_ident = &input.ident;
+    let ident = &input.ident;
     //    let mut tokens: TokenStream;
+    let the_input_context_enum: &Ident = &input
+        .attrs
+        .iter()
+        .find(|a| {
+            a.path()
+                .get_ident()
+                .is_some_and(|aa| aa == "input_context_enum")
+        })
+        .map(|aa| {
+            aa.parse_args()
+                .expect("input_context_enum attribute required")
+        })
+        .expect("input_context_enum attribute required");
     let out = match input.data {
         syn::Data::Struct(_) => {
-            panic!("enums only");
+            quote! {
+            impl<InputContextEnum: InputContext>
+                Playable<InputContextEnum> for #ident
+            {
+                fn playable_uuid(&self) -> Uuid {
+                    self.chorus_uuid()
+                }
+
+                fn playable_name(&self) ->  &str {
+                    self.chorus_name()
+                }
+
+                fn playable_definition(&mut self) ->  &mut Definitions {
+                    self.chorus_definition()
+                }
+
+                fn playable_implementation(&mut self) ->  &mut Option<Implementations> {
+                    self.chorus_implementation()
+                }
+
+                fn starting_cam_info(&self) -> CamInfo {
+                    CamInfo::default()
+                }
+
+                fn implement_playable(&mut self,settings: &GameProgrammeSettings,event_loop: &EventLoop<MyEvent>,renderer:Arc<Renderer>,routines:Arc<DefaultRoutines>,rts: &Runtime,orchestra:Arc<Orchestra>,) {
+
+                }
+
+                fn define_playable(&mut self) {
+                    self.define_chorus()
+                }
+
+                fn implement_chorus_for_playable(&self,egui_ctx:Context,orchestra:Arc<Orchestra>) {
+                    self.implement_chorus_for_choral(egui_ctx,orchestra)
+                }
+
+                fn handle_input_for_playable(&mut self,settings: &GameProgrammeSettings,state: &mut GameProgrammeState<InputContextEnum>,window: &Arc<Window>,) {
+                    // egui has its own input handling
+                }
+            }
+
+                        }
         }
         syn::Data::Enum(enum_data) => {
-            let the_input_context_enum: &Ident = &input
-                .attrs
-                .iter()
-                .find(|a| {
-                    a.path()
-                        .get_ident()
-                        .is_some_and(|aa| aa == "input_context_enum")
-                })
-                .map(|aa| {
-                    aa.parse_args()
-                        .expect("input_context_enum attribute required")
-                })
-                .expect("input_context_enum attribute required");
             let variants = &enum_data.variants;
             let imp_fn = |fn_name, fn_args: &'static str| {
                 variants.iter().map(move |v| {
@@ -139,7 +182,7 @@ pub fn derive_playable_for_enum(input: TokenStream) -> TokenStream {
                             .collect()
                     };
                     quote! {
-                        #enum_ident :: #name(inner) => inner.#fn_name(#(#fn_args),*)
+                        #ident :: #name(inner) => inner.#fn_name(#(#fn_args),*)
                     }
                 })
             };
@@ -151,12 +194,12 @@ pub fn derive_playable_for_enum(input: TokenStream) -> TokenStream {
                 "implement_playable",
                 "settings,event_loop,renderer,routines,rts,orchestra",
             );
-            let imp_chr = imp_fn("implement_chorus_for_playable", "egui_ctx");
+            let imp_chr = imp_fn("implement_chorus_for_playable", "egui_ctx,orchestra");
             let pl_def = imp_fn("playable_definition", "");
             let pl_imp = imp_fn("playable_implementation", "");
             let pl_inp = imp_fn("handle_input_for_playable", "settings,state,window");
             quote! {
-            impl Playable<#the_input_context_enum> for #enum_ident {
+            impl Playable<#the_input_context_enum> for #ident {
                 fn playable_uuid(&self) -> Uuid {
                     match self {
                         #(#imp_pl_uuid),*
@@ -190,7 +233,7 @@ pub fn derive_playable_for_enum(input: TokenStream) -> TokenStream {
                         #(#def_pl),*
                     }
                 }
-                fn implement_chorus_for_playable(&self, egui_ctx: Context) {
+                fn implement_chorus_for_playable(&self, egui_ctx: Context, orchestra: Arc<brainworms_lib::theater::play::orchestra::Orchestra>) {
                     match self {
                         #(#imp_chr),*
                     }
@@ -219,7 +262,7 @@ pub fn derive_playable_for_enum(input: TokenStream) -> TokenStream {
             }}
         }
         syn::Data::Union(_) => {
-            panic!("enums only");
+            panic!("but we're just like a family in here. There's a fussball table and 5 kinds of sweetened cereal");
         }
     };
     //    println!("{}", out);

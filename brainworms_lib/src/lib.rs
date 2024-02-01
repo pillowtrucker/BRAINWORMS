@@ -292,7 +292,10 @@ impl<
                 let current_scene_id = game_state.current_playable.unwrap();
                 let current_scene = game_data.play.playables.get_mut(&current_scene_id).unwrap();
 
-                current_scene.implement_chorus_for_playable(egui_ctx.clone());
+                current_scene.implement_chorus_for_playable(
+                    egui_ctx.clone(),
+                    game_state.orchestra.as_ref().unwrap().clone(),
+                );
                 egui::Window::new("FPS").show(&egui_ctx, |ui| {
                     ui.label(std::format!(
                         "framerate: {:.0}fps",

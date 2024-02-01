@@ -47,7 +47,7 @@ pub trait Playable<InputContextEnum: InputContext> {
         orchestra: Arc<Orchestra>,
     );
     fn define_playable(&mut self);
-    fn implement_chorus_for_playable(&self, egui_ctx: Context);
+    fn implement_chorus_for_playable(&self, egui_ctx: Context, orchestra: Arc<Orchestra>);
     //    fn get_current_input_context(&self) -> &InputContext<TO>;
     fn handle_input_for_playable(
         &mut self,
@@ -75,6 +75,7 @@ pub enum Implementations {
     #[default]
     BogusImplementation,
 }
+
 impl<
         InputContextEnum: InputContext,
         T: Scenic + Choral + HandlesInputContexts<InputContextEnum>,
@@ -107,8 +108,8 @@ impl<
     fn define_playable(&mut self) {
         self.define_scene()
     }
-    fn implement_chorus_for_playable(&self, egui_ctx: Context) {
-        self.implement_chorus_for_choral(egui_ctx);
+    fn implement_chorus_for_playable(&self, egui_ctx: Context, orchestra: Arc<Orchestra>) {
+        self.implement_chorus_for_choral(egui_ctx, orchestra);
     }
 
     fn playable_definition(&mut self) -> &mut Definitions {
