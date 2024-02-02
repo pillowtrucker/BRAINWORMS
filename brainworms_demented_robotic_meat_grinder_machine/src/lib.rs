@@ -28,8 +28,7 @@ pub fn derive_scenic_partial(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let ident = input.ident;
     let tokens = quote! {
-
-        impl Scenic for #ident {
+        impl brainworms_lib::theater::play::scene::Scenic for #ident {
 
             fn raw_definition(&mut self) -> &mut brainworms_lib::theater::play::Definitions {
                 &mut self.definition
@@ -49,10 +48,10 @@ pub fn derive_scenic_partial(input: TokenStream) -> TokenStream {
             fn implement_scene(&mut self,
                                settings: &brainworms_lib::theater::basement::cla::GameProgrammeSettings,
                                event_loop: &brainworms_lib::winit::event_loop::EventLoop<brainworms_lib::MyEvent>,
-                               renderer: Arc<brainworms_lib::rend3::Renderer>,
-                               routines: Arc<brainworms_lib::theater::play::backstage::plumbing::DefaultRoutines>,
+                               renderer: std::sync::Arc<brainworms_lib::rend3::Renderer>,
+                               routines: std::sync::Arc<brainworms_lib::theater::play::backstage::plumbing::DefaultRoutines>,
                                rts: &brainworms_lib::tokio::runtime::Runtime,
-                               orchestra: Arc<brainworms_lib::theater::play::orchestra::Orchestra>
+                               orchestra: std::sync::Arc<brainworms_lib::theater::play::orchestra::Orchestra>
             ) {
                 self.implement(
                     settings,
@@ -76,20 +75,20 @@ pub fn derive_choral(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let ident = input.ident;
     let tokens = quote! {
-        impl Choral for #ident {
-            fn implement_chorus_for_choral(&self, egui_ctx: brainworms_lib::egui::Context, orchestra: Arc<brainworms_lib::theater::play::orchestra::Orchestra>) {
+        impl brainworms_lib::theater::play::scene::chorus::Choral for #ident {
+            fn implement_chorus_for_choral(&self, egui_ctx: brainworms_lib::egui::Context, orchestra: std::sync::Arc<brainworms_lib::theater::play::orchestra::Orchestra>) {
                 self.implement_chorus(egui_ctx, orchestra);
             }
-            fn chorus_uuid(&self) -> Uuid {
+            fn chorus_uuid(&self) -> brainworms_lib::uuid::Uuid {
                 self.uuid
             }
             fn chorus_name(&self) -> &str {
                 &self.name
             }
-            fn chorus_definition(&mut self) -> &mut Definitions {
+            fn chorus_definition(&mut self) -> &mut brainworms_lib::theater::play::Definitions {
                 &mut self.definition
             }
-            fn chorus_implementation(&mut self) -> &mut Option<Implementations> {
+            fn chorus_implementation(&mut self) -> &mut Option<brainworms_lib::theater::play::Implementations> {
                 &mut self.implementation
             }
             fn define_chorus(&mut self) {
@@ -125,10 +124,10 @@ pub fn derive_playable(input: TokenStream) -> TokenStream {
     let out = match input.data {
         syn::Data::Struct(_) => {
             quote! {
-            impl<InputContextEnum: InputContext>
-                Playable<InputContextEnum> for #ident
+            use brainworms_lib::theater::play::scene::chorus::Choral as _;
+            impl brainworms_lib::theater::play::Playable<#the_input_context_enum> for #ident
             {
-                fn playable_uuid(&self) -> Uuid {
+                fn playable_uuid(&self) -> brainworms_lib::uuid::Uuid {
                     self.chorus_uuid()
                 }
 
@@ -136,19 +135,25 @@ pub fn derive_playable(input: TokenStream) -> TokenStream {
                     self.chorus_name()
                 }
 
-                fn playable_definition(&mut self) ->  &mut Definitions {
+                fn playable_definition(&mut self) ->  &mut brainworms_lib::theater::play::Definitions {
                     self.chorus_definition()
                 }
 
-                fn playable_implementation(&mut self) ->  &mut Option<Implementations> {
+                fn playable_implementation(&mut self) ->  &mut Option<brainworms_lib::theater::play::Implementations> {
                     self.chorus_implementation()
                 }
 
-                fn starting_cam_info(&self) -> CamInfo {
-                    CamInfo::default()
+                fn starting_cam_info(&self) -> brainworms_lib::theater::play::scene::CamInfo {
+                    Default::default()
                 }
 
-                fn implement_playable(&mut self,settings: &GameProgrammeSettings,event_loop: &EventLoop<MyEvent>,renderer:Arc<Renderer>,routines:Arc<DefaultRoutines>,rts: &Runtime,orchestra:Arc<Orchestra>,) {
+                fn implement_playable(&mut self,
+                                      settings: &brainworms_lib::theater::basement::cla::GameProgrammeSettings,
+                                      event_loop: &brainworms_lib::winit::event_loop::EventLoop<brainworms_lib::MyEvent>,
+                                      renderer:std::sync::Arc<brainworms_lib::rend3::Renderer>,
+                                      routines:std::sync::Arc<brainworms_lib::theater::play::backstage::plumbing::DefaultRoutines>,
+                                      rts: &brainworms_lib::tokio::runtime::Runtime,
+                                      orchestra:std::sync::Arc<brainworms_lib::theater::play::orchestra::Orchestra>,) {
 
                 }
 
@@ -156,11 +161,11 @@ pub fn derive_playable(input: TokenStream) -> TokenStream {
                     self.define_chorus()
                 }
 
-                fn implement_chorus_for_playable(&self,egui_ctx:Context,orchestra:Arc<Orchestra>) {
+                fn implement_chorus_for_playable(&self,egui_ctx:brainworms_lib::egui::Context,orchestra:std::sync::Arc<brainworms_lib::theater::play::orchestra::Orchestra>) {
                     self.implement_chorus_for_choral(egui_ctx,orchestra)
                 }
 
-                fn handle_input_for_playable(&mut self,settings: &GameProgrammeSettings,state: &mut GameProgrammeState<InputContextEnum>,window: &Arc<Window>,) {
+                fn handle_input_for_playable(&mut self,settings: &brainworms_lib::theater::basement::cla::GameProgrammeSettings,state: &mut brainworms_lib::GameProgrammeState<#the_input_context_enum>,window: &std::sync::Arc<brainworms_lib::winit::window::Window>,) {
                     // egui has its own input handling
                 }
             }
@@ -199,8 +204,8 @@ pub fn derive_playable(input: TokenStream) -> TokenStream {
             let pl_imp = imp_fn("playable_implementation", "");
             let pl_inp = imp_fn("handle_input_for_playable", "settings,state,window");
             quote! {
-            impl Playable<#the_input_context_enum> for #ident {
-                fn playable_uuid(&self) -> Uuid {
+            impl brainworms_lib::theater::play::Playable<#the_input_context_enum> for #ident {
+                fn playable_uuid(&self) -> brainworms_lib::uuid::Uuid {
                     match self {
                         #(#imp_pl_uuid),*
                     }
@@ -210,51 +215,43 @@ pub fn derive_playable(input: TokenStream) -> TokenStream {
                         #(#imp_pl_name),*
                     }
                 }
-                fn starting_cam_info(&self) -> CamInfo {
+                fn starting_cam_info(&self) -> brainworms_lib::theater::play::scene::CamInfo {
                     match self {
                         #(#imp_pl_start_cam),*
                     }
                 }
-                fn implement_playable(
-                    &mut self,
-                    settings: &GameProgrammeSettings,
-                    event_loop: &EventLoop<MyEvent>,
-                    renderer: Arc<Renderer>,
-                    routines: Arc<DefaultRoutines>,
-                    rts: &Runtime,
-                    orchestra: Arc<Orchestra>
-                ) {
+                fn implement_playable(&mut self,settings: &brainworms_lib::theater::basement::cla::GameProgrammeSettings,
+                                      event_loop: &brainworms_lib::winit::event_loop::EventLoop<brainworms_lib::MyEvent>,
+                                      renderer:std::sync::Arc<brainworms_lib::rend3::Renderer>,
+                                      routines:std::sync::Arc<brainworms_lib::theater::play::backstage::plumbing::DefaultRoutines>,
+                                      rts: &brainworms_lib::tokio::runtime::Runtime,
+                                      orchestra:std::sync::Arc<brainworms_lib::theater::play::orchestra::Orchestra>,) {
                     match self {
                         #(#imp_pl),*
                     }
                 }
+
                 fn define_playable(&mut self) {
                     match self {
                         #(#def_pl),*
                     }
                 }
-                fn implement_chorus_for_playable(&self, egui_ctx: Context, orchestra: Arc<brainworms_lib::theater::play::orchestra::Orchestra>) {
+                fn implement_chorus_for_playable(&self, egui_ctx: brainworms_lib::egui::Context, orchestra: std::sync::Arc<brainworms_lib::theater::play::orchestra::Orchestra>) {
                     match self {
                         #(#imp_chr),*
                     }
                 }
-                fn playable_definition(&mut self) -> &mut Definitions {
+                fn playable_definition(&mut self) -> &mut brainworms_lib::theater::play::Definitions {
                     match self {
                         #(#pl_def),*
                     }
                 }
-                fn playable_implementation(&mut self) -> &mut Option<Implementations> {
+                fn playable_implementation(&mut self) -> &mut Option<brainworms_lib::theater::play::Implementations> {
                     match self {
                         #(#pl_imp),*
                     }
                 }
-
-                fn handle_input_for_playable(
-                    &mut self,
-                    settings: &GameProgrammeSettings,
-                    state: &mut GameProgrammeState<#the_input_context_enum>,
-                    window: &Arc<Window>,
-                ) {
+                fn handle_input_for_playable(&mut self,settings: &brainworms_lib::theater::basement::cla::GameProgrammeSettings,state: &mut brainworms_lib::GameProgrammeState<#the_input_context_enum>,window: &std::sync::Arc<brainworms_lib::winit::window::Window>) {
                     match self {
                         #(#pl_inp),*
                     }
@@ -268,40 +265,3 @@ pub fn derive_playable(input: TokenStream) -> TokenStream {
     //    println!("{}", out);
     out.into()
 }
-
-/*
-// this is not worth the stupid RA errors
-#[proc_macro_attribute]
-pub fn add_common_playable_fields(args: TokenStream, input: TokenStream) -> TokenStream {
-    let mut item_struct = parse_macro_input!(input as ItemStruct);
-    let _ = parse_macro_input!(args as syn::parse::Nothing);
-
-    if let syn::Fields::Named(ref mut fields) = item_struct.fields {
-        fields.named.push(
-            syn::Field::parse_named
-                .parse2(quote! { pub uuid: Uuid })
-                .unwrap(),
-        );
-        fields.named.push(
-            syn::Field::parse_named
-                .parse2(quote! { pub name: String })
-                .unwrap(),
-        );
-        fields.named.push(
-            syn::Field::parse_named
-                .parse2(quote! { pub definition: SceneDefinition })
-                .unwrap(),
-        );
-        fields.named.push(
-            syn::Field::parse_named
-                .parse2(quote! { pub implementation: Option<SceneImplementation> })
-                .unwrap(),
-        );
-    }
-
-    quote! {
-        #item_struct
-    }
-    .into()
-}
-*/

@@ -14,13 +14,11 @@ use bl::the_great_mind_palace_of_theatrical_arts::basement::input_handling::{
 };
 use bl::the_great_mind_palace_of_theatrical_arts::play::orchestra::Orchestra;
 use bl::the_great_mind_palace_of_theatrical_arts::play::scene::actors::create_actor;
-use bl::the_great_mind_palace_of_theatrical_arts::play::scene::chorus::Choral;
 use bl::the_great_mind_palace_of_theatrical_arts::play::scene::stage3d::{
     get_collisions_from_camera, load_stage3d, CollisionMap,
 };
-use bl::the_great_mind_palace_of_theatrical_arts::play::scene::Scenic;
 use bl::tokio::runtime::Runtime;
-use bl::uuid::{uuid, Uuid};
+use bl::uuid::Uuid;
 use bl::winit::event::MouseButton;
 use bl::winit::event_loop::EventLoop;
 use bl::winit::keyboard::KeyCode;
@@ -76,7 +74,7 @@ const PDP11_WITH_MIDORI_CAM_INFO: [f32; 5] =
     [-3.7894087, 3.8481617, 0.3033728, -0.29471007, 6.2545333];
 
 //#[add_common_playable_fields] // this is not worth the stupid RA errors
-#[derive(Default, bl::proc_macros::Scenic, bl::proc_macros::Choral)]
+#[derive(Default, bl::macros::Scenic, bl::macros::Choral)]
 pub struct LinacLabScene {
     pub uuid: Uuid,
     pub name: String,
@@ -131,7 +129,12 @@ impl LinacLabScene {
             glam::Quat::from_euler(glam::EulerRot::XYZ, 0., PI, 0.0),
             glam::Vec3::new(-2.0586073, 1.5, -4.085335),
         );
-        self.uuid = uuid!("517e70e9-9f6d-48fe-a685-e24482d6d409");
+        let mut rng = nanorand::tls_rng();
+        let random_bytes = [0; 16];
+        let random_bytes = random_bytes.map(|_| rng.generate::<u8>());
+
+        self.uuid = bl::uuid::Builder::from_random_bytes(random_bytes).into_uuid();
+
         let midori = ActressDefinition {
             name: "Midori".to_owned(),
             directory: "assets/inochi2d-models".to_owned(),
@@ -145,7 +148,6 @@ impl LinacLabScene {
             start_cam: "overview".to_owned(),
             cameras: vec![
                 ("overview".to_owned(), OVERVIEW_CAM_INFO),
-                //                ("pdp11".to_owned(), PDP11_CAM_INFO),
                 ("pdp11".to_owned(), PDP11_WITH_MIDORI_CAM_INFO),
                 ("vt100".to_owned(), VT100_CAM_INFO),
                 ("Therac-25".to_owned(), THERAC_CAM_INFO),

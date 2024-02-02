@@ -337,6 +337,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "brainworms_demented_robotic_meat_grinder_machine"
+version = "0.0.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.48",
+]
+
+[[package]]
 name = "brainworms_farting_noises"
 version = "0.1.0"
 dependencies = [
@@ -358,6 +367,7 @@ name = "brainworms_lib"
 version = "0.1.0"
 dependencies = [
  "brainworms_arson",
+ "brainworms_demented_robotic_meat_grinder_machine",
  "brainworms_farting_noises",
  "bytemuck",
  "cfg-if",
@@ -377,7 +387,6 @@ dependencies = [
  "parry3d",
  "pico-args",
  "pollster",
- "proc_macros",
  "profiling",
  "rend3",
  "rend3-egui",
@@ -2527,15 +2536,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e2422ad645d89c99f8f3e6b88a9fdeca7fabeac836b1002371c4367c8f984aae"
 dependencies = [
  "unicode-ident",
-]
-
-[[package]]
-name = "proc_macros"
-version = "0.0.0"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.48",
 ]
 
 [[package]]

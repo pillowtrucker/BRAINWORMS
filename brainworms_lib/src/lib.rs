@@ -17,8 +17,8 @@ pub use rend3;
 pub use enum_dispatch;
 pub use nalgebra;
 
+pub use brainworms_demented_robotic_meat_grinder_machine as macros;
 pub use parry3d;
-pub use proc_macros;
 use rend3::types::DirectionalLight;
 pub use rend3_routine;
 use rend3_routine::base::BaseRenderGraph;

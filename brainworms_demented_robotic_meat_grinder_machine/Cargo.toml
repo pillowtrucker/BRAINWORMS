@@ -1,5 +1,5 @@
 [package]
-name = "proc_macros"
+name = "brainworms_demented_robotic_meat_grinder_machine"
 version = "0.0.0"
 authors = ["pillowtrucker"]
 description = "A `cargo generate` template for quick-starting a procedural macro crate"

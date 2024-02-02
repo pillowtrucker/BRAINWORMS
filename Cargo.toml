@@ -42,7 +42,7 @@ ndk-glue = "0.7"
 
 [workspace]
 members = [ "brainworms_arson", "brainworms_farting_noises", "brainworms_lib",
-"proc-macros"
+"brainworms_demented_robotic_meat_grinder_machine"
 ]
 [features]
 extra_debugging = ["brainworms_lib/extra_debugging"]

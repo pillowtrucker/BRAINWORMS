@@ -1,32 +1,21 @@
 #![feature(async_closure)]
+pub mod curtain;
 pub mod linac_lab;
 
-use std::{collections::HashMap, sync::Arc};
+use std::collections::HashMap;
 
 use bl::{
-    egui::Context,
-    proc_macros::Playable,
-    rend3::Renderer,
+    macros::Playable,
     the_great_mind_palace_of_theatrical_arts::{
-        basement::{
-            cla::GameProgrammeSettings,
-            input_handling::{DebugInputContext, InputContext},
-        },
-        play::{
-            backstage::plumbing::DefaultRoutines, orchestra::Orchestra, scene::CamInfo,
-            scene::Scenic, Definitions, Implementations, Play, Playable,
-        },
+        basement::input_handling::{DebugInputContext, InputContext},
+        play::{scene::Scenic, Play},
     },
     theater::basement::logging::register_logger,
-    tokio::runtime::Runtime,
-    uuid::Uuid,
-    winit::{
-        event_loop::EventLoop,
-        window::{Fullscreen, Window, WindowBuilder},
-    },
-    GameProgramme, GameProgrammeState, MyEvent,
+    winit::window::{Fullscreen, WindowBuilder},
+    GameProgramme,
 };
 use brainworms_lib as bl;
+use curtain::Curtain;
 use linac_lab::{LinacLabIC, LinacLabScene};
 
 #[bl::enum_dispatch::enum_dispatch(Playable)] // this doesnt work across crates but it does generate at least the from and into stuff
@@ -34,8 +23,7 @@ use linac_lab::{LinacLabIC, LinacLabScene};
 #[input_context_enum(MyInputContexts)]
 pub enum MyPlayables {
     LinacLabScene(LinacLabScene),
-    //    Curtain,   // loading screens
-    //    TicketBox, // menus
+    Curtain(Curtain), // loading screens and menus
 }
 
 #[derive(Default, Hash, Eq, PartialEq, Debug, Copy, Clone)]

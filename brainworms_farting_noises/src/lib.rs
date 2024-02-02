@@ -1,4 +1,4 @@
-pub mod prison_for_retarded_mozilla_dog_shit;
+pub mod prison;
 
 use std::{
     collections::HashMap, fs::File, io::Read, path::PathBuf, ptr::slice_from_raw_parts, sync::Arc,
@@ -13,7 +13,7 @@ use parking_lot::Mutex;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use uuid::Uuid;
 
-use crate::prison_for_retarded_mozilla_dog_shit::{prison, AudioPrisonOrder};
+use crate::prison::{prison, AudioPrisonOrder};
 const SAMPLE_FREQUENCY: u32 = 48_000;
 const STREAM_FORMAT: cubeb::SampleFormat = cubeb::SampleFormat::Float32LE;
 const MAX_SAMPLE_SIZE: usize = 2048;

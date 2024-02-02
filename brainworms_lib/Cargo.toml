@@ -64,7 +64,7 @@ enum_dispatch = "0.3.12"
 parry3d = "0.13"
 nalgebra = {version = "0.32", features = ["convert-glam024"]}
 gltf = { version = "1.0", default-features = false, features = ["KHR_lights_punctual", "KHR_texture_transform", "KHR_materials_unlit", "extras", "names", "utils"] }
-proc_macros = {path = "../proc-macros"}
+brainworms_demented_robotic_meat_grinder_machine = {path = "../brainworms_demented_robotic_meat_grinder_machine"}
 
 [package.metadata.android]
 build_targets = ["aarch64-linux-android"]
