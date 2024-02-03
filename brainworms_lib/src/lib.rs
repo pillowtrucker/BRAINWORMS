@@ -64,38 +64,38 @@ pub struct GameProgrammeData<
     PlayablesEnum, //: Playable<InputContextEnum>,
                    //    InputContextEnum: InputContext + 'static,
 > {
-    pub timestamp_start: time::Instant,
-    pub play: Play<PlayablesEnum>,
+    pub timestamp_start: Arc<time::Instant>,
+    pub play: Arc<Mutex<Play<PlayablesEnum>>>,
 }
 
 #[derive(Default)]
 pub struct GameProgrammeState<InputContextEnum: InputContext> {
     #[cfg(feature = "extra_debugging")]
     pub previous_profiling_stats: Option<Vec<wgpu_profiler::GpuTimerScopeResult>>,
-    pub egui_routine: Option<rend3_egui::EguiRenderRoutine>,
-    pub egui_ctx: Option<egui::Context>,
-    pub egui_platform: Option<egui_winit::State>,
-    pub last_update: Option<time::Instant>,
-    pub frame_rate: FrameRate,
-    pub current_playable: Option<Uuid>,
-    pub grabber: Option<Grabber>,
-    pub cur_camera: Option<theater::play::scene::Camera>,
-    pub input_status: InputStatus,
-    pub window: Option<Arc<Window>>,
-    pub renderer: Option<Arc<rend3::Renderer>>,
-    pub routines: Option<Arc<DefaultRoutines>>,
-    pub base_rendergraph: Option<Arc<Mutex<BaseRenderGraph>>>,
-    pub cur_input_context: InputContextEnum,
-    pub orchestra: Option<Arc<Orchestra>>,
+    pub egui_routine: Arc<Mutex<Option<rend3_egui::EguiRenderRoutine>>>,
+    pub egui_ctx: Arc<Mutex<Option<egui::Context>>>,
+    pub egui_platform: Arc<Mutex<Option<egui_winit::State>>>,
+    pub last_update: Arc<Mutex<Option<time::Instant>>>,
+    pub frame_rate: Arc<Mutex<FrameRate>>,
+    pub current_playable: Arc<Mutex<Option<Uuid>>>,
+    pub grabber: Arc<Mutex<Option<Grabber>>>,
+    pub cur_camera: Arc<Mutex<Option<theater::play::scene::Camera>>>,
+    pub input_status: Arc<Mutex<InputStatus>>,
+    pub window: Arc<Mutex<Option<Window>>>,
+    pub renderer: Arc<Mutex<Option<rend3::Renderer>>>,
+    pub routines: Arc<Mutex<Option<DefaultRoutines>>>,
+    pub base_rendergraph: Arc<Mutex<Option<BaseRenderGraph>>>,
+    pub cur_input_context: Arc<Mutex<InputContextEnum>>,
+    pub orchestra: Arc<Mutex<Option<Orchestra>>>,
 }
 pub struct GameProgramme<
     PlayablesEnum: Playable<InputContextEnum>,
     InputContextEnum: InputContext + 'static,
 > {
-    pub data: GameProgrammeData<PlayablesEnum>,
-    pub state: GameProgrammeState<InputContextEnum>,
-    pub settings: GameProgrammeSettings,
-    pub rts: Option<tokio::runtime::Runtime>,
+    pub data: Arc<Mutex<GameProgrammeData<PlayablesEnum>>>,
+    pub state: Arc<Mutex<GameProgrammeState<InputContextEnum>>>,
+    pub settings: Arc<Mutex<GameProgrammeSettings>>,
+    pub rts: Arc<Mutex<Option<tokio::runtime::Runtime>>>,
 }
 pub type MyEvent = MyWinitEvent<AstinkScene, AstinkSprite>;
 pub type Event = winit::event::Event<MyEvent>;

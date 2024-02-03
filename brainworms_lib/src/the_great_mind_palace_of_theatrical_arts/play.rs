@@ -3,13 +3,16 @@ use std::{collections::HashMap, sync::Arc};
 use brainworms_arson::egui;
 use egui::Context;
 use enum_dispatch::enum_dispatch;
+use parking_lot::Mutex;
 use rend3::Renderer;
 use tokio::runtime::Runtime;
 use uuid::Uuid;
 use winit::event_loop::EventLoop;
 use winit::window::Window;
 
-use crate::{theater::basement::input_handling::InputContext, GameProgrammeState, MyEvent};
+use crate::{
+    theater::basement::input_handling::InputContext, GameProgrammeData, GameProgrammeState, MyEvent,
+};
 
 use self::{
     backstage::plumbing::DefaultRoutines,
@@ -31,7 +34,7 @@ pub struct Play<PlayablesEnum> {
 }
 
 #[enum_dispatch]
-pub trait Playable<InputContextEnum: InputContext> {
+pub trait Playable<InputContextEnum: InputContext, PlayablesEnum> {
     fn playable_uuid(&self) -> Uuid;
     fn playable_name(&self) -> &str;
     fn playable_definition(&mut self) -> &mut Definitions;
@@ -39,21 +42,20 @@ pub trait Playable<InputContextEnum: InputContext> {
     fn starting_cam_info(&self) -> CamInfo;
     fn implement_playable(
         &mut self,
-        settings: &GameProgrammeSettings,
-        event_loop: &EventLoop<MyEvent>,
-        renderer: Arc<Renderer>,
-        routines: Arc<DefaultRoutines>,
-        rts: &Runtime,
-        orchestra: Arc<Orchestra>,
+        game_settings: Arc<Mutex<GameProgrammeSettings>>,
+        game_state: Arc<Mutex<GameProgrammeState<InputContextEnum>>>,
+        game_data: Arc<Mutex<GameProgrammeData<PlayablesEnum>>>,
+        rts: Arc<Mutex<Runtime>>,
     );
     fn define_playable(&mut self);
     fn implement_chorus_for_playable(&self, egui_ctx: Context, orchestra: Arc<Orchestra>);
     //    fn get_current_input_context(&self) -> &InputContext<TO>;
     fn handle_input_for_playable(
         &mut self,
-        settings: &GameProgrammeSettings,
-        state: &mut GameProgrammeState<InputContextEnum>,
-        window: &Arc<Window>,
+        game_settings: Arc<Mutex<GameProgrammeSettings>>,
+        game_state: Arc<Mutex<GameProgrammeState<InputContextEnum>>>,
+        game_data: Arc<Mutex<GameProgrammeData<PlayablesEnum>>>,
+        rts: Arc<Mutex<Runtime>>,
     );
 }
 #[derive(Debug)]

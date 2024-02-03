@@ -251,7 +251,10 @@ pub fn derive_playable(input: TokenStream) -> TokenStream {
                         #(#pl_imp),*
                     }
                 }
-                fn handle_input_for_playable(&mut self,settings: &brainworms_lib::theater::basement::cla::GameProgrammeSettings,state: &mut brainworms_lib::GameProgrammeState<#the_input_context_enum>,window: &std::sync::Arc<brainworms_lib::winit::window::Window>) {
+                fn handle_input_for_playable(&mut self,
+                                             settings: &brainworms_lib::theater::basement::cla::GameProgrammeSettings,
+                                             state: &mut brainworms_lib::GameProgrammeState<#the_input_context_enum>,
+                                             window: &std::sync::Arc<brainworms_lib::winit::window::Window>) {
                     match self {
                         #(#pl_inp),*
                     }
