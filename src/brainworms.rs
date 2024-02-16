@@ -17,10 +17,12 @@ use bl::{
 use brainworms_lib as bl;
 use curtain::Curtain;
 use linac_lab::{LinacLabIC, LinacLabScene};
-
+#[derive(Default, Debug)]
+pub struct BrainwormsData;
 #[bl::enum_dispatch::enum_dispatch(Playable)] // this doesnt work across crates but it does generate at least the from and into stuff
 #[derive(Playable)]
 #[input_context_enum(MyInputContexts)]
+#[user_data_struct(BrainwormsData)]
 pub enum MyPlayables {
     LinacLabScene(LinacLabScene),
     Curtain(Curtain), // loading screens and menus

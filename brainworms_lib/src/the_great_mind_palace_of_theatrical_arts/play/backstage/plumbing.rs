@@ -37,8 +37,11 @@ pub(crate) struct StoredSurfaceInfo {
     pub(crate) present_mode: PresentMode,
 }
 
-impl<PlayablesEnum: Playable<InputContextEnum> + 'static, InputContextEnum: InputContext>
-    GameProgramme<PlayablesEnum, InputContextEnum>
+impl<
+        PlayablesEnum: Playable<InputContextEnum, UserData> + 'static,
+        InputContextEnum: InputContext,
+        UserData: Default + 'static,
+    > GameProgramme<PlayablesEnum, InputContextEnum, UserData>
 {
     pub fn start(self, window_builder: WindowBuilder) {
         {
@@ -65,6 +68,7 @@ impl<PlayablesEnum: Playable<InputContextEnum> + 'static, InputContextEnum: Inpu
             settings: GameProgrammeSettings::new(),
             rts: tokio::runtime::Builder::new_multi_thread().build().ok(),
             state: GameProgrammeState::default(),
+            user_data: Arc::new(Mutex::new(UserData::default())),
         }
     }
 

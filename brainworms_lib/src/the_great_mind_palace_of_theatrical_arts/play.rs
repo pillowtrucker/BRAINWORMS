@@ -3,6 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 use brainworms_arson::egui;
 use egui::Context;
 use enum_dispatch::enum_dispatch;
+use parking_lot::Mutex;
 use rend3::Renderer;
 use tokio::runtime::Runtime;
 use uuid::Uuid;
@@ -31,7 +32,7 @@ pub struct Play<PlayablesEnum> {
 }
 
 #[enum_dispatch]
-pub trait Playable<InputContextEnum: InputContext> {
+pub trait Playable<InputContextEnum: InputContext, UserData> {
     fn playable_uuid(&self) -> Uuid;
     fn playable_name(&self) -> &str;
     fn playable_definition(&mut self) -> &mut Definitions;
@@ -45,9 +46,16 @@ pub trait Playable<InputContextEnum: InputContext> {
         routines: Arc<DefaultRoutines>,
         rts: &Runtime,
         orchestra: Arc<Orchestra>,
+        user_data: Arc<Mutex<UserData>>,
     );
     fn define_playable(&mut self);
-    fn implement_chorus_for_playable(&self, egui_ctx: Context, orchestra: Arc<Orchestra>);
+    fn implement_chorus_for_playable(
+        &self,
+        egui_ctx: Context,
+        orchestra: Arc<Orchestra>,
+        settings: &GameProgrammeSettings,
+        user_data: Arc<Mutex<UserData>>,
+    );
     //    fn get_current_input_context(&self) -> &InputContext<TO>;
     fn handle_input_for_playable(
         &mut self,
@@ -78,8 +86,9 @@ pub enum Implementations {
 
 impl<
         InputContextEnum: InputContext,
-        T: Scenic + Choral + HandlesInputContexts<InputContextEnum>,
-    > Playable<InputContextEnum> for T
+        T: Scenic<UserData> + Choral<UserData> + HandlesInputContexts<InputContextEnum>,
+        UserData: Default,
+    > Playable<InputContextEnum, UserData> for T
 {
     fn playable_uuid(&self) -> Uuid {
         self.scene_uuid()
@@ -101,15 +110,24 @@ impl<
         routines: Arc<DefaultRoutines>,
         rts: &Runtime,
         orchestra: Arc<Orchestra>,
+        user_data: Arc<Mutex<UserData>>,
     ) {
-        self.implement_scene(settings, event_loop, renderer, routines, rts, orchestra)
+        self.implement_scene(
+            settings, event_loop, renderer, routines, rts, orchestra, user_data,
+        )
     }
 
     fn define_playable(&mut self) {
         self.define_scene()
     }
-    fn implement_chorus_for_playable(&self, egui_ctx: Context, orchestra: Arc<Orchestra>) {
-        self.implement_chorus_for_choral(egui_ctx, orchestra);
+    fn implement_chorus_for_playable(
+        &self,
+        egui_ctx: Context,
+        orchestra: Arc<Orchestra>,
+        settings: &GameProgrammeSettings,
+        user_data: Arc<Mutex<UserData>>,
+    ) {
+        self.implement_chorus_for_choral(egui_ctx, orchestra, settings, user_data);
     }
 
     fn playable_definition(&mut self) -> &mut Definitions {

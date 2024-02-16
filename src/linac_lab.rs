@@ -1,3 +1,4 @@
+#![allow(clippy::too_many_arguments)]
 use bl::brainworms_arson::{parse_fireworks, Gay, KineticEffect, KineticLabel, ShakeLetters};
 
 use bl::brainworms_farting_noises::TicketedAudioRequestData as TARD;
@@ -6,6 +7,7 @@ use bl::log::{debug, info};
 use bl::nalgebra::distance;
 use bl::nanorand::RandomGen;
 
+use bl::parking_lot::Mutex;
 use bl::parry3d::query::RayCast;
 
 use bl::rend3::Renderer;
@@ -53,7 +55,7 @@ use std::{collections::HashMap, f32::consts::PI, sync::Arc};
 use DebugInputContext as DIC;
 use MyInputContexts as MIC;
 
-use crate::MyInputContexts;
+use crate::{BrainwormsData, MyInputContexts};
 //use MyInputContexts::DebugInputContext as DIC;
 
 #[derive(Default, Hash, Eq, PartialEq, Debug, Copy, Clone)]
@@ -75,6 +77,7 @@ const PDP11_WITH_MIDORI_CAM_INFO: [f32; 5] =
 
 //#[add_common_playable_fields] // this is not worth the stupid RA errors
 #[derive(Default, bl::macros::Scenic, bl::macros::Choral)]
+#[user_data_struct(BrainwormsData)]
 pub struct LinacLabScene {
     pub uuid: Uuid,
     pub name: String,
@@ -188,7 +191,7 @@ impl LinacLabScene {
         self.test_lines = test_lines;
         self.random_line_effects = random_line_effects;
     }
-
+    #[allow(clippy::too_many_arguments)]
     pub fn implement(
         &mut self,
         settings: &GameProgrammeSettings,
@@ -197,6 +200,7 @@ impl LinacLabScene {
         _routines: Arc<DefaultRoutines>,
         rts: &Runtime,
         orchestra: Arc<Orchestra>,
+        user_data: Arc<Mutex<BrainwormsData>>,
     ) {
         let Definitions::SceneDefinition(definition) = &self.definition else {
             panic!("scene has non-scene definition")
@@ -298,7 +302,10 @@ impl LinacLabScene {
             SoundGroup::BGM,
         ));
         let orchestra_player = Arc::clone(&orchestra);
-        let cv_playback_started_send = Arc::new((bl::Mutex::new(false), bl::Condvar::new()));
+        let cv_playback_started_send = Arc::new((
+            bl::parking_lot::Mutex::new(false),
+            bl::parking_lot::Condvar::new(),
+        ));
         let cv_playback_started_recv = Arc::clone(&cv_playback_started_send);
         let fname = test_filename.clone();
         rts.spawn_blocking(move || {
@@ -316,7 +323,10 @@ impl LinacLabScene {
             *playback_started = true;
             cvar.notify_one();
         });
-        let cv_playback_paused_send = Arc::new((bl::Mutex::new(false), bl::Condvar::new()));
+        let cv_playback_paused_send = Arc::new((
+            bl::parking_lot::Mutex::new(false),
+            bl::parking_lot::Condvar::new(),
+        ));
         let cv_playback_paused_recv = Arc::clone(&cv_playback_paused_send);
         let orchestra_pauser = Arc::clone(&orchestra);
         let fname = test_filename.clone();
@@ -335,7 +345,10 @@ impl LinacLabScene {
             cvar.notify_one();
         });
         let orchestra_unpauser = Arc::clone(&orchestra);
-        let cv_playback_unpaused_send = Arc::new((bl::Mutex::new(false), bl::Condvar::new()));
+        let cv_playback_unpaused_send = Arc::new((
+            bl::parking_lot::Mutex::new(false),
+            bl::parking_lot::Condvar::new(),
+        ));
         let cv_playback_unpaused_recv = Arc::clone(&cv_playback_unpaused_send);
         let fname = test_filename.clone();
         rts.spawn_blocking(move || {
@@ -376,7 +389,13 @@ impl LinacLabScene {
             .clone()
     }
 
-    pub fn implement_chorus(&self, egui_ctx: Context, _orchestra: Arc<Orchestra>) {
+    pub fn implement_chorus(
+        &self,
+        egui_ctx: Context,
+        _orchestra: Arc<Orchestra>,
+        settings: &GameProgrammeSettings,
+        user_data: Arc<Mutex<BrainwormsData>>,
+    ) {
         egui::Window::new("egui widget testing").show(&egui_ctx, |ui| {
             //
             ui.horizontal(|ui| {

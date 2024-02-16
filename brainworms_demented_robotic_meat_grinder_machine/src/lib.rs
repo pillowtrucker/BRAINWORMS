@@ -23,12 +23,25 @@ pub fn my_macro(input: TokenStream) -> TokenStream {
 /// Example of user-defined [derive mode macro][1]
 ///
 /// [1]: https://doc.rust-lang.org/reference/procedural-macros.html#derive-mode-macros
-#[proc_macro_derive(Scenic)]
+#[proc_macro_derive(Scenic, attributes(user_data_struct))]
 pub fn derive_scenic_partial(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let ident = input.ident;
+    let the_user_data_struct: &Ident = &input
+        .attrs
+        .iter()
+        .find(|a| {
+            a.path()
+                .get_ident()
+                .is_some_and(|aa| aa == "user_data_struct")
+        })
+        .map(|aa| {
+            aa.parse_args()
+                .expect("user_data_struct attribute required")
+        })
+        .expect("user_data_struct attribute required");
     let tokens = quote! {
-        impl brainworms_lib::theater::play::scene::Scenic for #ident {
+        impl brainworms_lib::theater::play::scene::Scenic<#the_user_data_struct> for #ident {
 
             fn raw_definition(&mut self) -> &mut brainworms_lib::theater::play::Definitions {
                 &mut self.definition
@@ -51,7 +64,8 @@ pub fn derive_scenic_partial(input: TokenStream) -> TokenStream {
                                renderer: std::sync::Arc<brainworms_lib::rend3::Renderer>,
                                routines: std::sync::Arc<brainworms_lib::theater::play::backstage::plumbing::DefaultRoutines>,
                                rts: &brainworms_lib::tokio::runtime::Runtime,
-                               orchestra: std::sync::Arc<brainworms_lib::theater::play::orchestra::Orchestra>
+                               orchestra: std::sync::Arc<brainworms_lib::theater::play::orchestra::Orchestra>,
+                               user_data: std::sync::Arc<brainworms_lib::parking_lot::Mutex<#the_user_data_struct>>
             ) {
                 self.implement(
                     settings,
@@ -59,7 +73,8 @@ pub fn derive_scenic_partial(input: TokenStream) -> TokenStream {
                     renderer,
                     routines,
                     rts,
-                    orchestra)
+                    orchestra,
+                    user_data)
             }
             fn scene_starting_cam_info(&self) -> brainworms_lib::theater::play::scene::CamInfo {
                 self.starting_cam_info()
@@ -70,14 +85,27 @@ pub fn derive_scenic_partial(input: TokenStream) -> TokenStream {
 
     tokens.into()
 }
-#[proc_macro_derive(Choral)]
+#[proc_macro_derive(Choral, attributes(user_data_struct))]
 pub fn derive_choral(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let ident = input.ident;
+    let the_user_data_struct: &Ident = &input
+        .attrs
+        .iter()
+        .find(|a| {
+            a.path()
+                .get_ident()
+                .is_some_and(|aa| aa == "user_data_struct")
+        })
+        .map(|aa| {
+            aa.parse_args()
+                .expect("user_data_struct attribute required")
+        })
+        .expect("user_data_struct attribute required");
     let tokens = quote! {
-        impl brainworms_lib::theater::play::scene::chorus::Choral for #ident {
-            fn implement_chorus_for_choral(&self, egui_ctx: brainworms_lib::egui::Context, orchestra: std::sync::Arc<brainworms_lib::theater::play::orchestra::Orchestra>) {
-                self.implement_chorus(egui_ctx, orchestra);
+        impl brainworms_lib::theater::play::scene::chorus::Choral<#the_user_data_struct> for #ident {
+            fn implement_chorus_for_choral(&self, egui_ctx: brainworms_lib::egui::Context, orchestra: std::sync::Arc<brainworms_lib::theater::play::orchestra::Orchestra>,settings: &brainworms_lib::theater::basement::cla::GameProgrammeSettings, user_data: std::sync::Arc<brainworms_lib::parking_lot::Mutex<#the_user_data_struct>>) {
+                self.implement_chorus(egui_ctx, orchestra,settings,user_data);
             }
             fn chorus_uuid(&self) -> brainworms_lib::uuid::Uuid {
                 self.uuid
@@ -102,7 +130,7 @@ pub fn derive_choral(input: TokenStream) -> TokenStream {
 }
 
 // enum_dispatch doesn't work across crates..
-#[proc_macro_derive(Playable, attributes(input_context_enum))]
+#[proc_macro_derive(Playable, attributes(input_context_enum, user_data_struct))]
 pub fn derive_playable(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 
@@ -121,11 +149,24 @@ pub fn derive_playable(input: TokenStream) -> TokenStream {
                 .expect("input_context_enum attribute required")
         })
         .expect("input_context_enum attribute required");
+    let the_user_data_struct: &Ident = &input
+        .attrs
+        .iter()
+        .find(|a| {
+            a.path()
+                .get_ident()
+                .is_some_and(|aa| aa == "user_data_struct")
+        })
+        .map(|aa| {
+            aa.parse_args()
+                .expect("user_data_struct attribute required")
+        })
+        .expect("user_data_struct attribute required");
     let out = match input.data {
         syn::Data::Struct(_) => {
             quote! {
             use brainworms_lib::theater::play::scene::chorus::Choral as _;
-            impl brainworms_lib::theater::play::Playable<#the_input_context_enum> for #ident
+            impl brainworms_lib::theater::play::Playable<#the_input_context_enum, #the_user_data_struct> for #ident
             {
                 fn playable_uuid(&self) -> brainworms_lib::uuid::Uuid {
                     self.chorus_uuid()
@@ -153,7 +194,9 @@ pub fn derive_playable(input: TokenStream) -> TokenStream {
                                       renderer:std::sync::Arc<brainworms_lib::rend3::Renderer>,
                                       routines:std::sync::Arc<brainworms_lib::theater::play::backstage::plumbing::DefaultRoutines>,
                                       rts: &brainworms_lib::tokio::runtime::Runtime,
-                                      orchestra:std::sync::Arc<brainworms_lib::theater::play::orchestra::Orchestra>,) {
+                                      orchestra:std::sync::Arc<brainworms_lib::theater::play::orchestra::Orchestra>,
+                                      user_data: std::sync::Arc<brainworms_lib::parking_lot::Mutex<#the_user_data_struct>>
+                ) {
 
                 }
 
@@ -161,8 +204,8 @@ pub fn derive_playable(input: TokenStream) -> TokenStream {
                     self.define_chorus()
                 }
 
-                fn implement_chorus_for_playable(&self,egui_ctx:brainworms_lib::egui::Context,orchestra:std::sync::Arc<brainworms_lib::theater::play::orchestra::Orchestra>) {
-                    self.implement_chorus_for_choral(egui_ctx,orchestra)
+                fn implement_chorus_for_playable(&self,egui_ctx:brainworms_lib::egui::Context,orchestra:std::sync::Arc<brainworms_lib::theater::play::orchestra::Orchestra>,      settings: &brainworms_lib::theater::basement::cla::GameProgrammeSettings,                                user_data: std::sync::Arc<brainworms_lib::parking_lot::Mutex<#the_user_data_struct>>) {
+                    self.implement_chorus_for_choral(egui_ctx,orchestra,settings,user_data)
                 }
 
                 fn handle_input_for_playable(&mut self,settings: &brainworms_lib::theater::basement::cla::GameProgrammeSettings,state: &mut brainworms_lib::GameProgrammeState<#the_input_context_enum>,window: &std::sync::Arc<brainworms_lib::winit::window::Window>,) {
@@ -197,14 +240,17 @@ pub fn derive_playable(input: TokenStream) -> TokenStream {
             let def_pl = imp_fn("define_playable", "");
             let imp_pl = imp_fn(
                 "implement_playable",
-                "settings,event_loop,renderer,routines,rts,orchestra",
+                "settings,event_loop,renderer,routines,rts,orchestra,user_data",
             );
-            let imp_chr = imp_fn("implement_chorus_for_playable", "egui_ctx,orchestra");
+            let imp_chr = imp_fn(
+                "implement_chorus_for_playable",
+                "egui_ctx,orchestra,settings,user_data",
+            );
             let pl_def = imp_fn("playable_definition", "");
             let pl_imp = imp_fn("playable_implementation", "");
             let pl_inp = imp_fn("handle_input_for_playable", "settings,state,window");
             quote! {
-            impl brainworms_lib::theater::play::Playable<#the_input_context_enum> for #ident {
+            impl brainworms_lib::theater::play::Playable<#the_input_context_enum, #the_user_data_struct> for #ident {
                 fn playable_uuid(&self) -> brainworms_lib::uuid::Uuid {
                     match self {
                         #(#imp_pl_uuid),*
@@ -225,7 +271,9 @@ pub fn derive_playable(input: TokenStream) -> TokenStream {
                                       renderer:std::sync::Arc<brainworms_lib::rend3::Renderer>,
                                       routines:std::sync::Arc<brainworms_lib::theater::play::backstage::plumbing::DefaultRoutines>,
                                       rts: &brainworms_lib::tokio::runtime::Runtime,
-                                      orchestra:std::sync::Arc<brainworms_lib::theater::play::orchestra::Orchestra>,) {
+                                      orchestra:std::sync::Arc<brainworms_lib::theater::play::orchestra::Orchestra>,
+                                      user_data: std::sync::Arc<brainworms_lib::parking_lot::Mutex<#the_user_data_struct>>
+                ) {
                     match self {
                         #(#imp_pl),*
                     }
@@ -236,7 +284,7 @@ pub fn derive_playable(input: TokenStream) -> TokenStream {
                         #(#def_pl),*
                     }
                 }
-                fn implement_chorus_for_playable(&self, egui_ctx: brainworms_lib::egui::Context, orchestra: std::sync::Arc<brainworms_lib::theater::play::orchestra::Orchestra>) {
+                fn implement_chorus_for_playable(&self, egui_ctx: brainworms_lib::egui::Context, orchestra: std::sync::Arc<brainworms_lib::theater::play::orchestra::Orchestra>,settings: &brainworms_lib::theater::basement::cla::GameProgrammeSettings,user_data: std::sync::Arc<brainworms_lib::parking_lot::Mutex<#the_user_data_struct>>) {
                     match self {
                         #(#imp_chr),*
                     }

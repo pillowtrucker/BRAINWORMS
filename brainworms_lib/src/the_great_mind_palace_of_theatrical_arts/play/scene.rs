@@ -91,7 +91,7 @@ pub struct SceneImplementation {
     pub cameras: HashMap<String, Camera>,
     //    script: String, // I'm really kinda stuck on this chicken and egg problem with script <-> actual game logic
 }
-pub trait Scenic {
+pub trait Scenic<UserData> {
     fn scene_uuid(&self) -> Uuid;
     fn scene_name(&self) -> &str;
     fn define_scene(&mut self);
@@ -103,6 +103,7 @@ pub trait Scenic {
         routines: Arc<DefaultRoutines>,
         rts: &Runtime,
         orchestra: Arc<Orchestra>,
+        user_data: Arc<Mutex<UserData>>,
     );
     fn scene_starting_cam_info(&self) -> CamInfo;
     fn raw_definition(&mut self) -> &mut Definitions;

@@ -1,4 +1,5 @@
 #![feature(variant_count, exact_size_is_empty, array_chunks, iter_array_chunks)]
+#![allow(clippy::too_many_arguments)]
 pub mod the_great_mind_palace_of_theatrical_arts;
 // the reexports suck but this stays until I can focus on wrapping this
 
@@ -11,7 +12,8 @@ pub use glam;
 use glam::{Mat3A, Vec3};
 pub use log;
 use log::info;
-pub use parking_lot::*;
+pub use parking_lot;
+use parking_lot::Mutex;
 pub use rend3;
 
 pub use enum_dispatch;
@@ -92,12 +94,14 @@ pub struct GameProgrammeState<InputContextEnum: InputContext> {
     pub orchestra: Option<Arc<Orchestra>>,
 }
 pub struct GameProgramme<
-    PlayablesEnum: Playable<InputContextEnum>,
+    PlayablesEnum: Playable<InputContextEnum, UserData>,
     InputContextEnum: InputContext + 'static,
+    UserData: Default,
 > {
     pub data: GameProgrammeData<PlayablesEnum>,
     pub state: GameProgrammeState<InputContextEnum>,
     pub settings: GameProgrammeSettings,
+    pub user_data: Arc<Mutex<UserData>>,
     pub rts: Option<tokio::runtime::Runtime>,
 }
 pub type MyEvent = MyWinitEvent<AstinkScene, AstinkSprite>;
@@ -111,9 +115,10 @@ pub enum MyWinitEvent<TS, TA: 'static> {
 }
 
 impl<
-        PlayablesEnum: Playable<InputContextEnum> + 'static,
+        PlayablesEnum: Playable<InputContextEnum, UserData> + 'static,
         InputContextEnum: InputContext + 'static,
-    > GameProgramme<PlayablesEnum, InputContextEnum>
+        UserData: Default + 'static,
+    > GameProgramme<PlayablesEnum, InputContextEnum, UserData>
 {
     pub async fn async_start(mut self, window_builder: WindowBuilder) {
         let iad = self.create_iad().await.unwrap();
@@ -299,6 +304,8 @@ impl<
                 current_scene.implement_chorus_for_playable(
                     egui_ctx.clone(),
                     game_state.orchestra.as_ref().unwrap().clone(),
+                    &self.settings,
+                    self.user_data.clone(),
                 );
                 egui::Window::new("FPS").show(&egui_ctx, |ui| {
                     ui.label(std::format!(
@@ -633,6 +640,7 @@ impl<
             playable_routines_copy,
             self.rts.as_ref().unwrap(),
             self.state.orchestra.as_ref().unwrap().clone(),
+            self.user_data.clone(),
         );
 
         let skybox_renderer_copy = Arc::clone(&renderer);
