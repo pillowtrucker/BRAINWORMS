@@ -6,9 +6,12 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-egui = { version = "0.25", git = "https://github.com/emilk/egui.git", branch="master"}
-egui-wgpu = {version = "0.25", git = "https://github.com/emilk/egui.git", branch="master", features = ["winit"] }
-egui-winit = {version = "0.25", git = "https://github.com/emilk/egui.git", branch="master", default-features = false, features = ["clipboard", "links", "wayland"] }
+#egui = { version = "0.26", git = "https://github.com/emilk/egui.git", branch="master"}
+#egui-wgpu = {version = "0.26", git = "https://github.com/emilk/egui.git", branch="master", features = ["winit"] }
+#egui-winit = {version = "0.26", git = "https://github.com/emilk/egui.git", branch="master", default-features = false, features = ["clipboard", "links", "wayland"] }
+egui = { version = "0.26"}
+egui-wgpu = {version = "0.26"}
+egui-winit = {version = "0.26"}
 nanorand = { version = "0.7", default-features = false, features = ["wyrand"] }
 nom = "7"
 anyhow = "1"

@@ -72,7 +72,8 @@ jobs:
           cd ../..
       - name: Build
         if: matrix.action == 'build'
-        run: cargo build --all-features --workspace --release
+        run: cargo build --workspace --release
+#        run: cargo build --all-features --workspace --release
           
 #      - name: Test
 #        if: matrix.action == 'test'
@@ -124,7 +125,8 @@ jobs:
           cmake -DCMAKE_TOOLCHAIN_FILE=./cmake/x86-64.cmake -S . -B build
           cmake --build build --parallel $(nproc)
           cd ../..
-          cargo clippy --all-features --workspace
+          cargo clippy --workspace
+#          cargo clippy --all-features --workspace
 
 #  docs:
 #    name: Docs

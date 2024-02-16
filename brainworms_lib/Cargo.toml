@@ -13,7 +13,7 @@ keywords = ["wgpu", "rend3", "not-bevy", "no-ecs", "game", "program"]
 [dependencies]
 brainworms_arson = {path = "../brainworms_arson"}
 brainworms_farting_noises = {path = "../brainworms_farting_noises"}
-wgpu = { version = "0.18", default-features = false }
+wgpu = { version = "0.19", default-features = false }
 
 pollster = "0.3.0"
 log = "0.4.20"
@@ -26,6 +26,7 @@ env_logger = "0.10.2"
 
 # Linear algebra library
 glam = "0.24"
+glam25compat = {package = "glam", version = "0.25"}
 # Importing png's
 image = { version = "0.24.3", default-features = false, features = ["png","jpeg","tiff"] }
 # Renderer core
@@ -45,7 +46,7 @@ inox2d-wgpu = {path = "../inox2d/inox2d-wgpu"}
 bytemuck = { version = "1.14.1", features = ["derive"] }
 
 pico-args = "0.5"
-wgpu-profiler = "0.15.0"
+#wgpu-profiler = "0.15.0"
 #gluon = {git = "https://github.com/gluon-lang/gluon", branch = "master"}
 
 cfg-if = "1"

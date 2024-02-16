@@ -48,7 +48,6 @@ pub(crate) fn extract_backend(value: &str) -> Result<Backend, &'static str> {
     Ok(match value.to_lowercase().as_str() {
         "vulkan" | "vk" => Backend::Vulkan,
         "dx12" | "12" => Backend::Dx12,
-        "dx11" | "11" => Backend::Dx11,
         "metal" | "mtl" => Backend::Metal,
         "opengl" | "gl" => Backend::Gl,
         _ => return Err("unknown backend"),

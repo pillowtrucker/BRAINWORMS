@@ -1,6 +1,6 @@
 use std::{num::NonZeroU32, sync::Arc};
 
-use glam::{uvec2, vec2, Vec2};
+use glam::uvec2;
 use inox2d::formats::inp::parse_inp;
 use parking_lot::Mutex;
 use rend3::{types::MipmapCount, Renderer};
@@ -35,7 +35,7 @@ pub enum AstinkSprite {
     Loaded((String, uuid::Uuid, Actress)),
 }
 
-pub(crate) fn draw_actor(a: Arc<Mutex<AstinkSprite>>, renderer: Arc<Renderer>, t: f32) {
+pub(crate) fn draw_actor(a: Arc<Mutex<AstinkSprite>>, renderer: Arc<Renderer>, t: f32, dt: f32) {
     let mut a = a.lock();
     let AstinkSprite::Loaded((_, _, ref mut actress)) = *a else {
         return;
@@ -46,9 +46,9 @@ pub(crate) fn draw_actor(a: Arc<Mutex<AstinkSprite>>, renderer: Arc<Renderer>, t
 
         puppet.begin_set_params();
 
-        puppet.set_param("Head:: Yaw-Pitch", vec2(t.cos(), t.sin()));
+        puppet.set_named_param("Head:: Yaw-Pitch", glam25compat::vec2(t.cos(), t.sin()));
 
-        puppet.end_set_params();
+        puppet.end_set_params(dt);
     }
 
     let inox_texture_rend3_handle = actress.texture_rend3_handle.clone();
@@ -93,7 +93,7 @@ pub async fn create_actor(
 ) {
     let path = format!("{}/{}.inp", &directory, name);
     let format = TextureFormat::Bgra8Unorm;
-    let texture_size_uvec2 = uvec2(8192, 8192); // we no longer care about the surface size for the sprite texture
+    let texture_size_uvec2 = glam25compat::uvec2(8192, 8192); // we no longer care about the surface size for the sprite texture
 
     let texture_size = wgpu::Extent3d {
         width: texture_size_uvec2.x,
@@ -112,7 +112,7 @@ pub async fn create_actor(
         texture_size_uvec2,
     );
 
-    inox_renderer.camera.scale = Vec2::splat(1.0);
+    inox_renderer.camera.scale = glam25compat::Vec2::splat(1.0);
 
     let inox_texture_descriptor = wgpu::TextureDescriptor {
         size: texture_size,
@@ -132,7 +132,7 @@ pub async fn create_actor(
         base_mip_level: 0,
         ..Default::default()
     });
-
+    let texture_size_uvec2 = uvec2(8192, 8192); // we no longer care about the surface size for the sprite texture
     let inox_texture_rend3 = rend3::types::Texture {
         label: Some("inox texture but rend3".to_owned()),
         format,

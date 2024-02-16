@@ -345,6 +345,7 @@ impl Widget for KineticLabel {
                 angle: 0.0,
                 fallback_color: response_color,
                 override_text_color: Some(response_color),
+                opacity_factor: 1.,
             });
         };
         if self.kinesis.is_none() {
@@ -359,7 +360,8 @@ impl Widget for KineticLabel {
             underline,
             angle: 0.0,
             fallback_color: response_color,
-            override_text_color: None, //            override_text_color: Some(response_color),
+            override_text_color: None,
+            opacity_factor: 1., //            override_text_color: Some(response_color),
         };
         let clipped_shape: ClippedShape = ClippedShape {
             clip_rect: Rect::EVERYTHING,

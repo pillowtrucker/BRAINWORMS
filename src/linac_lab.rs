@@ -137,7 +137,7 @@ impl LinacLabScene {
 
         let midori = ActressDefinition {
             name: "Midori".to_owned(),
-            directory: "assets/inochi2d-models".to_owned(),
+            directory: "lfs_scam/inochi2d-models".to_owned(),
             transform: next_to_pdp11,
             size: 5.0,
         };

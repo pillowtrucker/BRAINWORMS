@@ -97,7 +97,7 @@ impl<PlayablesEnum: Playable<InputContextEnum> + 'static, InputContextEnum: Inpu
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn handle_surface(
         &mut self,
-        window: &Window,
+        window: Arc<Window>,
         event: &Event,
         instance: &Instance,
         surface: &mut Option<Arc<Surface>>,
@@ -109,9 +109,7 @@ impl<PlayablesEnum: Playable<InputContextEnum> + 'static, InputContextEnum: Inpu
             Event::Resumed => {
                 if surface.is_none() {
                     // uhh this is still the same one line of unsafe I guess but for android
-                    *surface = Some(Arc::new(
-                        unsafe { instance.create_surface(window) }.unwrap(),
-                    ));
+                    *surface = Some(Arc::new(instance.create_surface(window.clone()).unwrap()));
                 }
                 Some(false)
             }
@@ -154,6 +152,7 @@ impl<PlayablesEnum: Playable<InputContextEnum> + 'static, InputContextEnum: Inpu
                     present_mode: wgpu::PresentMode::Immediate,
                     alpha_mode,
                     view_formats: Vec::new(),
+                    desired_maximum_frame_latency: 2,
                 };
 
                 surface
