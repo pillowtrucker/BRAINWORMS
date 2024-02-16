@@ -22,7 +22,10 @@ pub use parry3d;
 use rend3::types::DirectionalLight;
 pub use rend3_routine;
 use rend3_routine::base::BaseRenderGraph;
-use std::{sync::Arc, time};
+use std::{
+    sync::Arc,
+    time::{self, Duration},
+};
 pub use the_great_mind_palace_of_theatrical_arts as theater;
 use theater::{
     basement::{
@@ -120,6 +123,7 @@ impl<
             .unwrap();
 
         let window_size = window.inner_size();
+        let window = Arc::new(window);
         // The one line of unsafe needed. We just need to guarentee that the window
         // outlives the use of the surface.
         //
@@ -129,7 +133,7 @@ impl<
             None
         } else {
             Some(Arc::new(
-                unsafe { iad.instance.create_surface(&window) }.unwrap(),
+                iad.instance.create_surface(window.clone()).unwrap(),
             ))
         };
         let renderer = rend3::Renderer::new(
@@ -138,7 +142,7 @@ impl<
             Some(window_size.width as f32 / window_size.height as f32),
         )
         .unwrap();
-        self.state.window = Some(Arc::new(window));
+        self.state.window = Some(window.clone());
         self.state.renderer = Some(renderer.clone());
         let window = self.state.window.clone().unwrap();
         // Get the preferred format for the surface.
@@ -209,7 +213,7 @@ impl<
             let mut control_flow = event_loop_window_target.control_flow();
             if let Some(suspend) = Self::handle_surface(
                 &mut self,
-                &window,
+                window.clone(),
                 &event,
                 &iad.instance,
                 &mut surface,
@@ -386,6 +390,7 @@ impl<
                     .unwrap()
                 {
                     let t = game_data.timestamp_start.elapsed().as_secs_f32();
+                    let dt = game_state.last_update.unwrap().elapsed().as_secs_f32();
                     let actresses = cs_implementation.actresses.values();
                     for a in actresses {
                         let renderer = Arc::clone(&renderer);
@@ -393,7 +398,7 @@ impl<
                         // this kind of makes self.spawn at best useless and probably counter-productive
                         self.rts.as_ref().map(|rts| {
                             rts.spawn(async move {
-                                draw_actor(a, renderer, t);
+                                draw_actor(a, renderer, t, dt);
                             })
                         });
                     }
@@ -427,7 +432,7 @@ impl<
                 match event {
                     WindowEvent::CloseRequested => {
                         let the_rt = self.rts.take();
-                        the_rt.unwrap().shutdown_background();
+                        the_rt.unwrap().shutdown_timeout(Duration::from_secs(10));
                         event_loop_window_target.exit();
                     }
                     winit::event::WindowEvent::Resized(size) => {
