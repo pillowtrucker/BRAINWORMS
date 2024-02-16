@@ -453,7 +453,7 @@ pub fn draw_line(points: Vec<[f32; 3]>) -> rend3::types::Mesh {
 pub fn do_update_camera<InputContextEnum: InputContext>(
     state: &mut GameProgrammeState<InputContextEnum>,
 ) {
-    if let Some(cur_camera) = &mut state.cur_camera {
+    if let Some(cur_camera) = &mut state.cur_camera.lock().as_mut() {
         let view = glam::Mat4::from_euler(
             glam::EulerRot::XYZ,
             -cur_camera.info.pitch,
@@ -469,7 +469,7 @@ pub fn do_update_camera<InputContextEnum: InputContext>(
             view,
         };
         cur_camera.renderer_camera = renderer_camera;
-        if let Some(renderer) = &state.renderer {
+        if let Some(renderer) = &state.renderer.lock().as_ref() {
             renderer.set_camera_data(renderer_camera);
         }
     }
@@ -480,7 +480,7 @@ pub fn update_camera_mouse_params<InputContextEnum: InputContext>(
     delta_x: f64,
     delta_y: f64,
 ) {
-    if !state.grabber.as_ref().unwrap().grabbed() {
+    if !state.grabber.lock().as_ref().unwrap().grabbed() {
         return;
     }
 
@@ -489,6 +489,7 @@ pub fn update_camera_mouse_params<InputContextEnum: InputContext>(
     let mouse_delta = if absolute_mouse {
         let prev = state
             .input_status
+            .lock()
             .last_mouse_delta
             .replace(glam::DVec2::new(delta_x, delta_y));
         if let Some(prev) = prev {
@@ -499,7 +500,7 @@ pub fn update_camera_mouse_params<InputContextEnum: InputContext>(
     } else {
         glam::DVec2::new(delta_x, delta_y)
     };
-    if let Some(cur_camera) = &mut state.cur_camera {
+    if let Some(cur_camera) = &mut state.cur_camera.lock().as_mut() {
         cur_camera.info.yaw -= (mouse_delta.x / 1000.0) as f32;
         cur_camera.info.pitch -= (mouse_delta.y / 1000.0) as f32;
         if cur_camera.info.yaw < 0.0 {
@@ -517,7 +518,7 @@ pub fn update_camera_mouse_params<InputContextEnum: InputContext>(
 pub fn update_camera_rotation<InputContextEnum: InputContext>(
     state: &mut GameProgrammeState<InputContextEnum>,
 ) {
-    if let Some(cur_camera) = &mut state.cur_camera {
+    if let Some(cur_camera) = &mut state.cur_camera.lock().as_mut() {
         cur_camera.rotation = glam::Mat3A::from_euler(
             glam::EulerRot::XYZ,
             -cur_camera.info.pitch,

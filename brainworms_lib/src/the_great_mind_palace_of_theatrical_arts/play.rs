@@ -45,17 +45,23 @@ pub trait Playable<InputContextEnum: InputContext, PlayablesEnum> {
         game_settings: Arc<Mutex<GameProgrammeSettings>>,
         game_state: Arc<Mutex<GameProgrammeState<InputContextEnum>>>,
         game_data: Arc<Mutex<GameProgrammeData<PlayablesEnum>>>,
-        rts: Arc<Mutex<Runtime>>,
+        rts: Arc<Mutex<Option<Runtime>>>,
     );
     fn define_playable(&mut self);
-    fn implement_chorus_for_playable(&self, egui_ctx: Context, orchestra: Arc<Orchestra>);
+    fn implement_chorus_for_playable(
+        &mut self,
+        game_settings: Arc<Mutex<GameProgrammeSettings>>,
+        game_state: Arc<Mutex<GameProgrammeState<InputContextEnum>>>,
+        game_data: Arc<Mutex<GameProgrammeData<PlayablesEnum>>>,
+        rts: Arc<Mutex<Option<Runtime>>>,
+    );
     //    fn get_current_input_context(&self) -> &InputContext<TO>;
     fn handle_input_for_playable(
         &mut self,
         game_settings: Arc<Mutex<GameProgrammeSettings>>,
         game_state: Arc<Mutex<GameProgrammeState<InputContextEnum>>>,
         game_data: Arc<Mutex<GameProgrammeData<PlayablesEnum>>>,
-        rts: Arc<Mutex<Runtime>>,
+        rts: Arc<Mutex<Option<Runtime>>>,
     );
 }
 #[derive(Debug)]
@@ -80,8 +86,11 @@ pub enum Implementations {
 
 impl<
         InputContextEnum: InputContext,
-        T: Scenic + Choral + HandlesInputContexts<InputContextEnum>,
-    > Playable<InputContextEnum> for T
+        PlayablesEnum: Playable<InputContextEnum, PlayablesEnum>,
+        T: Scenic<InputContextEnum, PlayablesEnum>
+            + Choral<InputContextEnum, PlayablesEnum>
+            + HandlesInputContexts<InputContextEnum, PlayablesEnum>,
+    > Playable<InputContextEnum, PlayablesEnum> for T
 {
     fn playable_uuid(&self) -> Uuid {
         self.scene_uuid()
@@ -97,21 +106,25 @@ impl<
 
     fn implement_playable(
         &mut self,
-        settings: &GameProgrammeSettings,
-        event_loop: &EventLoop<MyEvent>,
-        renderer: Arc<Renderer>,
-        routines: Arc<DefaultRoutines>,
-        rts: &Runtime,
-        orchestra: Arc<Orchestra>,
+        game_settings: Arc<Mutex<GameProgrammeSettings>>,
+        game_state: Arc<Mutex<GameProgrammeState<InputContextEnum>>>,
+        game_data: Arc<Mutex<GameProgrammeData<PlayablesEnum>>>,
+        rts: Arc<Mutex<Option<Runtime>>>,
     ) {
-        self.implement_scene(settings, event_loop, renderer, routines, rts, orchestra)
+        self.implement_scene(game_settings, game_state, game_data, rts)
     }
 
     fn define_playable(&mut self) {
         self.define_scene()
     }
-    fn implement_chorus_for_playable(&self, egui_ctx: Context, orchestra: Arc<Orchestra>) {
-        self.implement_chorus_for_choral(egui_ctx, orchestra);
+    fn implement_chorus_for_playable(
+        &mut self,
+        game_settings: Arc<Mutex<GameProgrammeSettings>>,
+        game_state: Arc<Mutex<GameProgrammeState<InputContextEnum>>>,
+        game_data: Arc<Mutex<GameProgrammeData<PlayablesEnum>>>,
+        rts: Arc<Mutex<Option<Runtime>>>,
+    ) {
+        self.implement_chorus_for_choral(game_settings, game_state, game_data, rts);
     }
 
     fn playable_definition(&mut self) -> &mut Definitions {
@@ -124,10 +137,11 @@ impl<
 
     fn handle_input_for_playable(
         &mut self,
-        settings: &GameProgrammeSettings,
-        state: &mut GameProgrammeState<InputContextEnum>,
-        window: &Arc<Window>,
+        game_settings: Arc<Mutex<GameProgrammeSettings>>,
+        game_state: Arc<Mutex<GameProgrammeState<InputContextEnum>>>,
+        game_data: Arc<Mutex<GameProgrammeData<PlayablesEnum>>>,
+        rts: Arc<Mutex<Option<Runtime>>>,
     ) {
-        self.handle_input_for_context(settings, state, window)
+        self.handle_input_for_context(game_settings, game_state, game_data, rts)
     }
 }

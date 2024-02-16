@@ -7,12 +7,16 @@ use tokio::runtime::Runtime;
 use uuid::Uuid;
 use winit::event_loop::EventLoop;
 
-use crate::{theater::basement::cla::GameProgrammeSettings, MyEvent};
+use crate::{
+    theater::basement::{cla::GameProgrammeSettings, input_handling::InputContext},
+    GameProgrammeData, GameProgrammeState, MyEvent,
+};
 
 use self::{actors::ActressDefinition, stage3d::Colliders};
 
 use super::{
     backstage::plumbing::DefaultRoutines, orchestra::Orchestra, Definitions, Implementations,
+    Playable,
 };
 
 pub mod actors;
@@ -91,18 +95,20 @@ pub struct SceneImplementation {
     pub cameras: HashMap<String, Camera>,
     //    script: String, // I'm really kinda stuck on this chicken and egg problem with script <-> actual game logic
 }
-pub trait Scenic {
+pub trait Scenic<
+    InputContextEnum: InputContext,
+    PlayablesEnum: Playable<InputContextEnum, PlayablesEnum>,
+>
+{
     fn scene_uuid(&self) -> Uuid;
     fn scene_name(&self) -> &str;
     fn define_scene(&mut self);
     fn implement_scene(
         &mut self,
-        settings: &GameProgrammeSettings,
-        event_loop: &EventLoop<MyEvent>,
-        renderer: Arc<Renderer>,
-        routines: Arc<DefaultRoutines>,
-        rts: &Runtime,
-        orchestra: Arc<Orchestra>,
+        game_settings: Arc<Mutex<GameProgrammeSettings>>,
+        game_state: Arc<Mutex<GameProgrammeState<InputContextEnum>>>,
+        game_data: Arc<Mutex<GameProgrammeData<PlayablesEnum>>>,
+        rts: Arc<Mutex<Option<Runtime>>>,
     );
     fn scene_starting_cam_info(&self) -> CamInfo;
     fn raw_definition(&mut self) -> &mut Definitions;

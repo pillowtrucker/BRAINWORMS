@@ -84,15 +84,15 @@ pub struct GameProgrammeState<InputContextEnum: InputContext> {
     pub grabber: Arc<Mutex<Option<Grabber>>>,
     pub cur_camera: Arc<Mutex<Option<theater::play::scene::Camera>>>,
     pub input_status: Arc<Mutex<InputStatus>>,
-    pub window: Arc<Mutex<Option<Window>>>,
-    pub renderer: Arc<Mutex<Option<rend3::Renderer>>>,
-    pub routines: Arc<Mutex<Option<DefaultRoutines>>>,
-    pub base_rendergraph: Arc<Mutex<Option<BaseRenderGraph>>>,
+    pub window: Arc<Mutex<Option<Arc<Window>>>>,
+    pub renderer: Arc<Mutex<Option<Arc<rend3::Renderer>>>>,
+    pub routines: Arc<Mutex<Option<Arc<DefaultRoutines>>>>,
+    pub base_rendergraph: Arc<Mutex<Option<Arc<BaseRenderGraph>>>>,
     pub cur_input_context: Arc<Mutex<InputContextEnum>>,
     pub orchestra: Arc<Mutex<Option<Orchestra>>>,
 }
 pub struct GameProgramme<
-    PlayablesEnum: Playable<InputContextEnum>,
+    PlayablesEnum: Playable<InputContextEnum, PlayablesEnum>,
     InputContextEnum: InputContext + 'static,
 > {
     pub data: Arc<Mutex<GameProgrammeData<PlayablesEnum>>>,
@@ -111,7 +111,7 @@ pub enum MyWinitEvent<TS, TA: 'static> {
 }
 
 impl<
-        PlayablesEnum: Playable<InputContextEnum> + 'static,
+        PlayablesEnum: Playable<InputContextEnum, PlayablesEnum> + 'static,
         InputContextEnum: InputContext + 'static,
     > GameProgramme<PlayablesEnum, InputContextEnum>
 {
@@ -121,9 +121,9 @@ impl<
         let (event_loop, window) = self
             .create_window(window_builder.with_visible(false))
             .unwrap();
-
-        let window_size = window.inner_size();
         let window = Arc::new(window);
+
+        //        let window = Arc::new(window);
         // The one line of unsafe needed. We just need to guarentee that the window
         // outlives the use of the surface.
         //
@@ -136,15 +136,20 @@ impl<
                 iad.instance.create_surface(window.clone()).unwrap(),
             ))
         };
+        let window_size = window.inner_size();
         let renderer = rend3::Renderer::new(
             iad.clone(),
-            self.settings.handedness,
+            self.settings.lock().handedness,
             Some(window_size.width as f32 / window_size.height as f32),
         )
         .unwrap();
-        self.state.window = Some(window.clone());
-        self.state.renderer = Some(renderer.clone());
-        let window = self.state.window.clone().unwrap();
+
+        let mut state = self.state.lock();
+        state.window = Arc::new(Mutex::new(Some(window)));
+        state.renderer = Arc::new(Mutex::new(Some(renderer.clone())));
+
+        let window = state.window.lock().clone().unwrap();
+
         // Get the preferred format for the surface.
         //
         // Assume android supports Rgba8Srgb, as it has 100% device coverage
@@ -168,10 +173,12 @@ impl<
         rend3_routine::builtin_shaders(&mut spp);
 
         let mut data_core = renderer.data_core.lock();
-        let base_rendergraph = Arc::new(Mutex::new(create_base_rendergraph(&renderer, &spp)));
+        let base_rendergraph = Arc::new(Mutex::new(Some(Arc::new(create_base_rendergraph(
+            &renderer, &spp,
+        )))));
         {
-            let base_rendergraph = base_rendergraph.lock();
-            self.state.routines = Some(Arc::new(DefaultRoutines {
+            let base_rendergraph = base_rendergraph.lock().clone().unwrap();
+            state.routines = Arc::new(Mutex::new(Some(Arc::new(DefaultRoutines {
                 pbr: Mutex::new(rend3_routine::pbr::PbrRoutine::new(
                     &renderer,
                     &mut data_core,
@@ -190,11 +197,12 @@ impl<
                     &base_rendergraph.interfaces,
                     format,
                 )),
-            }));
+            }))));
         }
-        self.state.base_rendergraph = Some(base_rendergraph);
+        state.base_rendergraph = base_rendergraph;
         drop(data_core); // initiate noocoolar explosion
                          // SETUP CALLED HERE
+        drop(state);
         self.setup(&event_loop, format);
 
         // We're ready, so lets make things visible
@@ -267,15 +275,14 @@ impl<
         control_flow: impl FnOnce(winit::event_loop::ControlFlow),
         event_loop_window_target: &EventLoopWindowTarget<MyEvent>,
     ) {
-        let game_data = &mut self.data;
-        let game_state = &mut self.state;
-        let window = game_state.window.clone().unwrap();
+        let game_data = &mut self.data.lock();
+        let game_state = &mut self.state.lock();
+        let window = game_state.window.lock().clone().unwrap();
         let window_size = window.inner_size();
-        let renderer = game_state.renderer.clone().unwrap();
-        let routines = game_state.routines.clone().unwrap();
+        let renderer = game_state.renderer.lock().clone().unwrap();
+        let routines = game_state.routines.lock().clone().unwrap();
         let resolution = glam::UVec2::new(window_size.width, window_size.height);
-        let base_rendergraph = game_state.base_rendergraph.clone().unwrap();
-        let base_rendergraph = base_rendergraph.lock();
+        let base_rendergraph = game_state.base_rendergraph.lock().clone().unwrap();
 
         match event {
             Event::WindowEvent {
@@ -287,23 +294,28 @@ impl<
 
                 // Get a frame
                 let frame = surface.unwrap().get_current_texture().unwrap();
-                let egui_ctx = game_state.egui_ctx.clone().unwrap();
-                let egui_platform = game_state.egui_platform.as_mut().unwrap();
-
+                let egui_ctx = game_state.egui_ctx.lock().clone().unwrap();
+                let mut egui_platform = game_state.egui_platform.lock();
+                let egui_platform = egui_platform.as_mut().unwrap();
                 egui_ctx.begin_frame(egui_platform.take_egui_input(&window));
 
                 // Insert egui commands here
-                let current_scene_id = game_state.current_playable.unwrap();
-                let current_scene = game_data.play.playables.get_mut(&current_scene_id).unwrap();
+                let current_scene_id = game_state.current_playable.lock().unwrap();
+                let mut play = game_data.play.lock();
+                let current_scene = play.playables.get_mut(&current_scene_id).unwrap();
+                drop(game_data);
+                drop(game_state);
 
                 current_scene.implement_chorus_for_playable(
-                    egui_ctx.clone(),
-                    game_state.orchestra.as_ref().unwrap().clone(),
+                    self.settings.clone(),
+                    self.state.clone(),
+                    self.data.clone(),
+                    self.rts.clone(),
                 );
                 egui::Window::new("FPS").show(&egui_ctx, |ui| {
                     ui.label(std::format!(
                         "framerate: {:.0}fps",
-                        game_state.frame_rate.get()
+                        game_state.frame_rate.lock().get()
                     ))
                 });
                 // End the UI frame. Now let's draw the UI with our Backend, we could also
@@ -343,30 +355,32 @@ impl<
                     0..1,
                     rend3::graph::ViewportRect::from_size(resolution),
                 );
-
-                base_rendergraph.add_to_graph(
-                    &mut graph,
-                    rend3_routine::base::BaseRenderGraphInputs {
-                        eval_output: &eval_output,
-                        routines: rend3_routine::base::BaseRenderGraphRoutines {
-                            pbr: &pbr_routine,
-                            skybox: Some(&skybox_routine),
-                            tonemapping: &tonemapping_routine,
+                {
+                    let settings = self.settings.lock();
+                    base_rendergraph.add_to_graph(
+                        &mut graph,
+                        rend3_routine::base::BaseRenderGraphInputs {
+                            eval_output: &eval_output,
+                            routines: rend3_routine::base::BaseRenderGraphRoutines {
+                                pbr: &pbr_routine,
+                                skybox: Some(&skybox_routine),
+                                tonemapping: &tonemapping_routine,
+                            },
+                            target: rend3_routine::base::OutputRenderTarget {
+                                handle: frame_handle,
+                                resolution,
+                                samples: settings.samples,
+                            },
                         },
-                        target: rend3_routine::base::OutputRenderTarget {
-                            handle: frame_handle,
-                            resolution,
-                            samples: self.settings.samples,
+                        rend3_routine::base::BaseRenderGraphSettings {
+                            ambient_color: Vec3::splat(settings.ambient_light_level).extend(1.0),
+                            clear_color: glam::Vec4::new(0.0, 0.0, 0.0, 1.0),
                         },
-                    },
-                    rend3_routine::base::BaseRenderGraphSettings {
-                        ambient_color: Vec3::splat(self.settings.ambient_light_level).extend(1.0),
-                        clear_color: glam::Vec4::new(0.0, 0.0, 0.0, 1.0),
-                    },
-                );
+                    );
+                }
 
                 // Add egui on top of all the other passes
-                let egui_routine = game_state.egui_routine.as_mut().unwrap();
+                let egui_routine = game_state.egui_routine.lock().as_mut().unwrap();
                 egui_routine.add_to_graph(&mut graph, input, frame_handle);
 
                 // Dispatch a render using the built up rendergraph!
@@ -382,6 +396,7 @@ impl<
                     ref mut cs_implementation,
                 ) = game_data
                     .play
+                    .lock()
                     .playables
                     .get_mut(&current_scene_id)
                     .unwrap()
@@ -390,13 +405,18 @@ impl<
                     .unwrap()
                 {
                     let t = game_data.timestamp_start.elapsed().as_secs_f32();
-                    let dt = game_state.last_update.unwrap().elapsed().as_secs_f32();
+                    let dt = game_state
+                        .last_update
+                        .lock()
+                        .unwrap()
+                        .elapsed()
+                        .as_secs_f32();
                     let actresses = cs_implementation.actresses.values();
                     for a in actresses {
                         let renderer = Arc::clone(&renderer);
                         let a = Arc::clone(a);
                         // this kind of makes self.spawn at best useless and probably counter-productive
-                        self.rts.as_ref().map(|rts| {
+                        self.rts.lock().as_ref().map(|rts| {
                             rts.spawn(async move {
                                 draw_actor(a, renderer, t, dt);
                             })
@@ -414,29 +434,40 @@ impl<
                 #[cfg(feature = "extra_debugging")]
                 profiling::scope!("MainEventsCleared");
 
-                let current_scene_id = game_state.current_playable.as_ref().unwrap();
-                let current_scene = game_data.play.playables.get_mut(current_scene_id).unwrap();
-
-                current_scene.handle_input_for_playable(&self.settings, game_state, &window);
+                let current_scene_id = game_state.current_playable.lock().as_ref().unwrap();
+                let current_scene = game_data
+                    .play
+                    .lock()
+                    .playables
+                    .get_mut(current_scene_id)
+                    .unwrap();
+                drop(game_data);
+                drop(game_state);
+                current_scene.handle_input_for_playable(
+                    self.settings.clone(),
+                    self.state.clone(),
+                    self.data.clone(),
+                    self.rts.clone(),
+                );
 
                 window.request_redraw();
             }
             Event::WindowEvent { event, .. } => {
                 // Pass the window events to the egui integration.
 
-                let egui_platform = game_state.egui_platform.as_mut().unwrap();
+                let egui_platform = game_state.egui_platform.lock().as_mut().unwrap();
                 if egui_platform.on_window_event(&window, &event).consumed {
                     return;
                 }
 
                 match event {
                     WindowEvent::CloseRequested => {
-                        let the_rt = self.rts.take();
+                        let the_rt = self.rts.lock().take();
                         the_rt.unwrap().shutdown_timeout(Duration::from_secs(10));
                         event_loop_window_target.exit();
                     }
                     winit::event::WindowEvent::Resized(size) => {
-                        let egui_routine = game_state.egui_routine.as_mut().unwrap();
+                        let egui_routine = game_state.egui_routine.lock().as_mut().unwrap();
                         egui_routine.resize(size.width, size.height, window.scale_factor() as f32);
                     }
 
@@ -452,12 +483,14 @@ impl<
                         log::debug!("pressed {:?}", key_code);
                         game_state
                             .input_status
+                            .lock()
                             .buttons
                             .insert(AcceptedInput::KB(key_code), state);
                     }
                     WindowEvent::MouseInput { button, state, .. } => {
                         game_state
                             .input_status
+                            .lock()
                             .buttons
                             .insert(AcceptedInput::M(button), state);
                     }
@@ -465,7 +498,7 @@ impl<
                         device_id: _,
                         position,
                     } => {
-                        game_state.input_status.mouse_physical_poz = position;
+                        game_state.input_status.lock().mouse_physical_poz = position;
                     }
 
                     _ => {}
@@ -480,7 +513,7 @@ impl<
                 ..
             } => {
                 update_camera_mouse_params(
-                    self.settings.absolute_mouse,
+                    self.settings.lock().absolute_mouse,
                     game_state,
                     delta_x,
                     delta_y,
@@ -492,6 +525,7 @@ impl<
                 );
                 if let theater::play::Implementations::SceneImplementation(sc_imp) = game_data
                     .play
+                    .lock()
                     .playables
                     .get_mut(&sc_id)
                     .unwrap()
@@ -511,6 +545,7 @@ impl<
 
                 if let theater::play::Implementations::SceneImplementation(sc_imp) = game_data
                     .play
+                    .lock()
                     .playables
                     .get_mut(&sc_id)
                     .unwrap()
@@ -533,22 +568,20 @@ impl<
         event_loop: &winit::event_loop::EventLoop<MyEvent>,
         surface_format: rend3::types::TextureFormat,
     ) {
-        let renderer = self.state.renderer.clone().unwrap();
-        let window = self.state.window.clone().unwrap();
-        self.state.grabber = Some(Grabber::new(&window));
-        if let Some(direction) = self.settings.directional_light_direction {
-            self.settings.directional_light = Some(
-                renderer.clone().add_directional_light(DirectionalLight {
+        let state = self.state.lock();
+        let renderer = state.renderer.clone().lock().unwrap();
+        let window = state.window.clone().lock().unwrap();
+        state.grabber = Arc::new(Mutex::new(Some(Grabber::new(&window))));
+        let settings = self.settings.lock();
+        if let Some(direction) = settings.directional_light_direction {
+            settings.directional_light =
+                Some(renderer.clone().add_directional_light(DirectionalLight {
                     color: Vec3::splat(1.), //Vec3::new(1., 0.9, 0.8),
-                    intensity: self.settings.directional_light_intensity,
+                    intensity: settings.directional_light_intensity,
                     direction,
-                    distance: self
-                        .settings
-                        .gltf_settings
-                        .directional_light_shadow_distance,
-                    resolution: self.settings.gltf_settings.directional_light_resolution,
-                }),
-            );
+                    distance: settings.gltf_settings.directional_light_shadow_distance,
+                    resolution: settings.gltf_settings.directional_light_resolution,
+                }));
         }
 
         let window_size = window.inner_size();
@@ -590,26 +623,26 @@ impl<
         );
 
         // Definitions for Play/Scene/etc go above
-        let state = &mut self.state;
+        //        let state = &mut self.state.lock();
 
-        state.egui_routine = Some(egui_routine);
-        state.egui_ctx = Some(egui_ctx);
-        state.egui_platform = Some(egui_platform);
-        state.last_update = Some(time::Instant::now());
-        state.frame_rate = FrameRate::new(100);
-        state.current_playable = None;
-        state.cur_camera = None;
-        state.input_status = InputStatus::default();
-        state.orchestra = Some(Arc::new(Orchestra::new(
-            self.rts.as_ref().unwrap().handle().clone(),
-        )));
+        state.egui_routine = Arc::new(Mutex::new(Some(egui_routine)));
+        state.egui_ctx = Arc::new(Mutex::new(Some(egui_ctx)));
+        state.egui_platform = Arc::new(Mutex::new(Some(egui_platform)));
+        state.last_update = Arc::new(Mutex::new(Some(time::Instant::now())));
+        state.frame_rate = Arc::new(Mutex::new(FrameRate::new(100)));
+        state.current_playable = Arc::new(Mutex::new(None));
+        state.cur_camera = Arc::new(Mutex::new(None));
+        state.input_status = Arc::new(Mutex::new(InputStatus::default()));
+        state.orchestra = Arc::new(Mutex::new(Some(Orchestra::new(
+            self.rts.lock().as_ref().unwrap().handle().clone(),
+        ))));
         //        state.cur_input_context = ;
 
         // Implementations for Play/Scene/etc go below
-        let data = &mut self.data;
-        let play = &mut data.play;
-        let state = &mut self.state;
-        state.current_playable = Some(play.first_playable);
+        let data = &mut self.data.lock();
+        let play = &mut data.play.lock();
+        //        let state = &mut self.state;
+        state.current_playable = Arc::new(Mutex::new(Some(play.first_playable)));
         let scene1 = play.playables.get_mut(&play.first_playable).unwrap();
 
         // Set camera location data
@@ -621,18 +654,19 @@ impl<
                 info: scene1_starting_cam_info.clone(),
                 rotation: Mat3A::default(),
             };
-            state.cur_camera = Some(cur_cam);
+            state.cur_camera = Arc::new(Mutex::new(Some(cur_cam)));
         }
-        let routines = state.routines.clone().unwrap();
+        let routines = state.routines.clone().lock().unwrap();
         let playable_renderer_copy = Arc::clone(&renderer);
         let playable_routines_copy = Arc::clone(&routines);
+        drop(settings);
+        drop(data);
+        drop(state);
         scene1.implement_playable(
-            &self.settings,
-            event_loop,
-            playable_renderer_copy,
-            playable_routines_copy,
-            self.rts.as_ref().unwrap(),
-            self.state.orchestra.as_ref().unwrap().clone(),
+            self.settings.clone(),
+            self.state.clone(),
+            self.data.clone(),
+            self.rts.clone(),
         );
 
         let skybox_renderer_copy = Arc::clone(&renderer);

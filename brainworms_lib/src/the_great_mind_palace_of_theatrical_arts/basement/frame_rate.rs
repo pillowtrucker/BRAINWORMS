@@ -1,4 +1,6 @@
-use std::time;
+use std::{sync::Arc, time};
+
+use parking_lot::Mutex;
 
 use super::input_handling::InputContext;
 
@@ -56,8 +58,8 @@ impl Default for FrameRate {
 pub fn update_frame_stats<InputContextEnum: InputContext>(
     state: &mut crate::GameProgrammeState<InputContextEnum>,
 ) {
-    let last_update = state.last_update.unwrap();
+    let last_update = state.last_update.lock().unwrap();
     let last_frame_duration = last_update.elapsed().as_secs_f32();
-    state.frame_rate.update(last_frame_duration);
-    state.last_update = Some(time::Instant::now());
+    state.frame_rate.lock().update(last_frame_duration);
+    state.last_update = Arc::new(Mutex::new(Some(time::Instant::now())));
 }

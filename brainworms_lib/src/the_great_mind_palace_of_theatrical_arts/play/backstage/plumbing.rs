@@ -37,8 +37,10 @@ pub(crate) struct StoredSurfaceInfo {
     pub(crate) present_mode: PresentMode,
 }
 
-impl<PlayablesEnum: Playable<InputContextEnum> + 'static, InputContextEnum: InputContext>
-    GameProgramme<PlayablesEnum, InputContextEnum>
+impl<
+        PlayablesEnum: Playable<InputContextEnum, PlayablesEnum> + 'static,
+        InputContextEnum: InputContext,
+    > GameProgramme<PlayablesEnum, InputContextEnum>
 {
     pub fn start(self, window_builder: WindowBuilder) {
         {
@@ -51,25 +53,28 @@ impl<PlayablesEnum: Playable<InputContextEnum> + 'static, InputContextEnum: Inpu
         Fut: Future + Send + 'static,
         Fut::Output: Send + 'static,
     {
-        self.rts.as_ref().unwrap().spawn(fut)
+        self.rts.lock().as_ref().unwrap().spawn(fut)
     }
 
     pub fn new(play: Play<PlayablesEnum>) -> Self {
-        let timestamp_start = std::time::Instant::now();
-        let data = GameProgrammeData {
+        let timestamp_start = Arc::new(std::time::Instant::now());
+        let play = Arc::new(Mutex::new(play));
+        let data = Arc::new(Mutex::new(GameProgrammeData {
             timestamp_start,
             play,
-        };
+        }));
         Self {
             data,
-            settings: GameProgrammeSettings::new(),
-            rts: tokio::runtime::Builder::new_multi_thread().build().ok(),
-            state: GameProgrammeState::default(),
+            settings: Arc::new(Mutex::new(GameProgrammeSettings::new())),
+            rts: Arc::new(Mutex::new(
+                tokio::runtime::Builder::new_multi_thread().build().ok(),
+            )),
+            state: Arc::new(Mutex::new(GameProgrammeState::default())),
         }
     }
 
     pub(crate) fn sample_count(&self) -> rend3::types::SampleCount {
-        self.settings.samples
+        self.settings.lock().samples
     }
     pub(crate) fn winit_run<F, T>(
         event_loop: winit::event_loop::EventLoop<T>,
@@ -173,10 +178,11 @@ impl<PlayablesEnum: Playable<InputContextEnum> + 'static, InputContextEnum: Inpu
         Box<dyn std::future::Future<Output = anyhow::Result<rend3::InstanceAdapterDevice>> + 'a>,
     > {
         Box::pin(async move {
+            let settings = self.settings.lock();
             Ok(rend3::create_iad(
-                self.settings.desired_backend,
-                self.settings.desired_device_name.clone(),
-                self.settings.desired_profile,
+                settings.desired_backend,
+                settings.desired_device_name.clone(),
+                settings.desired_profile,
                 Some(Features::ADDRESS_MODE_CLAMP_TO_BORDER),
             )
             .await?)
@@ -195,7 +201,7 @@ impl<PlayablesEnum: Playable<InputContextEnum> + 'static, InputContextEnum: Inpu
     }
 
     pub(crate) fn present_mode(&self) -> rend3::types::PresentMode {
-        self.settings.present_mode
+        self.settings.lock().present_mode
     }
 }
 pub(crate) fn create_base_rendergraph(

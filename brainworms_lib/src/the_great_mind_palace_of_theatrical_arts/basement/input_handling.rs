@@ -2,6 +2,8 @@ use std::{collections::HashMap, sync::Arc};
 
 use glam::DVec2;
 use log::info;
+use parking_lot::Mutex;
+use tokio::runtime::Runtime;
 use winit::{
     dpi::PhysicalPosition,
     event::{ElementState, MouseButton},
@@ -9,7 +11,7 @@ use winit::{
     window::Window,
 };
 
-use crate::{GameProgrammeSettings, GameProgrammeState};
+use crate::{GameProgrammeData, GameProgrammeSettings, GameProgrammeState};
 
 pub type KeyStates = HashMap<AcceptedInput, ElementState>;
 pub type KeyBindings<TO> = HashMap<TO, AcceptedInput>;
@@ -42,12 +44,13 @@ pub enum AcceptedInput {
 
 // Ideally I want this to only mess with its own data but for now let's just reproduce the existing behaviour
 //#[enum_dispatch(Playables)]
-pub trait HandlesInputContexts<InputContextEnum: InputContext> {
+pub trait HandlesInputContexts<InputContextEnum: InputContext, PlayablesEnum> {
     fn handle_input_for_context(
         &mut self,
-        settings: &GameProgrammeSettings,
-        state: &mut GameProgrammeState<InputContextEnum>,
-        window: &Arc<Window>,
+        game_settings: Arc<Mutex<GameProgrammeSettings>>,
+        game_state: Arc<Mutex<GameProgrammeState<InputContextEnum>>>,
+        game_data: Arc<Mutex<GameProgrammeData<PlayablesEnum>>>,
+        rts: Arc<Mutex<Option<Runtime>>>,
     );
     fn key_down(input_status: &KeyStates, the_input: &AcceptedInput) -> Option<bool> {
         Self::key_is_state(input_status, the_input, &ElementState::Pressed)
