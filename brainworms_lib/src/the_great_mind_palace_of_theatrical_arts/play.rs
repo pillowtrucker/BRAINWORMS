@@ -14,6 +14,7 @@ use crate::{theater::basement::input_handling::InputContext, GameProgrammeState,
 
 use self::{
     backstage::plumbing::DefaultRoutines,
+    curtain::{CurtainDefinition, CurtainImplementation},
     orchestra::Orchestra,
     scene::{chorus::Choral, CamInfo, SceneDefinition, SceneImplementation, Scenic},
 };
@@ -21,6 +22,7 @@ use self::{
 use super::basement::{cla::GameProgrammeSettings, input_handling::HandlesInputContexts};
 
 pub mod backstage;
+pub mod curtain;
 pub mod definition;
 pub mod orchestra;
 pub mod scene;
@@ -56,7 +58,7 @@ pub trait Playable<InputContextEnum: InputContext, UserData> {
         settings: &GameProgrammeSettings,
         user_data: Arc<Mutex<UserData>>,
     );
-    //    fn get_current_input_context(&self) -> &InputContext<TO>;
+
     fn handle_input_for_playable(
         &mut self,
         settings: &GameProgrammeSettings,
@@ -67,7 +69,8 @@ pub trait Playable<InputContextEnum: InputContext, UserData> {
 #[derive(Debug)]
 pub enum Definitions {
     SceneDefinition(SceneDefinition),
-    BogusDefinition, // because fucking clippy that's why
+    CurtainDefinition(CurtainDefinition),
+    BogusDefinition,
 }
 
 impl Default for Definitions {
@@ -80,6 +83,7 @@ impl Default for Definitions {
 #[derive(Default)]
 pub enum Implementations {
     SceneImplementation(SceneImplementation),
+    CurtainImplementation(CurtainImplementation),
     #[default]
     BogusImplementation,
 }
