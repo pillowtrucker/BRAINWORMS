@@ -1,18 +1,9 @@
-use std::{path::Path, sync::Arc};
+use std::sync::Arc;
 
 use rend3::types::Handedness;
 
 use crate::theater::play::scene::stage3d::draw_line;
 
-pub fn write_profiling_json(stats: &Option<&Vec<wgpu_profiler::GpuTimerScopeResult>>) {
-    // write out gpu side performance info into a trace readable by chrome://tracing
-    if let Some(stats) = stats {
-        println!("Outputing gpu timing chrome trace to profile.json");
-        wgpu_profiler::chrometrace::write_chrometrace(Path::new("profile.json"), stats).unwrap();
-    } else {
-        println!("No gpu timing trace available, either timestamp queries are unsupported or not enough frames have elapsed yet!");
-    }
-}
 pub enum DebugPickingDoodad {
     TheRay,
     TheColliderShape,

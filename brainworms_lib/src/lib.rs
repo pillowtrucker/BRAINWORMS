@@ -75,8 +75,6 @@ pub struct GameProgrammeData<
 
 #[derive(Default)]
 pub struct GameProgrammeState<InputContextEnum: InputContext> {
-    #[cfg(feature = "extra_debugging")]
-    pub previous_profiling_stats: Option<Vec<wgpu_profiler::GpuTimerScopeResult>>,
     pub egui_routine: Option<rend3_egui::EguiRenderRoutine>,
     pub egui_ctx: Option<egui::Context>,
     pub egui_platform: Option<egui_winit::State>,
@@ -377,14 +375,9 @@ impl<
                 egui_routine.add_to_graph(&mut graph, input, frame_handle);
 
                 // Dispatch a render using the built up rendergraph!
-                cfg_if! {
-                    if #[cfg(feature = "extra_debugging")] {
-                        game_state.previous_profiling_stats = graph.execute(&renderer, &mut eval_output);
-                    }
-                    else {
-                        graph.execute(&renderer, &mut eval_output);
-                    }
-                }
+
+                graph.execute(&renderer, &mut eval_output);
+
                 if let theater::play::Implementations::SceneImplementation(
                     ref mut cs_implementation,
                 ) = game_data
@@ -412,15 +405,10 @@ impl<
                 }
                 // Present the frame
                 frame.present();
-                #[cfg(feature = "extra_debugging")]
-                // mark the end of the frame for tracy/other profilers
-                profiling::finish_frame!();
+
                 control_flow(winit::event_loop::ControlFlow::Poll);
             }
             Event::AboutToWait => {
-                #[cfg(feature = "extra_debugging")]
-                profiling::scope!("MainEventsCleared");
-
                 let current_scene_id = game_state.current_playable.as_ref().unwrap();
                 let current_scene = game_data.play.playables.get_mut(current_scene_id).unwrap();
 

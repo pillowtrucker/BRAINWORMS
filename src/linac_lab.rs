@@ -104,7 +104,7 @@ impl LinacLabScene {
                 (DebugInputContext::LiftUp, KeyCode::KeyQ),
                 (DebugInputContext::Interact, KeyCode::Period),
                 (DebugInputContext::Back, KeyCode::Escape),
-                (DIC::Profiling, KeyCode::KeyP),
+                //                (DIC::Profiling, KeyCode::KeyP),
                 (DIC::SwitchToScene, KeyCode::F7),
             ]
             .map(|(lb, kc)| (MIC::DebugInputContext(lb), AcceptedInput::KB(kc))),
@@ -548,12 +548,6 @@ impl HandlesInputContexts<MyInputContexts> for LinacLabScene {
                     state.grabber.as_mut().unwrap().request_ungrab(window);
                 }
 
-                if really_released(wdbg(DIC::Profiling)) {
-                    #[cfg(feature = "extra_debugging")]
-                    crate::bl::theater::basement::debug_profiling_etc::write_profiling_json(
-                        &state.previous_profiling_stats.as_ref(),
-                    );
-                }
                 if interacted_with(wdbg(DIC::GrabWindow)) {
                     let grabber = state.grabber.as_mut().unwrap();
 
