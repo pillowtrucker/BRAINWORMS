@@ -1,14 +1,18 @@
-#![feature(async_closure)]
+#![feature(async_closure, variant_count)]
 pub mod curtain;
 pub mod linac_lab;
 
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    mem::{take, variant_count},
+    ops::{Deref, DerefMut},
+};
 
 use bl::{
     macros::Playable,
     the_great_mind_palace_of_theatrical_arts::{
         basement::input_handling::{DebugInputContext, InputContext},
-        play::{scene::Scenic, Play},
+        play::{scene::Scenic, Play, Playable},
     },
     theater::basement::logging::register_logger,
     winit::window::{Fullscreen, WindowBuilder},
@@ -19,8 +23,8 @@ use curtain::Curtain;
 use linac_lab::{LinacLabIC, LinacLabScene};
 #[derive(Default, Debug)]
 pub struct BrainwormsData;
-#[bl::enum_dispatch::enum_dispatch(Playable)] // this doesnt work across crates but it does generate at least the from and into stuff
-#[derive(Playable)]
+use bl::into_variant::{self as into_variant, IntoVariant, VariantFrom};
+#[derive(Playable, VariantFrom)]
 #[input_context_enum(MyInputContexts)]
 #[user_data_struct(BrainwormsData)]
 pub enum MyPlayables {
@@ -38,17 +42,20 @@ pub enum MyInputContexts {
 impl InputContext for MyInputContexts {}
 
 pub fn define_play() -> Play<MyPlayables> {
-    let mut linac_lab_scene = LinacLabScene::default();
-    linac_lab_scene.define_scene();
-    let mut playables = HashMap::new();
-    let mut playable_names = HashMap::new();
-    playable_names.insert(linac_lab_scene.name.clone(), linac_lab_scene.uuid);
-    let first_playable = linac_lab_scene.uuid;
-    playables.insert(
-        linac_lab_scene.uuid,
-        MyPlayables::LinacLabScene(linac_lab_scene),
-    );
+    let mut all_playables: Vec<MyPlayables> = vec![
+        Curtain::default().into_variant(),
+        LinacLabScene::default().into_variant(),
+    ];
 
+    let mut playable_names = HashMap::new();
+    let mut playables = HashMap::new();
+    while let Some(mut p) = all_playables.pop() {
+        p.define_playable();
+        playable_names.insert(p.playable_name().to_owned(), p.playable_uuid());
+        playables.insert(p.playable_uuid(), p);
+    }
+
+    let first_playable = playable_names["curtain"];
     Play {
         first_playable,
         playables,

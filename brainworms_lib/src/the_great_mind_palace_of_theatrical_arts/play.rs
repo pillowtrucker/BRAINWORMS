@@ -3,6 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 use brainworms_arson::egui;
 use egui::Context;
 use enum_dispatch::enum_dispatch;
+use into_variant::VariantFrom;
 use parking_lot::Mutex;
 use rend3::Renderer;
 use tokio::runtime::Runtime;
@@ -66,17 +67,12 @@ pub trait Playable<InputContextEnum: InputContext, UserData> {
         window: &Arc<Window>,
     );
 }
-#[derive(Debug)]
+#[derive(Debug, VariantFrom, Default)]
 pub enum Definitions {
     SceneDefinition(SceneDefinition),
     CurtainDefinition(CurtainDefinition),
+    #[default]
     BogusDefinition,
-}
-
-impl Default for Definitions {
-    fn default() -> Self {
-        Definitions::SceneDefinition(SceneDefinition::default())
-    }
 }
 
 #[allow(clippy::large_enum_variant)]

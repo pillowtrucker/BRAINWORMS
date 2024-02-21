@@ -4,8 +4,10 @@ use crate::{BrainwormsData, MyInputContexts};
 
 use bl::egui::Context;
 
+use bl::into_variant::IntoVariant;
 use bl::parking_lot::Mutex;
 use bl::the_great_mind_palace_of_theatrical_arts::basement::cla::GameProgrammeSettings;
+use bl::the_great_mind_palace_of_theatrical_arts::play::curtain::CurtainDefinition;
 use bl::theater::play::orchestra::Orchestra;
 use bl::theater::play::{Definitions, Implementations};
 use bl::{
@@ -30,10 +32,13 @@ impl Curtain {
         settings: &GameProgrammeSettings,
         user_data: Arc<Mutex<BrainwormsData>>,
     ) {
-        todo!()
-        //        egui::Window::new("ok").fixed_size(size)
     }
     fn define(&mut self) {
-        todo!()
+        self.name = "curtain".into();
+        self.definition = CurtainDefinition {
+            backgrounds: vec![],
+            actors: vec![],
+        }
+        .into_variant();
     }
 }

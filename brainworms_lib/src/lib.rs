@@ -16,10 +16,10 @@ pub use parking_lot;
 use parking_lot::Mutex;
 pub use rend3;
 
-pub use enum_dispatch;
-pub use nalgebra;
-
 pub use brainworms_demented_robotic_meat_grinder_machine as macros;
+pub use enum_dispatch;
+pub use into_variant;
+pub use nalgebra;
 pub use parry3d;
 use rend3::types::DirectionalLight;
 pub use rend3_routine;
@@ -378,16 +378,15 @@ impl<
 
                 graph.execute(&renderer, &mut eval_output);
 
-                if let theater::play::Implementations::SceneImplementation(
+                if let Some(theater::play::Implementations::SceneImplementation(
                     ref mut cs_implementation,
-                ) = game_data
+                )) = game_data
                     .play
                     .playables
                     .get_mut(&current_scene_id)
                     .unwrap()
                     .playable_implementation()
                     .as_mut()
-                    .unwrap()
                 {
                     let t = game_data.timestamp_start.elapsed().as_secs_f32();
                     let dt = game_state.last_update.unwrap().elapsed().as_secs_f32();
