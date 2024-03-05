@@ -55,7 +55,8 @@ pub fn define_play() -> Play<MyPlayables> {
         playables.insert(p.playable_uuid(), p);
     }
 
-    let first_playable = playable_names["curtain"];
+    //    let first_playable = playable_names["curtain"];
+    let first_playable = playable_names["LinacLab"];
     Play {
         first_playable,
         playables,
