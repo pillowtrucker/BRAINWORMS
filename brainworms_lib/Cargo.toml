@@ -25,8 +25,7 @@ into_variant = "0.3"
 #egui-winit = { version = "0.24.1", default-features = false, features = ["clipboard", "links", "wayland"] }
 
 # Linear algebra library
-glam = "0.24"
-glam25compat = {package = "glam", version = "0.25"}
+glam = "0.25"
 # Importing png's
 image = { version = "0.24.3", default-features = false, features = ["png","jpeg","tiff"] }
 # Renderer core
@@ -63,7 +62,7 @@ notify = "6.1.1"
 rust-embed = "8.2.0" # Enable shader hot reload for native compilation.
 enum_dispatch = "0.3.12"
 parry3d = "0.13"
-nalgebra = {version = "0.32", features = ["convert-glam024"]}
+nalgebra = {version = "0.32", features = ["convert-glam025"]}
 gltf = { version = "1.0", default-features = false, features = ["KHR_lights_punctual", "KHR_texture_transform", "KHR_materials_unlit", "extras", "names", "utils"] }
 brainworms_demented_robotic_meat_grinder_machine = {path = "../brainworms_demented_robotic_meat_grinder_machine"}
 

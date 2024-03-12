@@ -46,7 +46,7 @@ pub(crate) fn draw_actor(a: Arc<Mutex<AstinkSprite>>, renderer: Arc<Renderer>, t
 
         puppet.begin_set_params();
 
-        puppet.set_named_param("Head:: Yaw-Pitch", glam25compat::vec2(t.cos(), t.sin()));
+        puppet.set_named_param("Head:: Yaw-Pitch", glam::vec2(t.cos(), t.sin()));
 
         puppet.end_set_params(dt);
     }
@@ -93,7 +93,7 @@ pub async fn create_actor(
 ) {
     let path = format!("{}/{}.inp", &directory, name);
     let format = TextureFormat::Bgra8Unorm;
-    let texture_size_uvec2 = glam25compat::uvec2(8192, 8192); // we no longer care about the surface size for the sprite texture
+    let texture_size_uvec2 = glam::uvec2(8192, 8192); // we no longer care about the surface size for the sprite texture
 
     let texture_size = wgpu::Extent3d {
         width: texture_size_uvec2.x,
@@ -112,7 +112,7 @@ pub async fn create_actor(
         texture_size_uvec2,
     );
 
-    inox_renderer.camera.scale = glam25compat::Vec2::splat(1.0);
+    inox_renderer.camera.scale = glam::Vec2::splat(1.0);
 
     let inox_texture_descriptor = wgpu::TextureDescriptor {
         size: texture_size,
